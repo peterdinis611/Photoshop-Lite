@@ -1,0 +1,11 @@
+{
+  "name": "@photoshop-lite/editor-ai-client",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@photoshop-lite/shared-types": "0.0.1",
+    "@photoshop-lite/editor-core": "0.0.1",
+    "@imgly/background-removal": "^1.7.0"
+  }
+}

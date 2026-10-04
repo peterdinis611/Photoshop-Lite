@@ -1,0 +1,9 @@
+{
+  "name": "@photoshop-lite/editor-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "e2e": "cypress open",
+    "e2e:run": "cypress run"
+  }
+}

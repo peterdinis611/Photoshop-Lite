@@ -1,0 +1,9 @@
+{
+  "name": "@photoshop-lite/editor-core",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@photoshop-lite/shared-types": "0.0.1"
+  }
+}

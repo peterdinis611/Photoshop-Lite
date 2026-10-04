@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["cypress", "node"],
+    "sourceMap": false,
+    "outDir": "../../dist/out-tsc",
+    "allowJs": true
+  },
+  "include": ["cypress/**/*.ts", "cypress.config.ts"]
+}

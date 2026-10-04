@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Industrial darkroom — copper safelight on deep ink */
+    --bg-app: #0b0c0f;
+    --bg-panel: #12141a;
+    --bg-toolbar: #181b22;
+    --bg-elevated: #1c2029;
+    --bg-subtle: #242933;
+    --border-subtle: #2a303c;
+    --border-strong: #3a4252;
+    --accent: #d4923a;
+    --accent-hot: #e8a84a;
+    --accent-dim: rgba(212, 146, 58, 0.14);
+    --accent-glow: rgba(212, 146, 58, 0.35);
+    --ink-blue: #5b8def;
+    --success: #5ecf9a;
+    --danger: #e85d5d;
+    --text-primary: #ece8e1;
+    --text-muted: #8b929e;
+    --text-faint: #5c6470;
+    --font-display: "Syne", sans-serif;
+    --font-body: "Figtree", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    user-select: none;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Film grain atmosphere */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 180px 180px;
+    mix-blend-mode: overlay;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-mono-ui {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Soft panel entrance */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes safelight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+  }
+  50% {
+    box-shadow: 0 0 18px 2px var(--accent-glow);
+  }
+}
+
+.animate-panel-in {
+  animation: panel-in 0.35s ease-out both;
+}
+
+.animate-safelight {
+  animation: safelight-pulse 2.4s ease-in-out infinite;
+}
+
+/* Custom Photoshop-style checkerboard */
+.canvas-checkerboard {
+  background-color: #12141a;
+  background-image:
+    linear-gradient(45deg, #1a1d26 25%, transparent 25%),
+    linear-gradient(-45deg, #1a1d26 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #1a1d26 75%),
+    linear-gradient(-45deg, transparent 75%, #1a1d26 75%);
+  background-size: 18px 18px;
+  background-position: 0 0, 0 9px, 9px -9px, -9px 0px;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #2e3440;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Options bar keyboard chips */
+kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+/* Range inputs — copper accent */
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+/* Panel chrome helpers */
+.px-panel {
+  background: var(--bg-panel);
+  border-color: var(--border-subtle);
+}
+
+.px-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

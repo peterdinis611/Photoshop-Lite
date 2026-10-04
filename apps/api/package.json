@@ -1,0 +1,9 @@
+{
+  "name": "@photoshop-lite/api",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "importHelpers": true,
+    "isolatedModules": true,
+    "lib": ["es2022"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmitOnError": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "es2022",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "baseUrl": ".",
+    "paths": {
+      "@photoshop-lite/shared-types": ["libs/shared/types/src/index.ts"],
+      "@photoshop-lite/ai": ["libs/ai/src/index.ts"],
+      "@photoshop-lite/editor-core": ["libs/editor-core/src/index.ts"],
+      "@photoshop-lite/editor-ai-client": ["libs/editor-ai-client/src/index.ts"]
+    },
+    "customConditions": ["@photoshop-lite/source"]
+  }
+}
