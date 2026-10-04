@@ -5,12 +5,82 @@ import {
   UpscaleResponseDto,
   PredictionPollRequestDto,
   PredictionPollResponseDto,
+  AiJobRequestDto,
+  AiJobResponseDto,
+  AiStylePreset,
 } from '@photoshop-lite/shared-types';
+import { REAL_ESRGAN_VERSION, REPLICATE_MODEL_REFS, styleModelRef } from './replicate-models';
+
+type PredictionStart = {
+  id?: string;
+  error?: string;
+  status?: string;
+  urls?: { get?: string };
+};
 
 export class AiEngineService {
+  private replicateToken(override?: string): string | undefined {
+    return override || process.env.REPLICATE_API_TOKEN || undefined;
+  }
+
+  private stripDataUrl(imageBase64: string): string {
+    return imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  }
+
+  private ensureDataUrl(imageBase64: string): string {
+    if (imageBase64.startsWith('data:')) return imageBase64;
+    return `data:image/png;base64,${imageBase64}`;
+  }
+
   /**
-   * Process background removal through remove.bg or cloud/fallback
+   * Start a Replicate prediction via model owner/name (preferred) or pinned version.
    */
+  async startPrediction(options: {
+    model?: string;
+    version?: string;
+    input: Record<string, unknown>;
+    apiKey?: string;
+  }): Promise<AiJobResponseDto> {
+    const token = this.replicateToken(options.apiKey);
+    if (!token) {
+      return {
+        success: false,
+        fallbackToClient: true,
+        message: 'No Replicate API token configured (set REPLICATE_API_TOKEN).',
+      };
+    }
+
+    const url = options.model
+      ? `https://api.replicate.com/v1/models/${options.model}/predictions`
+      : 'https://api.replicate.com/v1/predictions';
+
+    const body = options.model
+      ? { input: options.input }
+      : { version: options.version, input: options.input };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'wait=0',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const prediction = (await response.json()) as PredictionStart;
+    if (!response.ok || !prediction.id) {
+      throw new Error(prediction.error || `Failed to start Replicate job (${response.status})`);
+    }
+
+    return {
+      success: true,
+      predictionId: prediction.id,
+      statusUrl:
+        prediction.urls?.get || `https://api.replicate.com/v1/predictions/${prediction.id}`,
+    };
+  }
+
   async removeBackground(dto: RemoveBgRequestDto): Promise<RemoveBgResponseDto> {
     const { imageBase64, apiKey, provider } = dto;
 
@@ -18,13 +88,13 @@ export class AiEngineService {
       throw new Error('Missing imageBase64 parameter');
     }
 
-    if (provider === 'remove.bg' || apiKey) {
+    if (provider === 'remove.bg' || apiKey || process.env.REMOVE_BG_API_KEY) {
       const key = apiKey || process.env.REMOVE_BG_API_KEY;
       if (!key) {
         throw new Error('No remove.bg API key provided');
       }
 
-      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const cleanBase64 = this.stripDataUrl(imageBase64);
       const response = await fetch('https://api.remove.bg/v1.0/removebg', {
         method: 'POST',
         headers: {
@@ -59,58 +129,143 @@ export class AiEngineService {
     };
   }
 
-  /**
-   * Upscale image via Replicate Real-ESRGAN or return client fallback recommendation
-   */
   async upscale(dto: UpscaleRequestDto): Promise<UpscaleResponseDto> {
     const { imageBase64, apiKey, scale = 2, faceEnhance = true } = dto;
-    const token = apiKey || process.env.REPLICATE_API_TOKEN;
 
     if (!imageBase64) {
       throw new Error('Missing imageBase64 parameter');
     }
 
-    if (token) {
-      const response = await fetch('https://api.replicate.com/v1/predictions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          version: '42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b',
-          input: {
-            image: imageBase64,
-            scale: Number(scale),
-            face_enhance: Boolean(faceEnhance),
-          },
-        }),
-      });
+    const started = await this.startPrediction({
+      version: REAL_ESRGAN_VERSION,
+      apiKey,
+      input: {
+        image: this.ensureDataUrl(imageBase64),
+        scale: Number(scale),
+        face_enhance: Boolean(faceEnhance),
+      },
+    });
 
-      const prediction = (await response.json()) as { id?: string; error?: string };
-      if (!response.ok || !prediction.id) {
-        throw new Error(prediction.error || 'Failed to start upscale prediction on Replicate');
-      }
-
+    if (started.fallbackToClient) {
       return {
-        success: true,
-        predictionId: prediction.id,
-        statusUrl: `https://api.replicate.com/v1/predictions/${prediction.id}`,
+        success: false,
+        fallbackToClient: true,
+        message: started.message,
       };
     }
 
     return {
-      success: false,
-      fallbackToClient: true,
-      message: 'No Replicate API token provided. Client-side super-resolution applied.',
+      success: true,
+      predictionId: started.predictionId,
+      statusUrl: started.statusUrl,
     };
   }
 
-  /**
-   * Poll a Replicate prediction and return the output image when ready.
-   */
+  async cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.cleanup,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        task_type: 'Real-World Image Super-Resolution-Large',
+        noise: Math.round((dto.intensity ?? 0.5) * 15),
+        jpeg: 40,
+      },
+    });
+  }
+
+  async revive(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.revive,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        model_size: 'large',
+      },
+    });
+  }
+
+  async faceRestore(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    const w = dto.intensity ?? 0.7;
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.faceRestore,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        codeformer_fidelity: Math.max(0, Math.min(1, 1 - w * 0.5)),
+        upscale: 1,
+      },
+    });
+  }
+
+  async inpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (!dto.maskBase64) throw new Error('Missing maskBase64 for inpaint');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.inpaint,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        mask: this.ensureDataUrl(dto.maskBase64),
+        prompt: dto.prompt || 'seamless photorealistic fill, match lighting and texture',
+        negative_prompt: 'blurry, distorted, watermark, text',
+        num_inference_steps: 30,
+      },
+    });
+  }
+
+  async styleTransfer(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    const style = (dto.style || 'film') as AiStylePreset;
+    const model = styleModelRef(style);
+    const promptMap: Record<AiStylePreset, string> = {
+      film: 'cinematic film still, kodak portra, soft grain',
+      sketch: 'detailed pencil sketch, clean line art',
+      anime: 'anime illustration, vibrant cel shading',
+      watercolor: 'watercolor painting, soft washes',
+      noir: 'high contrast black and white noir photography',
+    };
+
+    return this.startPrediction({
+      model,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        prompt: dto.prompt || promptMap[style],
+        strength: dto.intensity ?? 0.65,
+      },
+    });
+  }
+
+  async segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.segment,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        caption: dto.prompt || 'person',
+      },
+    });
+  }
+
+  async caption(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.caption,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        task: 'image_captioning',
+      },
+    });
+  }
+
   async pollPrediction(dto: PredictionPollRequestDto): Promise<PredictionPollResponseDto> {
-    const token = dto.apiKey || process.env.REPLICATE_API_TOKEN;
+    const token = this.replicateToken(dto.apiKey);
     if (!token) {
       throw new Error('No Replicate API token provided');
     }
@@ -140,7 +295,7 @@ export class AiEngineService {
     const prediction = (await response.json()) as {
       status?: string;
       error?: string;
-      output?: string | string[];
+      output?: string | string[] | Record<string, unknown>;
     };
 
     const status = prediction.status || 'processing';
@@ -153,23 +308,64 @@ export class AiEngineService {
       return { status };
     }
 
-    const outputUrl = Array.isArray(prediction.output)
-      ? prediction.output[0]
-      : prediction.output;
+    const output = prediction.output;
 
-    if (!outputUrl || typeof outputUrl !== 'string') {
-      return { status: 'failed', error: 'Prediction succeeded but returned no image URL' };
+    // Text caption jobs
+    if (typeof output === 'string' && !output.startsWith('http') && !output.startsWith('data:')) {
+      return { status: 'succeeded', text: output };
     }
 
+    if (output && typeof output === 'object' && !Array.isArray(output)) {
+      const caption =
+        (output as { caption?: string; text?: string }).caption ||
+        (output as { caption?: string; text?: string }).text;
+      if (caption) {
+        return { status: 'succeeded', text: caption };
+      }
+    }
+
+    const outputUrl = Array.isArray(output)
+      ? output.find((u) => typeof u === 'string' && (u.startsWith('http') || u.startsWith('data:')))
+      : typeof output === 'string'
+        ? output
+        : undefined;
+
+    if (!outputUrl || typeof outputUrl !== 'string') {
+      // Sometimes segment returns nested mask URL
+      if (Array.isArray(output) && output.length > 0) {
+        const first = output[0];
+        if (typeof first === 'string') {
+          return this.downloadAsBase64(first, status);
+        }
+      }
+      return { status: 'failed', error: 'Prediction succeeded but returned no usable output' };
+    }
+
+    if (outputUrl.startsWith('data:')) {
+      return { status: 'succeeded', imageBase64: outputUrl, outputUrl };
+    }
+
+    return this.downloadAsBase64(outputUrl, status);
+  }
+
+  private async downloadAsBase64(
+    outputUrl: string,
+    status: string
+  ): Promise<PredictionPollResponseDto> {
     const imageRes = await fetch(outputUrl);
     if (!imageRes.ok) {
-      throw new Error('Failed to download upscaled image from Replicate');
+      throw new Error('Failed to download result from Replicate');
     }
 
     const buffer = Buffer.from(await imageRes.arrayBuffer());
     const contentType = imageRes.headers.get('content-type') || 'image/png';
-    const imageBase64 = `data:${contentType};base64,${buffer.toString('base64')}`;
 
+    // BLIP sometimes returns JSON/text
+    if (contentType.includes('text') || contentType.includes('json')) {
+      return { status: 'succeeded', text: buffer.toString('utf8'), outputUrl };
+    }
+
+    const imageBase64 = `data:${contentType};base64,${buffer.toString('base64')}`;
     return { status: 'succeeded', imageBase64, outputUrl };
   }
 }

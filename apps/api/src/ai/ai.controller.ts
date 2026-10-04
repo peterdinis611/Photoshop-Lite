@@ -7,6 +7,8 @@ import {
   UpscaleResponseDto,
   PredictionPollRequestDto,
   PredictionPollResponseDto,
+  AiJobRequestDto,
+  AiJobResponseDto,
 } from '@photoshop-lite/shared-types';
 
 @Controller('ai')
@@ -28,5 +30,40 @@ export class AiController {
     @Body() body: PredictionPollRequestDto
   ): Promise<PredictionPollResponseDto> {
     return this.aiService.pollPrediction(body);
+  }
+
+  @Post('cleanup')
+  cleanup(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.cleanup(body);
+  }
+
+  @Post('revive')
+  revive(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.revive(body);
+  }
+
+  @Post('face-restore')
+  faceRestore(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.faceRestore(body);
+  }
+
+  @Post('inpaint')
+  inpaint(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.inpaint(body);
+  }
+
+  @Post('style')
+  style(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.style(body);
+  }
+
+  @Post('segment')
+  segment(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.segment(body);
+  }
+
+  @Post('caption')
+  caption(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.caption(body);
   }
 }

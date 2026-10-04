@@ -17,8 +17,9 @@ import {
   MarqueeMode,
   SelectionShape,
 } from '../types/editor';
-import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, buildProjectFile, downloadProjectFile, type ReviveMode, type CleanupMode } from '@photoshop-lite/editor-core';
+import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, buildProjectFile, downloadProjectFile, selectionToMaskDataUrl, type ReviveMode, type CleanupMode } from '@photoshop-lite/editor-core';
 import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
+import type { AiJobKind, AiStylePreset, ProjectSummaryDto } from '@photoshop-lite/shared-types';
 
 /** Unique layer name: "Portrait · Revived", "Portrait · Revived 2", … */
 function uniqueLayerName(base: string, layers: EditorLayer[]): string {
@@ -129,7 +130,13 @@ interface EditorState {
   // Actions - AI Operations
   removeBackground: (id: string, provider?: 'client' | 'remove.bg') => Promise<void>;
   upscaleLayer: (id: string, scaleFactor?: number) => Promise<void>;
+  runCloudAiJob: (
+    id: string,
+    kind: AiJobKind,
+    options?: { intensity?: number; prompt?: string; style?: AiStylePreset }
+  ) => Promise<void>;
   setAIStatus: (status: Partial<AIStatus>) => void;
+  lastCaption: string;
 
   // Actions - Clipping Mask & Layer Mask
   setClippingMask: (id: string, clipToId: string) => void;
@@ -157,9 +164,13 @@ interface EditorState {
 
   // Project I/O
   projectTitle: string;
+  cloudProjectId: string | null;
   setProjectTitle: (title: string) => void;
   saveProject: () => void;
   loadProject: (project: ProjectFileData) => void;
+  saveProjectToCloud: () => Promise<ProjectSummaryDto>;
+  listCloudProjects: () => Promise<ProjectSummaryDto[]>;
+  loadProjectFromCloud: (id: string) => Promise<void>;
 }
 
 const MAX_HISTORY = 40;
@@ -216,6 +227,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isSettingsModalOpen: false,
   isNewCanvasModalOpen: false,
   projectTitle: 'Untitled',
+  cloudProjectId: null,
+  lastCaption: '',
 
   setCanvasDimensions: (width, height) => {
     get().commitHistory(`Resize Canvas to ${width}x${height}`);
@@ -865,65 +878,59 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
 
     try {
-      const replicateKey = get().replicateApiKey;
+      const replicateKey = get().replicateApiKey || undefined;
       let upscaledSrc = '';
 
-      if (replicateKey) {
-        set({
-          aiStatus: {
-            isProcessing: true,
-            action: 'upscale',
-            progress: 40,
-            statusText: 'Submitting to Real-ESRGAN on Replicate...',
-          },
+      // Prefer server proxy (env token on API); optional client key override
+      set({
+        aiStatus: {
+          isProcessing: true,
+          action: 'upscale',
+          progress: 40,
+          statusText: 'Submitting upscale job...',
+        },
+      });
+
+      try {
+        const data = await aiApiClient.upscale({
+          imageBase64: layer.src,
+          apiKey: replicateKey,
+          scale: scaleFactor,
         });
 
-        try {
-          const data = await aiApiClient.upscale({
-            imageBase64: layer.src,
-            apiKey: replicateKey,
-            scale: scaleFactor,
-          });
-
-          if (data.statusUrl || data.predictionId) {
-            set({
-              aiStatus: {
-                isProcessing: true,
-                action: 'upscale',
-                progress: 55,
-                statusText: 'Waiting for Real-ESRGAN result...',
-              },
-            });
-
-            const poll = await aiApiClient.pollUntilComplete(
-              {
-                statusUrl: data.statusUrl,
-                predictionId: data.predictionId,
-                apiKey: replicateKey,
-              },
-              {
-                onProgress: (attempt, status) => {
-                  set({
-                    aiStatus: {
-                      isProcessing: true,
-                      action: 'upscale',
-                      progress: Math.min(90, 55 + attempt),
-                      statusText: `Real-ESRGAN ${status}...`,
-                    },
-                  });
-                },
-              }
-            );
-            upscaledSrc = poll.imageBase64 || '';
-          }
-        } catch (apiErr) {
-          console.warn('Cloud upscale failed, falling back to client:', getErrorMessage(apiErr));
+        if (data.fallbackToClient) {
+          throw new Error(data.message || 'Server has no Replicate token');
         }
 
-        if (!upscaledSrc) {
-          upscaledSrc = await clientSideSuperResolution(layer.src, scaleFactor);
+        if (data.statusUrl || data.predictionId) {
+          const poll = await aiApiClient.pollUntilComplete(
+            {
+              statusUrl: data.statusUrl,
+              predictionId: data.predictionId,
+              apiKey: replicateKey,
+            },
+            {
+              onProgress: (attempt, status) => {
+                set({
+                  aiStatus: {
+                    isProcessing: true,
+                    action: 'upscale',
+                    progress: Math.min(90, 55 + attempt),
+                    statusText: `Upscale ${status}...`,
+                  },
+                });
+              },
+            }
+          );
+          upscaledSrc = poll.imageBase64 || '';
+        } else if (data.imageBase64) {
+          upscaledSrc = data.imageBase64;
         }
-      } else {
+      } catch (apiErr) {
+        console.warn('Cloud upscale failed, falling back to client:', getErrorMessage(apiErr));
+      }
+
+      if (!upscaledSrc) {
         upscaledSrc = await clientSideSuperResolution(layer.src, scaleFactor);
       }
 
@@ -957,6 +964,158 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           progress: 0,
           statusText: '',
           error: err,
+        },
+      });
+    }
+  },
+
+  runCloudAiJob: async (id, kind, options = {}) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'Select an image layer first',
+        },
+      });
+      return;
+    }
+
+    const actionLabel: Record<AiJobKind, string> = {
+      revive: 'Cloud Revive',
+      cleanup: 'Cloud Cleanup',
+      inpaint: 'Inpaint',
+      'face-restore': 'Face Restore',
+      style: 'Style Transfer',
+      segment: 'Segmentation',
+      caption: 'Caption',
+    };
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: kind,
+        progress: 15,
+        statusText: `${actionLabel[kind]}…`,
+        error: undefined,
+      },
+    });
+
+    try {
+      const apiKey = get().replicateApiKey || undefined;
+      let maskBase64: string | undefined;
+
+      if (kind === 'inpaint') {
+        const sel = get().marqueeSelection;
+        if (!sel) {
+          throw new Error('Draw a marquee/lasso selection for inpaint first');
+        }
+        maskBase64 = await selectionToMaskDataUrl({
+          canvasWidth: get().canvasWidth,
+          canvasHeight: get().canvasHeight,
+          selection: sel,
+        });
+      }
+
+      const jobBody = {
+        imageBase64: layer.src,
+        apiKey,
+        intensity: options.intensity ?? 0.7,
+        prompt: options.prompt,
+        style: options.style,
+        maskBase64,
+      };
+
+      const starters: Record<AiJobKind, () => ReturnType<typeof aiApiClient.cleanup>> = {
+        cleanup: () => aiApiClient.cleanup(jobBody),
+        revive: () => aiApiClient.revive(jobBody),
+        inpaint: () => aiApiClient.inpaint(jobBody),
+        'face-restore': () => aiApiClient.faceRestore(jobBody),
+        style: () => aiApiClient.style(jobBody),
+        segment: () => aiApiClient.segment(jobBody),
+        caption: () => aiApiClient.caption(jobBody),
+      };
+
+      const started = await starters[kind]();
+      if (started.fallbackToClient) {
+        throw new Error(started.message || 'Server AI unavailable — set REPLICATE_API_TOKEN');
+      }
+
+      let resultSrc = started.imageBase64 || '';
+      let resultText = started.text || '';
+
+      if (started.predictionId || started.statusUrl) {
+        const poll = await aiApiClient.pollUntilComplete(
+          {
+            predictionId: started.predictionId,
+            statusUrl: started.statusUrl,
+            apiKey,
+          },
+          {
+            onProgress: (attempt, status) => {
+              set({
+                aiStatus: {
+                  isProcessing: true,
+                  action: kind,
+                  progress: Math.min(92, 25 + attempt),
+                  statusText: `${actionLabel[kind]} · ${status}`,
+                },
+              });
+            },
+          }
+        );
+        resultSrc = poll.imageBase64 || resultSrc;
+        resultText = poll.text || resultText;
+      }
+
+      if (kind === 'caption') {
+        set({
+          lastCaption: resultText || 'No caption returned',
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: resultText ? `Caption: ${resultText}` : 'Caption done',
+          },
+        });
+        return;
+      }
+
+      if (!resultSrc) {
+        throw new Error('Cloud job returned no image');
+      }
+
+      get().commitHistory(actionLabel[kind]);
+      const baked: ImageLayer = {
+        ...deepClone(layer),
+        id: `${Date.now()}_${kind}`,
+        name: derivativeName(layer.name, actionLabel[kind], get().layers),
+        src: resultSrc,
+        originalSrc: layer.originalSrc || layer.src,
+      };
+
+      set((state) => ({
+        layers: [...state.layers, baked],
+        selectedLayerId: baked.id,
+        marqueeSelection: kind === 'inpaint' ? null : state.marqueeSelection,
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `${actionLabel[kind]} complete`,
+        },
+      }));
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, `${kind} failed`),
         },
       });
     }
@@ -1257,5 +1416,102 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       },
       activeTool: 'select',
     });
+  },
+
+  saveProjectToCloud: async () => {
+    const { projectTitle, canvasWidth, canvasHeight, backgroundColor, layers, cloudProjectId } =
+      get();
+    const dto = {
+      title: projectTitle || 'Untitled',
+      canvasWidth,
+      canvasHeight,
+      backgroundColor,
+      layers,
+      id: cloudProjectId || undefined,
+    };
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 40,
+        statusText: 'Saving project to API…',
+      },
+    });
+
+    try {
+      const saved = cloudProjectId
+        ? await aiApiClient.updateProject(cloudProjectId, dto)
+        : await aiApiClient.createProject(dto);
+
+      set({
+        cloudProjectId: saved.id,
+        projectTitle: saved.title,
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Saved · ${saved.title}`,
+        },
+      });
+      return saved;
+    } catch (e: unknown) {
+      const err = getErrorMessage(e, 'Cloud save failed');
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: err,
+        },
+      });
+      throw e;
+    }
+  },
+
+  listCloudProjects: () => aiApiClient.listProjects(),
+
+  loadProjectFromCloud: async (id) => {
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 30,
+        statusText: 'Loading cloud project…',
+      },
+    });
+    try {
+      const detail = await aiApiClient.getProject(id);
+      get().loadProject({
+        version: '1.0',
+        title: detail.title,
+        canvasWidth: detail.canvasWidth,
+        canvasHeight: detail.canvasHeight,
+        backgroundColor: detail.backgroundColor,
+        layers: detail.layers as ProjectFileData['layers'],
+        savedAt: detail.savedAt,
+      });
+      set({
+        cloudProjectId: detail.id,
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Opened · ${detail.title}`,
+        },
+      });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Cloud open failed'),
+        },
+      });
+      throw e;
+    }
   },
 }));

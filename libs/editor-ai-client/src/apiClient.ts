@@ -6,6 +6,14 @@ import type {
   RemoveBgResponseDto,
   UpscaleRequestDto,
   UpscaleResponseDto,
+  AiJobRequestDto,
+  AiJobResponseDto,
+  ProjectCreateDto,
+  ProjectDetailDto,
+  ProjectSummaryDto,
+  ProjectVersionSummaryDto,
+  AssetUploadDto,
+  AssetResponseDto,
 } from '@photoshop-lite/shared-types';
 
 const DEFAULT_BASE = '/api';
@@ -13,13 +21,17 @@ const DEFAULT_BASE = '/api';
 export class AiApiClient {
   constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
 
-  private async request<T>(path: string, body: unknown): Promise<T> {
+  private async request<T>(
+    path: string,
+    body?: unknown,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST'
+  ): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        method,
+        headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (cause) {
       throw new AppError('Network error talking to AI API', {
@@ -41,7 +53,7 @@ export class AiApiClient {
           ? String((payload as { error: unknown }).error)
           : payload && typeof payload === 'object' && 'message' in payload
             ? String((payload as { message: unknown }).message)
-            : `AI API failed (${response.status})`;
+            : `API failed (${response.status})`;
 
       throw new AppError(message, {
         code: response.status >= 500 ? 'UPSTREAM' : 'VALIDATION',
@@ -65,9 +77,34 @@ export class AiApiClient {
     return this.request<PredictionPollResponseDto>('/ai/prediction-status', dto);
   }
 
-  /**
-   * Poll Replicate prediction until success / failure / timeout.
-   */
+  cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/cleanup', dto);
+  }
+
+  revive(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/revive', dto);
+  }
+
+  faceRestore(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/face-restore', dto);
+  }
+
+  inpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/inpaint', dto);
+  }
+
+  style(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/style', dto);
+  }
+
+  segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/segment', dto);
+  }
+
+  caption(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/caption', dto);
+  }
+
   async pollUntilComplete(
     dto: PredictionPollRequestDto,
     options: {
@@ -83,11 +120,11 @@ export class AiApiClient {
       const poll = await this.predictionStatus(dto);
       options.onProgress?.(attempt, poll.status);
 
-      if (poll.status === 'succeeded' && poll.imageBase64) {
+      if (poll.status === 'succeeded' && (poll.imageBase64 || poll.text)) {
         return poll;
       }
       if (poll.status === 'failed' || poll.status === 'canceled') {
-        throw new AppError(poll.error || `Upscale ${poll.status}`, {
+        throw new AppError(poll.error || `Job ${poll.status}`, {
           code: 'UPSTREAM',
           details: poll,
         });
@@ -96,9 +133,49 @@ export class AiApiClient {
       await new Promise((r) => setTimeout(r, intervalMs));
     }
 
-    throw new AppError('Upscale timed out waiting for Replicate', {
+    throw new AppError('Timed out waiting for Replicate prediction', {
       code: 'TIMEOUT',
     });
+  }
+
+  // ── Projects ───────────────────────────────────────────────────
+
+  listProjects(): Promise<ProjectSummaryDto[]> {
+    return this.request<ProjectSummaryDto[]>('/projects', undefined, 'GET');
+  }
+
+  getProject(id: string): Promise<ProjectDetailDto> {
+    return this.request<ProjectDetailDto>(`/projects/${id}`, undefined, 'GET');
+  }
+
+  createProject(dto: ProjectCreateDto): Promise<ProjectDetailDto> {
+    return this.request<ProjectDetailDto>('/projects', dto, 'POST');
+  }
+
+  updateProject(id: string, dto: ProjectCreateDto): Promise<ProjectDetailDto> {
+    return this.request<ProjectDetailDto>(`/projects/${id}`, dto, 'PUT');
+  }
+
+  deleteProject(id: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/projects/${id}`, undefined, 'DELETE');
+  }
+
+  listProjectVersions(id: string): Promise<ProjectVersionSummaryDto[]> {
+    return this.request<ProjectVersionSummaryDto[]>(
+      `/projects/${id}/versions`,
+      undefined,
+      'GET'
+    );
+  }
+
+  // ── Assets ─────────────────────────────────────────────────────
+
+  uploadAsset(dto: AssetUploadDto): Promise<AssetResponseDto> {
+    return this.request<AssetResponseDto>('/assets/upload', dto, 'POST');
+  }
+
+  listAssets(): Promise<AssetResponseDto[]> {
+    return this.request<AssetResponseDto[]>('/assets', undefined, 'GET');
   }
 }
 

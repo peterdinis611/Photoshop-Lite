@@ -29,12 +29,14 @@ import {
   ChevronDown,
   SunMedium,
   Eraser,
+  Cloud,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
 import type { ReviveMode } from '../../utils/photoRevive';
 import type { CleanupMode } from '../../utils/photoCleanup';
+import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 
 interface TopNavBarProps {
   onFitToScreen: () => void;
@@ -119,6 +121,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<MenuId>(null);
+  const [cloudProjects, setCloudProjects] = useState<ProjectSummaryDto[]>([]);
 
   const {
     zoom,
@@ -147,6 +150,9 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     selectLayer,
     saveProject,
     loadProject,
+    saveProjectToCloud,
+    listCloudProjects,
+    loadProjectFromCloud,
     projectTitle,
     updateLayer,
     updateAdjustments,
@@ -178,7 +184,17 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   }, []);
 
   const close = () => setActiveMenu(null);
-  const toggle = (id: MenuId) => setActiveMenu((m) => (m === id ? null : id));
+  const toggle = (id: MenuId) => {
+    setActiveMenu((m) => {
+      const next = m === id ? null : id;
+      if (next === 'file') {
+        listCloudProjects()
+          .then(setCloudProjects)
+          .catch(() => setCloudProjects([]));
+      }
+      return next;
+    });
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -305,6 +321,41 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               <Item onClick={() => { saveProject(); close(); }} hint="⌘S">
                 <Save size={13} /> Save Project
               </Item>
+              <Item
+                onClick={async () => {
+                  try {
+                    await saveProjectToCloud();
+                  } catch {
+                    /* toast via aiStatus */
+                  }
+                  close();
+                }}
+              >
+                <Cloud size={13} /> Save to Cloud
+              </Item>
+              <Sep />
+              <Label>Cloud projects</Label>
+              {cloudProjects.length === 0 ? (
+                <div className="px-3 py-1.5 text-[11px] text-[var(--text-faint)]">
+                  No cloud projects (start API)
+                </div>
+              ) : (
+                cloudProjects.slice(0, 8).map((p) => (
+                  <Item
+                    key={p.id}
+                    onClick={async () => {
+                      try {
+                        await loadProjectFromCloud(p.id);
+                      } catch {
+                        /* toast */
+                      }
+                      close();
+                    }}
+                  >
+                    <Cloud size={13} /> {p.title}
+                  </Item>
+                ))
+              )}
               <Sep />
               <Label>Samples</Label>
               {SAMPLE_IMAGES.map((s) => (

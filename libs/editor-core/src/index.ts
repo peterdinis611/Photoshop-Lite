@@ -31,6 +31,7 @@ export {
 } from './projectFile';
 
 export { paintStrokeOnMask, clearImageRect, clearImageSelection, magicWandBounds } from './maskHelpers';
+export { selectionToMaskDataUrl } from './selectionMask';
 export {
   sampleCanvasColor,
   applySpotHealingToImage,

@@ -1,6 +1,30 @@
 import React, { useEffect } from 'react';
-import { Scissors, AlertCircle, CheckCircle, X, Loader2, SunMedium, Eraser } from 'lucide-react';
+import {
+  Scissors,
+  AlertCircle,
+  CheckCircle,
+  X,
+  Loader2,
+  SunMedium,
+  Eraser,
+  ScanFace,
+  Paintbrush,
+  Sparkles,
+  Cloud,
+} from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
+
+const ACTION_LABELS: Record<string, string> = {
+  'remove-bg': 'Cutout',
+  revive: 'Photo Revive',
+  cleanup: 'Photo Cleanup',
+  upscale: 'Upscale',
+  'face-restore': 'Face Restore',
+  inpaint: 'Inpaint',
+  style: 'Style Transfer',
+  segment: 'Segment',
+  caption: 'Caption',
+};
 
 export const FloatingAIStatusToast: React.FC = () => {
   const { aiStatus, setAIStatus } = useEditorStore();
@@ -21,6 +45,29 @@ export const FloatingAIStatusToast: React.FC = () => {
   const isError = Boolean(aiStatus.error);
   const isComplete = !aiStatus.isProcessing && Boolean(aiStatus.statusText) && !isError;
 
+  const actionIcon = () => {
+    switch (aiStatus.action) {
+      case 'remove-bg':
+        return <Scissors size={18} className="text-[var(--ink-blue)] animate-bounce" />;
+      case 'revive':
+        return <SunMedium size={18} className="text-[var(--accent-hot)] animate-pulse" />;
+      case 'cleanup':
+        return <Eraser size={18} className="text-[var(--ink-blue)] animate-pulse" />;
+      case 'face-restore':
+        return <ScanFace size={18} className="text-[var(--accent)] animate-pulse" />;
+      case 'inpaint':
+        return <Paintbrush size={18} className="text-[var(--accent-hot)] animate-pulse" />;
+      case 'style':
+      case 'segment':
+      case 'caption':
+        return <Sparkles size={18} className="text-[var(--accent)] animate-pulse" />;
+      case 'upscale':
+        return <Cloud size={18} className="text-[var(--accent)] animate-pulse" />;
+      default:
+        return <Loader2 size={18} className="text-[var(--accent)] animate-spin" />;
+    }
+  };
+
   return (
     <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 pointer-events-auto animate-panel-in">
       <div
@@ -37,14 +84,8 @@ export const FloatingAIStatusToast: React.FC = () => {
             <AlertCircle size={18} className="text-[var(--danger)]" />
           ) : isComplete ? (
             <CheckCircle size={18} className="text-[var(--success)]" />
-          ) : aiStatus.action === 'remove-bg' ? (
-            <Scissors size={18} className="text-[var(--ink-blue)] animate-bounce" />
-          ) : aiStatus.action === 'revive' ? (
-            <SunMedium size={18} className="text-[var(--accent-hot)] animate-pulse" />
-          ) : aiStatus.action === 'cleanup' ? (
-            <Eraser size={18} className="text-[var(--ink-blue)] animate-pulse" />
           ) : (
-            <Loader2 size={18} className="text-[var(--accent)] animate-spin" />
+            actionIcon()
           )}
         </div>
 
@@ -55,13 +96,7 @@ export const FloatingAIStatusToast: React.FC = () => {
                 ? 'Failed'
                 : isComplete
                   ? 'Done'
-                  : aiStatus.action === 'remove-bg'
-                    ? 'Cutout'
-                    : aiStatus.action === 'revive'
-                      ? 'Photo Revive'
-                      : aiStatus.action === 'cleanup'
-                        ? 'Photo Cleanup'
-                        : 'Processing'}
+                  : (aiStatus.action && ACTION_LABELS[aiStatus.action]) || 'Processing'}
             </span>
             {aiStatus.isProcessing && (
               <span className="text-[10px] font-mono-ui text-[var(--text-faint)] ml-2">

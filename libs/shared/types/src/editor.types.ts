@@ -200,7 +200,19 @@ export interface HistorySnapshot {
 
 export interface AIStatus {
   isProcessing: boolean;
-  action: 'remove-bg' | 'upscale' | 'auto-enhance' | 'revive' | 'cleanup' | 'healing' | null;
+  action:
+    | 'remove-bg'
+    | 'upscale'
+    | 'auto-enhance'
+    | 'revive'
+    | 'cleanup'
+    | 'healing'
+    | 'face-restore'
+    | 'inpaint'
+    | 'style'
+    | 'segment'
+    | 'caption'
+    | null;
   progress: number;
   statusText: string;
   error?: string;

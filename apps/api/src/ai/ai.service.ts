@@ -11,43 +11,41 @@ import {
   UpscaleResponseDto,
   PredictionPollRequestDto,
   PredictionPollResponseDto,
+  AiJobRequestDto,
+  AiJobResponseDto,
 } from '@photoshop-lite/shared-types';
 
 @Injectable()
 export class AiService {
   private readonly aiEngine = new AiEngineService();
 
-  async removeBackground(dto: RemoveBgRequestDto): Promise<RemoveBgResponseDto> {
-    if (!dto?.imageBase64) {
-      throw new BadRequestException({
-        error: 'Missing imageBase64',
-        code: 'VALIDATION',
-      });
-    }
-    try {
-      return await this.aiEngine.removeBackground(dto);
-    } catch (err: unknown) {
+  private wrapUpstream<T>(fn: () => Promise<T>): Promise<T> {
+    return fn().catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      if (/api key|token/i.test(message)) {
+      if (/api key|token|missing/i.test(message)) {
         throw new BadRequestException({ error: message, code: 'VALIDATION' });
       }
       throw new ServiceUnavailableException({ error: message, code: 'UPSTREAM' });
-    }
+    });
   }
 
-  async upscale(dto: UpscaleRequestDto): Promise<UpscaleResponseDto> {
+  private requireImage(dto: { imageBase64?: string }) {
     if (!dto?.imageBase64) {
       throw new BadRequestException({
         error: 'Missing imageBase64',
         code: 'VALIDATION',
       });
     }
-    try {
-      return await this.aiEngine.upscale(dto);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ServiceUnavailableException({ error: message, code: 'UPSTREAM' });
-    }
+  }
+
+  async removeBackground(dto: RemoveBgRequestDto): Promise<RemoveBgResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.removeBackground(dto));
+  }
+
+  async upscale(dto: UpscaleRequestDto): Promise<UpscaleResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.upscale(dto));
   }
 
   async pollPrediction(dto: PredictionPollRequestDto): Promise<PredictionPollResponseDto> {
@@ -57,11 +55,47 @@ export class AiService {
         code: 'VALIDATION',
       });
     }
-    try {
-      return await this.aiEngine.pollPrediction(dto);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new ServiceUnavailableException({ error: message, code: 'UPSTREAM' });
+    return this.wrapUpstream(() => this.aiEngine.pollPrediction(dto));
+  }
+
+  async cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.cleanup(dto));
+  }
+
+  async revive(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.revive(dto));
+  }
+
+  async faceRestore(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.faceRestore(dto));
+  }
+
+  async inpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    if (!dto.maskBase64) {
+      throw new BadRequestException({
+        error: 'Missing maskBase64 for inpaint',
+        code: 'VALIDATION',
+      });
     }
+    return this.wrapUpstream(() => this.aiEngine.inpaint(dto));
+  }
+
+  async style(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.styleTransfer(dto));
+  }
+
+  async segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.segment(dto));
+  }
+
+  async caption(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.caption(dto));
   }
 }

@@ -10,10 +10,24 @@ import {
   SunMedium,
   Layers,
   Eraser,
+  Cloud,
+  ScanFace,
+  Paintbrush,
+  VenetianMask,
+  MessageSquareText,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { REVIVE_MODES, type ReviveMode } from '../../utils/photoRevive';
 import { CLEANUP_MODES, type CleanupMode } from '../../utils/photoCleanup';
+import type { AiStylePreset } from '@photoshop-lite/shared-types';
+
+const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
+  { id: 'film', label: 'Film' },
+  { id: 'sketch', label: 'Sketch' },
+  { id: 'anime', label: 'Anime' },
+  { id: 'watercolor', label: 'Water' },
+  { id: 'noir', label: 'Noir' },
+];
 
 export const AISuitePanel: React.FC = () => {
   const {
@@ -23,7 +37,9 @@ export const AISuitePanel: React.FC = () => {
     upscaleLayer,
     revivePhotoLayer,
     cleanPhotoLayer,
+    runCloudAiJob,
     aiStatus,
+    lastCaption,
     removeBgApiKey,
     replicateApiKey,
     setApiKeys,
@@ -31,6 +47,7 @@ export const AISuitePanel: React.FC = () => {
     setActiveTool,
     brushSettings,
     updateBrushSettings,
+    marqueeSelection,
   } = useEditorStore();
 
   const [provider, setProvider] = useState<'client' | 'remove.bg'>('client');
@@ -42,6 +59,8 @@ export const AISuitePanel: React.FC = () => {
   const [cleanupMode, setCleanupMode] = useState<CleanupMode>('standard');
   const [cleanupIntensity, setCleanupIntensity] = useState(0.7);
   const [cleanupBake, setCleanupBake] = useState(true);
+  const [cloudStyle, setCloudStyle] = useState<AiStylePreset>('film');
+  const [inpaintPrompt, setInpaintPrompt] = useState('');
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImage = selectedLayer?.type === 'image';
@@ -282,6 +301,119 @@ export const AISuitePanel: React.FC = () => {
             ? 'Cleaning…'
             : 'Clean Photo'}
         </button>
+      </section>
+
+      {/* CLOUD AI PROXY */}
+      <section className="rounded-[var(--radius-lg)] border border-[var(--accent)]/30 bg-[var(--bg-elevated)] p-3.5 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 font-display font-bold text-[13px] text-[var(--text-primary)]">
+            <Cloud size={15} className="text-[var(--accent-hot)]" />
+            Cloud Lab
+          </div>
+          <span className="px-chip text-[var(--accent-hot)]">API</span>
+        </div>
+        <p className="text-[10px] text-[var(--text-faint)] leading-snug">
+          Server-side Replicate jobs. Set <code className="text-[var(--accent-hot)]">REPLICATE_API_TOKEN</code> on the API.
+        </p>
+
+        <div className="grid grid-cols-2 gap-1.5">
+          {(
+            [
+              ['cleanup', 'Denoise', Eraser],
+              ['revive', 'Colorize', SunMedium],
+              ['face-restore', 'Face', ScanFace],
+              ['segment', 'Segment', VenetianMask],
+            ] as const
+          ).map(([kind, label, Icon]) => (
+            <button
+              key={kind}
+              disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
+              onClick={() => {
+                const targetId = resolveImageId();
+                if (targetId) runCloudAiJob(targetId, kind, { intensity: 0.7 });
+              }}
+              className="py-2 px-1.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)] text-[11px] font-semibold text-[var(--text-muted)] hover:border-[var(--accent)]/50 hover:text-[var(--text-primary)] disabled:opacity-40 cursor-pointer flex items-center justify-center gap-1"
+            >
+              <Icon size={12} /> {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
+          <span className="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider">
+            Style
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {CLOUD_STYLES.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setCloudStyle(s.id)}
+                className={`px-2 py-0.5 rounded text-[10px] font-semibold cursor-pointer border ${
+                  cloudStyle === s.id
+                    ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
+                    : 'border-[var(--border-subtle)] text-[var(--text-muted)]'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <button
+            disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
+            onClick={() => {
+              const targetId = resolveImageId();
+              if (targetId) runCloudAiJob(targetId, 'style', { style: cloudStyle, intensity: 0.65 });
+            }}
+            className="w-full py-2 rounded-[var(--radius-md)] bg-[var(--accent-dim)] border border-[var(--accent)]/40 text-[var(--accent-hot)] font-display font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+          >
+            <Paintbrush size={13} /> Apply style
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-[var(--border-subtle)]">
+          <span className="text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider">
+            Inpaint · needs selection
+          </span>
+          <input
+            type="text"
+            placeholder="Optional prompt…"
+            value={inpaintPrompt}
+            onChange={(e) => setInpaintPrompt(e.target.value)}
+            className="w-full bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <button
+            disabled={
+              aiStatus.isProcessing ||
+              !layers.some((l) => l.type === 'image') ||
+              !marqueeSelection
+            }
+            onClick={() => {
+              const targetId = resolveImageId();
+              if (targetId) {
+                runCloudAiJob(targetId, 'inpaint', { prompt: inpaintPrompt || undefined });
+              }
+            }}
+            className="w-full py-2 rounded-[var(--radius-md)] bg-[var(--ink-blue)] text-white font-display font-bold text-[11px] cursor-pointer disabled:opacity-40"
+          >
+            Generative fill
+          </button>
+        </div>
+
+        <button
+          disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
+          onClick={() => {
+            const targetId = resolveImageId();
+            if (targetId) runCloudAiJob(targetId, 'caption');
+          }}
+          className="w-full py-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-app)] text-[var(--text-muted)] font-semibold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40 hover:text-[var(--text-primary)]"
+        >
+          <MessageSquareText size={13} /> Auto caption
+        </button>
+        {lastCaption && (
+          <p className="text-[10px] text-[var(--text-muted)] leading-snug bg-[var(--bg-app)] rounded p-2 border border-[var(--border-subtle)]">
+            {lastCaption}
+          </p>
+        )}
       </section>
 
       {/* Background Removal */}
