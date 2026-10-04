@@ -52,9 +52,24 @@ export class AiController {
     return this.aiService.inpaint(body);
   }
 
+  @Post('object-remove')
+  objectRemove(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.objectRemove(body);
+  }
+
+  @Post('outpaint')
+  outpaint(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.outpaint(body);
+  }
+
   @Post('style')
   style(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
     return this.aiService.style(body);
+  }
+
+  @Post('relight')
+  relight(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.relight(body);
   }
 
   @Post('segment')

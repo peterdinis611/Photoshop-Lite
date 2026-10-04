@@ -67,22 +67,28 @@ export type AiJobKind =
   | 'revive'
   | 'cleanup'
   | 'inpaint'
+  | 'object-remove'
+  | 'outpaint'
   | 'face-restore'
   | 'style'
+  | 'relight'
   | 'segment'
   | 'caption';
 
 export type AiStylePreset = 'film' | 'sketch' | 'anime' | 'watercolor' | 'noir';
 
+export type AiRelightPreset = 'softbox' | 'rim' | 'golden';
+
 export interface AiJobRequestDto {
   imageBase64: string;
   apiKey?: string;
-  /** Intensity 0–1 for cleanup / revive */
+  /** Intensity 0–1 for cleanup / revive / relight */
   intensity?: number;
-  /** Inpaint: white = edit region */
+  /** Inpaint / object-remove: white = edit region */
   maskBase64?: string;
   prompt?: string;
   style?: AiStylePreset;
+  relight?: AiRelightPreset;
 }
 
 export interface AiJobResponseDto {

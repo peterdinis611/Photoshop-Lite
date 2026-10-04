@@ -1,18 +1,19 @@
-const IMAGE_MIME = /^image\//i;
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|avif|svg|heic|heif|tif{1,2})$/i;
+import {
+  isImageFile as isImageFileByFormat,
+  isSvgFile,
+  preferEncodeMime,
+  shouldNormalizeToPng,
+} from './imageFormats';
+
+export { IMAGE_ACCEPT, IMAGE_EXTENSIONS, isImageFile } from './imageFormats';
 
 /** Browser-safe decode limits — larger photos are downscaled, not rejected. */
 export const MAX_IMAGE_EDGE = 8192;
 export const MAX_IMAGE_PIXELS = 40_000_000; // ~6324²
 
-export function isImageFile(file: File): boolean {
-  if (file.type && IMAGE_MIME.test(file.type)) return true;
-  return IMAGE_EXT.test(file.name);
-}
-
 export function collectImageFiles(fileList: FileList | File[] | null | undefined): File[] {
   if (!fileList) return [];
-  return Array.from(fileList).filter(isImageFile);
+  return Array.from(fileList).filter(isImageFileByFormat);
 }
 
 export function dragEventHasFiles(e: { dataTransfer?: DataTransfer | null }): boolean {
@@ -29,6 +30,8 @@ export interface LoadedImageFile {
   file: File;
   /** True when the bitmap was downscaled for memory/browser limits */
   downscaled?: boolean;
+  /** True when exotic format was baked to a browser-safe PNG/WebP */
+  normalized?: boolean;
   originalWidth?: number;
   originalHeight?: number;
 }
@@ -64,9 +67,35 @@ function loadHtmlImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Invalid image'));
+    img.onerror = () =>
+      reject(new Error('Unsupported or corrupted image (browser cannot decode this format)'));
     img.src = src;
   });
+}
+
+/** Parse SVG intrinsic size when the browser reports 0×0. */
+export async function resolveSvgDimensions(
+  file: File
+): Promise<{ width: number; height: number } | null> {
+  try {
+    const text = await file.text();
+    const vb = text.match(/viewBox\s*=\s*["']?\s*([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)[,\s]+([-\d.]+)/i);
+    if (vb) {
+      const w = Math.abs(parseFloat(vb[3]));
+      const h = Math.abs(parseFloat(vb[4]));
+      if (w > 0 && h > 0) return { width: Math.round(w), height: Math.round(h) };
+    }
+    const wAttr = text.match(/\bwidth\s*=\s*["']?([\d.]+)/i);
+    const hAttr = text.match(/\bheight\s*=\s*["']?([\d.]+)/i);
+    if (wAttr && hAttr) {
+      const w = parseFloat(wAttr[1]);
+      const h = parseFloat(hAttr[1]);
+      if (w > 0 && h > 0) return { width: Math.round(w), height: Math.round(h) };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { width: 512, height: 512 };
 }
 
 async function decodeFile(file: File): Promise<{
@@ -85,18 +114,32 @@ async function decodeFile(file: File): Promise<{
         release: () => bitmap.close(),
       };
     } catch {
-      /* SVG / exotic — fall through */
+      /* SVG / HEIC / exotic — fall through */
     }
   }
 
   const url = URL.createObjectURL(file);
-  const img = await loadHtmlImage(url);
-  return {
-    width: img.naturalWidth,
-    height: img.naturalHeight,
-    draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h),
-    release: () => URL.revokeObjectURL(url),
-  };
+  try {
+    const img = await loadHtmlImage(url);
+    let width = img.naturalWidth;
+    let height = img.naturalHeight;
+
+    if ((!width || !height) && isSvgFile(file)) {
+      const dims = await resolveSvgDimensions(file);
+      width = dims?.width ?? 512;
+      height = dims?.height ?? 512;
+    }
+
+    return {
+      width,
+      height,
+      draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h),
+      release: () => URL.revokeObjectURL(url),
+    };
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    throw err;
+  }
 }
 
 function canvasToObjectUrl(
@@ -105,28 +148,59 @@ function canvasToObjectUrl(
   width: number,
   height: number
 ): Promise<string> {
-  const preferJpeg = /jpe?g/i.test(mimeHint) || width * height > 8_000_000;
-  const type = preferJpeg ? 'image/jpeg' : 'image/webp';
-  const quality = preferJpeg ? 0.92 : 0.9;
+  const type = preferEncodeMime(mimeHint, width, height);
+  const quality = type === 'image/png' ? undefined : type === 'image/jpeg' ? 0.92 : 0.9;
 
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
+    const tryEncode = (mime: string, q?: number) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob && blob.size > 0) {
+            resolve(URL.createObjectURL(blob));
+            return;
+          }
+          // Fallback chain: requested → webp → png
+          if (mime === 'image/avif') {
+            tryEncode('image/webp', 0.9);
+            return;
+          }
+          if (mime === 'image/webp' || mime === 'image/jpeg') {
+            tryEncode('image/png');
+            return;
+          }
           reject(new Error('Failed to encode image'));
-          return;
-        }
-        resolve(URL.createObjectURL(blob));
-      },
-      type,
-      quality
-    );
+        },
+        mime,
+        q
+      );
+    };
+    tryEncode(type, quality);
   });
+}
+
+async function rasterizeDecoded(
+  decoded: {
+    width: number;
+    height: number;
+    draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
+  },
+  width: number,
+  height: number,
+  mimeHint: string
+): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) throw new Error('Canvas unavailable');
+  decoded.draw(ctx, width, height);
+  return canvasToObjectUrl(canvas, mimeHint, width, height);
 }
 
 /**
  * Load a single image file for the editor.
  * Uses object URLs (not giant data-URLs) and downscales only when needed.
+ * Exotic formats (HEIC/TIFF/ICO/BMP/…) are normalized to PNG/WebP after decode.
  */
 export async function loadImageFile(
   file: File,
@@ -135,29 +209,35 @@ export async function loadImageFile(
   onPhase?.('read');
   onPhase?.('decode');
 
-  const decoded = await decodeFile(file);
+  let decoded: Awaited<ReturnType<typeof decodeFile>>;
+  try {
+    decoded = await decodeFile(file);
+  } catch {
+    throw new Error(
+      `Cannot decode “${file.name}”. Try PNG, JPEG, WebP, GIF, AVIF, BMP, SVG, or TIFF (browser-supported).`
+    );
+  }
+
   const originalWidth = decoded.width;
   const originalHeight = decoded.height;
 
   if (!originalWidth || !originalHeight) {
     decoded.release();
-    throw new Error('Invalid image');
+    throw new Error(`Invalid image dimensions for “${file.name}”`);
   }
 
   const scale = computeImageScale(originalWidth, originalHeight);
   const width = Math.max(1, Math.round(originalWidth * scale));
   const height = Math.max(1, Math.round(originalHeight * scale));
+  const normalize = shouldNormalizeToPng(file) || scale < 0.999;
+  const mimeHint = file.type || file.name;
 
   try {
-    if (scale < 0.999) {
+    if (normalize) {
       onPhase?.('optimize');
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d', { alpha: true });
-      if (!ctx) throw new Error('Canvas unavailable');
-      decoded.draw(ctx, width, height);
-      const src = await canvasToObjectUrl(canvas, file.type || file.name, width, height);
+      // Prefer PNG for normalized exotic formats so alpha + crop stay reliable
+      const encodeHint = shouldNormalizeToPng(file) ? 'image/png' : mimeHint;
+      const src = await rasterizeDecoded(decoded, width, height, encodeHint);
       onPhase?.('done');
       return {
         src,
@@ -165,7 +245,8 @@ export async function loadImageFile(
         width,
         height,
         file,
-        downscaled: true,
+        downscaled: scale < 0.999,
+        normalized: shouldNormalizeToPng(file),
         originalWidth,
         originalHeight,
       };

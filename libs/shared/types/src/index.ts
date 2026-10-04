@@ -9,6 +9,7 @@ export type {
   ApiErrorResponse,
   AiJobKind,
   AiStylePreset,
+  AiRelightPreset,
   AiJobRequestDto,
   AiJobResponseDto,
   ProjectCreateDto,

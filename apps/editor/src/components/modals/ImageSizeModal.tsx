@@ -42,7 +42,14 @@ export const ImageSizeModal: React.FC = () => {
 
   const estimate = useMemo(() => {
     const px = width * height;
-    const bpp = format === 'image/png' ? 3.2 : format === 'image/webp' ? 0.55 : 0.9 * quality;
+    const bpp =
+      format === 'image/png'
+        ? 3.2
+        : format === 'image/webp'
+          ? 0.55
+          : format === 'image/avif'
+            ? 0.4
+            : 0.9 * quality;
     return Math.round(px * bpp);
   }, [width, height, format, quality]);
 
@@ -183,12 +190,13 @@ export const ImageSizeModal: React.FC = () => {
 
               <div className="flex flex-col gap-1.5">
                 <span className="font-medium text-[var(--text-faint)]">Optimize format</span>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   {(
                     [
                       ['image/jpeg', 'JPEG'],
                       ['image/webp', 'WEBP'],
                       ['image/png', 'PNG'],
+                      ['image/avif', 'AVIF'],
                     ] as const
                   ).map(([id, label]) => (
                     <button

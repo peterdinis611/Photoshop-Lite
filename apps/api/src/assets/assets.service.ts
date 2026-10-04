@@ -45,9 +45,19 @@ export class AssetsService {
   }
 
   private extFromMime(mime: string): string {
-    if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
-    if (mime.includes('webp')) return 'webp';
-    if (mime.includes('gif')) return 'gif';
+    const m = mime.toLowerCase();
+    if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
+    if (m.includes('webp')) return 'webp';
+    if (m.includes('gif')) return 'gif';
+    if (m.includes('avif')) return 'avif';
+    if (m.includes('svg')) return 'svg';
+    if (m.includes('bmp')) return 'bmp';
+    if (m.includes('tiff') || m.includes('tif')) return 'tiff';
+    if (m.includes('heic')) return 'heic';
+    if (m.includes('heif')) return 'heif';
+    if (m.includes('jxl')) return 'jxl';
+    if (m.includes('icon') || m.includes('x-icon')) return 'ico';
+    if (m.includes('apng')) return 'apng';
     return 'png';
   }
 

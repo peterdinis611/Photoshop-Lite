@@ -1,8 +1,9 @@
 import type Konva from 'konva';
 import { getStage } from './stageRegistry';
+import { exportFormatToMime, type ExportImageFormat } from './imageFormats';
 
 export interface CanvasExportOptions {
-  format: 'png' | 'jpeg' | 'webp';
+  format: ExportImageFormat;
   quality: number;
   scale: number;
   transparentBackground: boolean;
@@ -30,12 +31,7 @@ export async function exportDocumentToDataUrl(options: CanvasExportOptions): Pro
     throw new Error('Export content layer not found');
   }
 
-  const mimeType =
-    options.format === 'jpeg'
-      ? 'image/jpeg'
-      : options.format === 'webp'
-        ? 'image/webp'
-        : 'image/png';
+  const mimeType = exportFormatToMime(options.format);
 
   const needsSolidBg =
     options.format === 'jpeg' ||

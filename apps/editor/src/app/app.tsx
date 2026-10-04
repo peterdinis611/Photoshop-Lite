@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { HotkeysProvider } from '@tanstack/react-hotkeys';
 import { PacerProvider } from '@tanstack/react-pacer';
 import { useEditorStore } from '../store/editorStore';
@@ -18,7 +19,9 @@ import {
   useAutoStartOnboarding,
 } from '../components/onboarding/OnboardingTour';
 import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
+import { NotFoundPage } from '../pages/NotFoundPage';
 
 function EditorShell() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -67,25 +70,30 @@ function EditorShell() {
 
 export function App() {
   return (
-    <PacerProvider
-      defaultOptions={{
-        debouncer: { wait: 200 },
-        throttler: { wait: 16, leading: true, trailing: true },
-        asyncThrottler: { wait: 50, leading: true, trailing: true },
-      }}
-    >
-      <HotkeysProvider
+    <ErrorBoundary>
+      <PacerProvider
         defaultOptions={{
-          hotkey: {
-            preventDefault: true,
-            stopPropagation: true,
-            conflictBehavior: 'allow',
-          },
+          debouncer: { wait: 200 },
+          throttler: { wait: 16, leading: true, trailing: true },
+          asyncThrottler: { wait: 50, leading: true, trailing: true },
         }}
       >
-        <EditorShell />
-      </HotkeysProvider>
-    </PacerProvider>
+        <HotkeysProvider
+          defaultOptions={{
+            hotkey: {
+              preventDefault: true,
+              stopPropagation: true,
+              conflictBehavior: 'allow',
+            },
+          }}
+        >
+          <Routes>
+            <Route path="/" element={<EditorShell />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </HotkeysProvider>
+      </PacerProvider>
+    </ErrorBoundary>
   );
 }
 

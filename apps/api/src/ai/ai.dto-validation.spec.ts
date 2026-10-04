@@ -22,6 +22,12 @@ describe('AiService validation', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects object-remove without mask', async () => {
+    await expect(
+      service.objectRemove({ imageBase64: 'data:image/png;base64,x' } as never)
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('passes through engine result for revive', async () => {
     const engine = (service as unknown as { aiEngine: { revive: ReturnType<typeof vi.fn> } })
       .aiEngine;

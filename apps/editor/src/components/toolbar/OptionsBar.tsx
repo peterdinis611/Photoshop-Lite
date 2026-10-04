@@ -367,7 +367,7 @@ export const OptionsBar: React.FC = () => {
       {activeTool === 'crop' && (
         <div className="flex items-center gap-2">
           <span className="text-[var(--text-faint)]">Ratio</span>
-          {(['free', '1:1', '16:9', '4:3', '9:16'] as const).map((ratio) => (
+          {(['free', '1:1', '16:9', '4:3', '3:2', '9:16'] as const).map((ratio) => (
             <button
               key={ratio}
               onClick={() => {
@@ -379,6 +379,7 @@ export const OptionsBar: React.FC = () => {
                   h = s;
                 } else if (ratio === '16:9') h = Math.round((w * 9) / 16);
                 else if (ratio === '4:3') h = Math.round((w * 3) / 4);
+                else if (ratio === '3:2') h = Math.round((w * 2) / 3);
                 else if (ratio === '9:16') w = Math.round((h * 9) / 16);
                 setCropSettings({ aspect: ratio, width: w, height: h });
               }}
@@ -393,7 +394,7 @@ export const OptionsBar: React.FC = () => {
           ))}
           <div className="h-3.5 w-px bg-[var(--border-subtle)] mx-1" />
           <button
-            onClick={applyCrop}
+            onClick={() => void applyCrop()}
             className="flex items-center gap-1 px-2 py-0.5 bg-[var(--success)] text-[#0b0c0f] rounded-[var(--radius-sm)] font-semibold cursor-pointer"
           >
             <Check size={11} /> Apply

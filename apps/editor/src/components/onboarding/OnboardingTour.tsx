@@ -32,7 +32,7 @@ export const ONBOARDING_STEPS = [
     id: 'sidebar',
     eyebrow: 'Panels · 04',
     title: 'Layers, Tone & Lab',
-    body: 'Right sidebar holds Layers, Tone, Neural Lab, Style, and History. Open Lab for Revive, Cleanup, Cutout, and cloud jobs.',
+    body: 'Right sidebar holds Layers, Tone, Neural Lab, Style, and History. Open Lab for Revive, Clarity, Color Match, Outpaint, Batch, and cloud jobs.',
     tips: ['Revive = tone & color', 'Cutout = background removal'],
   },
   {

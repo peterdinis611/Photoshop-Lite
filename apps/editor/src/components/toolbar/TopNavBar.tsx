@@ -35,11 +35,12 @@ import {
   Compass,
   Scaling,
   Pencil,
+  Crop,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
-import { loadImageFiles } from '../../utils/loadImageFiles';
+import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import type { ReviveMode } from '../../utils/photoRevive';
 import type { CleanupMode } from '../../utils/photoCleanup';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
@@ -147,6 +148,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     setShortcutsModalOpen,
     setOnboardingOpen,
     setImageSizeModalOpen,
+    setActiveTool,
     showGrid,
     showRulers,
     toggleGrid,
@@ -309,7 +311,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         multiple
         className="hidden"
         onChange={handleFileChange}
@@ -529,6 +531,15 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Sep />
               <Label>Size</Label>
+              <Item
+                onClick={() => {
+                  setActiveTool('crop');
+                  close();
+                }}
+                hint="C"
+              >
+                <Crop size={13} /> Crop…
+              </Item>
               <Item
                 disabled={!isImageSelected}
                 onClick={() => {

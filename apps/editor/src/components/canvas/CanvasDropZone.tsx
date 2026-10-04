@@ -4,6 +4,7 @@ import { useEditorStore } from '../../store/editorStore';
 import {
   collectImageFiles,
   dragEventHasFiles,
+  IMAGE_ACCEPT,
   loadImageFiles,
   type LoadImageProgress,
 } from '../../utils/loadImageFiles';
@@ -140,7 +141,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         multiple
         className="hidden"
         onChange={onBrowse}

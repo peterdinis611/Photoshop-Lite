@@ -21,6 +21,26 @@ export type { ReviveMode, ReviveModeMeta } from './photoRevive';
 export { CLEANUP_MODES, bakeCleanupPixels } from './photoCleanup';
 export type { CleanupMode, CleanupModeMeta } from './photoCleanup';
 
+export { RELIGHT_MODES, bakeRelightPixels, relightCloudPrompt } from './photoRelight';
+export type { RelightMode, RelightModeMeta } from './photoRelight';
+
+export { PORTRAIT_MODES, bakePortraitPixels } from './photoPortrait';
+export type { PortraitMode, PortraitModeMeta } from './photoPortrait';
+
+export { CLARITY_MODES, bakeClarityPixels } from './photoClarity';
+export type { ClarityMode, ClarityModeMeta } from './photoClarity';
+
+export { bakeColorMatchPixels } from './photoColorMatch';
+
+export {
+  OUTPAINT_PRESETS,
+  computeOutpaintLayout,
+  expandImageWithEdgeFill,
+  buildOutpaintBorderMask,
+  rasterizeImageToSize,
+} from './photoOutpaint';
+export type { OutpaintPreset, OutpaintModeMeta, OutpaintLayout } from './photoOutpaint';
+
 export {
   PROJECT_FILE_EXTENSION,
   buildProjectFile,

@@ -8,10 +8,15 @@ export const REPLICATE_MODEL_REFS = {
   revive: 'piddnad/ddcolor',
   faceRestore: 'sczhou/codeformer',
   inpaint: 'stability-ai/stable-diffusion-inpainting',
+  /** Object remove reuses inpaint with a fixed remove prompt */
+  objectRemove: 'stability-ai/stable-diffusion-inpainting',
+  /** Outpaint reuses inpaint; mask = white border to generate */
+  outpaint: 'stability-ai/stable-diffusion-inpainting',
   segment: 'schananas/grounded_sam',
   caption: 'salesforce/blip',
-  /** Shared img2img-ish model; prompt varies by style preset */
+  /** Shared img2img-ish model; prompt varies by style / relight preset */
   style: 'lucataco/sdxl-lightning-4step',
+  relight: 'lucataco/sdxl-lightning-4step',
 } as const;
 
 /** Known-good version pin for Real-ESRGAN (existing upscale path). */

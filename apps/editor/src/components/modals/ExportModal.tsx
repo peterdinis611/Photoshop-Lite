@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Download, FileImage } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { downloadDataUrl, exportDocumentToDataUrl } from '../../utils/exportCanvas';
+import {
+  isAvifEncodeSupported,
+  listExportFormats,
+  type ExportImageFormat,
+} from '../../utils/imageFormats';
 
 export const ExportModal: React.FC = () => {
   const {
@@ -12,13 +17,19 @@ export const ExportModal: React.FC = () => {
     backgroundColor,
   } = useEditorStore();
 
-  const [format, setFormat] = useState<'png' | 'jpeg' | 'webp'>('png');
+  const [format, setFormat] = useState<ExportImageFormat>('png');
+  const [formats, setFormats] = useState<ExportImageFormat[]>(['png', 'jpeg', 'webp']);
   const [quality, setQuality] = useState<number>(0.92);
   const [scale, setScale] = useState<number>(1);
   const [transparentBg, setTransparentBg] = useState<boolean>(true);
   const [fileName, setFileName] = useState<string>('photoshop-lite-artwork');
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isExportModalOpen) return;
+    void isAvifEncodeSupported().then((ok) => setFormats(listExportFormats(ok)));
+  }, [isExportModalOpen]);
 
   if (!isExportModalOpen) return null;
 
@@ -79,8 +90,8 @@ export const ExportModal: React.FC = () => {
 
           <div className="flex flex-col gap-1.5">
             <label className="text-zinc-400 font-medium">Format:</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['png', 'jpeg', 'webp'] as const).map((fmt) => (
+            <div className={`grid gap-2 ${formats.length > 3 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              {formats.map((fmt) => (
                 <button
                   key={fmt}
                   onClick={() => setFormat(fmt)}

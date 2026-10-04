@@ -108,8 +108,20 @@ export class AiApiClient {
     return this.request<AiJobResponseDto>('/ai/inpaint', dto);
   }
 
+  objectRemove(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/object-remove', dto);
+  }
+
+  outpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/outpaint', dto);
+  }
+
   style(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     return this.request<AiJobResponseDto>('/ai/style', dto);
+  }
+
+  relight(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/relight', dto);
   }
 
   segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {

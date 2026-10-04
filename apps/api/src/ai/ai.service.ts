@@ -84,9 +84,36 @@ export class AiService {
     return this.wrapUpstream(() => this.aiEngine.inpaint(dto));
   }
 
+  async objectRemove(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    if (!dto.maskBase64) {
+      throw new BadRequestException({
+        error: 'Missing maskBase64 for object-remove',
+        code: 'VALIDATION',
+      });
+    }
+    return this.wrapUpstream(() => this.aiEngine.objectRemove(dto));
+  }
+
+  async outpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    if (!dto.maskBase64) {
+      throw new BadRequestException({
+        error: 'Missing maskBase64 for outpaint',
+        code: 'VALIDATION',
+      });
+    }
+    return this.wrapUpstream(() => this.aiEngine.outpaint(dto));
+  }
+
   async style(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     this.requireImage(dto);
     return this.wrapUpstream(() => this.aiEngine.styleTransfer(dto));
+  }
+
+  async relight(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.relight(dto));
   }
 
   async segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {

@@ -90,6 +90,40 @@ describe('AiEngineService routing', () => {
     expect(body.input.mask).toContain('data:image/png');
   });
 
+  it('routes object-remove with fixed remove prompt', async () => {
+    await engine.objectRemove({
+      imageBase64: 'data:image/png;base64,img',
+      maskBase64: 'data:image/png;base64,mask',
+    });
+    const [url, init] = await lastFetchCall();
+    expect(url).toContain(REPLICATE_MODEL_REFS.objectRemove);
+    const body = JSON.parse(String(init.body));
+    expect(body.input.prompt).toMatch(/remove/i);
+  });
+
+  it('routes outpaint with border mask', async () => {
+    await engine.outpaint({
+      imageBase64: 'data:image/png;base64,img',
+      maskBase64: 'data:image/png;base64,mask',
+    });
+    const [url, init] = await lastFetchCall();
+    expect(url).toContain(REPLICATE_MODEL_REFS.outpaint);
+    const body = JSON.parse(String(init.body));
+    expect(body.input.prompt).toMatch(/extend/i);
+  });
+
+  it('routes relight with softbox prompt', async () => {
+    await engine.relight({
+      imageBase64: 'data:image/png;base64,abc',
+      relight: 'softbox',
+      intensity: 0.6,
+    });
+    const [url, init] = await lastFetchCall();
+    expect(url).toContain(REPLICATE_MODEL_REFS.relight);
+    const body = JSON.parse(String(init.body));
+    expect(body.input.prompt).toMatch(/softbox/i);
+  });
+
   it('routes style with film prompt', async () => {
     await engine.styleTransfer({
       imageBase64: 'data:image/png;base64,abc',

@@ -1,4 +1,4 @@
-export type ResizeFormat = 'image/jpeg' | 'image/webp' | 'image/png';
+export type ResizeFormat = 'image/jpeg' | 'image/webp' | 'image/png' | 'image/avif';
 
 export interface ResizeImageOptions {
   width: number;
@@ -59,14 +59,29 @@ export async function resizeImageSource(
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d', { alpha: format === 'image/png' });
+  const wantsAlpha = format === 'image/png' || format === 'image/webp' || format === 'image/avif';
+  const ctx = canvas.getContext('2d', { alpha: wantsAlpha });
   if (!ctx) throw new Error('Canvas unavailable');
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, 0, 0, width, height);
 
-  const encoded = await canvasToObjectUrl(canvas, format, quality);
+  let encoded: { src: string; bytesEstimate: number };
+  try {
+    encoded = await canvasToObjectUrl(canvas, format, quality);
+  } catch {
+    // AVIF may be unavailable — fall back to WebP then PNG
+    if (format === 'image/avif') {
+      try {
+        encoded = await canvasToObjectUrl(canvas, 'image/webp', quality);
+      } catch {
+        encoded = await canvasToObjectUrl(canvas, 'image/png', 1);
+      }
+    } else {
+      throw new Error('Failed to encode resized image');
+    }
+  }
   return {
     src: encoded.src,
     width,

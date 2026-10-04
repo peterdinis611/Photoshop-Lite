@@ -17,10 +17,11 @@ import {
   MarqueeMode,
   SelectionShape,
 } from '../types/editor';
-import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, buildProjectFile, downloadProjectFile, selectionToMaskDataUrl, type ReviveMode, type CleanupMode } from '@photoshop-lite/editor-core';
+import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, bakeRelightPixels, bakePortraitPixels, bakeClarityPixels, bakeColorMatchPixels, computeOutpaintLayout, expandImageWithEdgeFill, buildOutpaintBorderMask, rasterizeImageToSize, buildProjectFile, downloadProjectFile, selectionToMaskDataUrl, type ReviveMode, type CleanupMode, type RelightMode, type PortraitMode, type ClarityMode, type OutpaintPreset } from '@photoshop-lite/editor-core';
 import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
-import type { AiJobKind, AiStylePreset, ProjectSummaryDto } from '@photoshop-lite/shared-types';
+import type { AiJobKind, AiStylePreset, AiRelightPreset, ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { resizeImageSource } from '../utils/resizeImage';
+import { applyCropToImageLayer } from '../utils/cropImage';
 
 /** Unique layer name: "Portrait · Revived", "Portrait · Revived 2", … */
 function uniqueLayerName(base: string, layers: EditorLayer[]): string {
@@ -100,7 +101,7 @@ interface EditorState {
   setWandTolerance: (tolerance: number) => void;
   updateBrushSettings: (settings: Partial<BrushSettings>) => void;
   setCropSettings: (settings: Partial<CropSettings>) => void;
-  applyCrop: () => void;
+  applyCrop: () => Promise<void>;
   cancelCrop: () => void;
 
   // Actions - Layers
@@ -132,6 +133,43 @@ interface EditorState {
     intensity?: number,
     bakeNewLayer?: boolean
   ) => Promise<void>;
+  relightPhotoLayer: (
+    id: string,
+    mode?: RelightMode,
+    intensity?: number,
+    bakeNewLayer?: boolean
+  ) => Promise<void>;
+  polishPortraitLayer: (
+    id: string,
+    mode?: PortraitMode,
+    intensity?: number,
+    bakeNewLayer?: boolean
+  ) => Promise<void>;
+  clarityPhotoLayer: (
+    id: string,
+    mode?: ClarityMode,
+    intensity?: number,
+    bakeNewLayer?: boolean
+  ) => Promise<void>;
+  colorMatchLayer: (
+    id: string,
+    referenceSrc: string,
+    intensity?: number,
+    bakeNewLayer?: boolean
+  ) => Promise<void>;
+  outpaintDocument: (options: {
+    preset: OutpaintPreset;
+    useCloud?: boolean;
+    expandRatio?: number;
+  }) => Promise<void>;
+  runBatchLab: (options: {
+    revive?: boolean;
+    cleanup?: boolean;
+    cutout?: boolean;
+    reviveMode?: ReviveMode;
+    cleanupMode?: CleanupMode;
+    cutoutProvider?: 'client' | 'remove.bg';
+  }) => Promise<void>;
 
   // Actions - AI Operations
   removeBackground: (id: string, provider?: 'client' | 'remove.bg') => Promise<void>;
@@ -139,7 +177,13 @@ interface EditorState {
   runCloudAiJob: (
     id: string,
     kind: AiJobKind,
-    options?: { intensity?: number; prompt?: string; style?: AiStylePreset }
+    options?: {
+      intensity?: number;
+      prompt?: string;
+      style?: AiStylePreset;
+      relight?: AiRelightPreset;
+      maskBase64?: string;
+    }
   ) => Promise<void>;
   setAIStatus: (status: Partial<AIStatus>) => void;
   lastCaption: string;
@@ -174,7 +218,7 @@ interface EditorState {
     options: {
       width: number;
       height: number;
-      format?: 'image/jpeg' | 'image/webp' | 'image/png';
+      format?: 'image/jpeg' | 'image/webp' | 'image/png' | 'image/avif';
       quality?: number;
       resizeCanvas?: boolean;
     }
@@ -304,19 +348,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setActiveTool: (tool) => {
     if (tool === 'crop') {
-      const { canvasWidth, canvasHeight } = get();
-      set({
-        activeTool: 'crop',
-        cropSettings: {
-          active: true,
-          aspect: 'free',
-          x: Math.round(canvasWidth * 0.05),
-          y: Math.round(canvasHeight * 0.05),
-          width: Math.round(canvasWidth * 0.9),
-          height: Math.round(canvasHeight * 0.9),
-          rotation: 0,
-        },
-      });
+      const { canvasWidth, canvasHeight, selectedLayerId, layers } = get();
+      const selected = layers.find((l) => l.id === selectedLayerId);
+      // Prefer the selected image bounds so crop feels like “crop this photo”
+      if (selected?.type === 'image') {
+        const w = Math.max(20, Math.round(selected.width * Math.abs(selected.scaleX)));
+        const h = Math.max(20, Math.round(selected.height * Math.abs(selected.scaleY)));
+        const x = Math.round(
+          Math.max(0, Math.min(selected.x, canvasWidth - Math.min(w, canvasWidth)))
+        );
+        const y = Math.round(
+          Math.max(0, Math.min(selected.y, canvasHeight - Math.min(h, canvasHeight)))
+        );
+        set({
+          activeTool: 'crop',
+          cropSettings: {
+            active: true,
+            aspect: 'free',
+            x,
+            y,
+            width: Math.min(w, canvasWidth - x),
+            height: Math.min(h, canvasHeight - y),
+            rotation: 0,
+          },
+        });
+      } else {
+        set({
+          activeTool: 'crop',
+          cropSettings: {
+            active: true,
+            aspect: 'free',
+            x: Math.round(canvasWidth * 0.05),
+            y: Math.round(canvasHeight * 0.05),
+            width: Math.round(canvasWidth * 0.9),
+            height: Math.round(canvasHeight * 0.9),
+            rotation: 0,
+          },
+        });
+      }
     } else {
       set({
         activeTool: tool,
@@ -338,27 +407,65 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCropSettings: (settings) =>
     set((state) => ({ cropSettings: { ...state.cropSettings, ...settings } })),
 
-  applyCrop: () => {
+  applyCrop: async () => {
     const { cropSettings, layers } = get();
     if (!cropSettings.active) return;
 
-    get().commitHistory('Crop Canvas');
-    const { x, y, width, height } = cropSettings;
-
-    // Shift all layers relative to new origin
-    const updatedLayers = layers.map((layer) => ({
-      ...layer,
-      x: layer.x - x,
-      y: layer.y - y,
-    }));
+    const crop = {
+      x: cropSettings.x,
+      y: cropSettings.y,
+      width: Math.max(1, cropSettings.width),
+      height: Math.max(1, cropSettings.height),
+    };
 
     set({
-      canvasWidth: Math.max(50, Math.round(width)),
-      canvasHeight: Math.max(50, Math.round(height)),
-      layers: updatedLayers,
-      activeTool: 'select',
-      cropSettings: { ...cropSettings, active: false },
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 35,
+        statusText: 'Cropping images…',
+      },
     });
+
+    try {
+      get().commitHistory('Crop');
+
+      const updatedLayers = await Promise.all(
+        layers.map(async (layer) => {
+          if (layer.type === 'image') {
+            return applyCropToImageLayer(layer, crop);
+          }
+          return {
+            ...layer,
+            x: layer.x - crop.x,
+            y: layer.y - crop.y,
+          };
+        })
+      );
+
+      set({
+        canvasWidth: Math.max(50, Math.round(crop.width)),
+        canvasHeight: Math.max(50, Math.round(crop.height)),
+        layers: updatedLayers,
+        activeTool: 'select',
+        cropSettings: { ...cropSettings, active: false },
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Cropped to ${Math.round(crop.width)}×${Math.round(crop.height)}`,
+        },
+      });
+    } catch (err) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: getErrorMessage(err),
+        },
+      });
+    }
   },
 
   cancelCrop: () => {
@@ -806,6 +913,545 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  relightPhotoLayer: async (id, mode = 'softbox', intensity = 0.7, bakeNewLayer = true) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') return;
+
+    const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'relight',
+        progress: 20,
+        statusText: `Relight · ${modeLabel}...`,
+        error: undefined,
+      },
+    });
+
+    try {
+      const litSrc = await bakeRelightPixels(layer.src, mode, intensity);
+      get().commitHistory(`Relight · ${modeLabel}`);
+
+      if (bakeNewLayer) {
+        const lit: ImageLayer = {
+          ...deepClone(layer),
+          id: `${Date.now()}_relight`,
+          name: derivativeName(layer.name, 'Relight', get().layers),
+          src: litSrc,
+          originalSrc: layer.originalSrc || layer.src,
+          preset: `Relight ${modeLabel}`,
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        set((state) => ({
+          layers: [...state.layers, lit],
+          selectedLayerId: lit.id,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `Relight applied · ${modeLabel}`,
+          },
+        }));
+      } else {
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === id && l.type === 'image'
+              ? {
+                  ...l,
+                  src: litSrc,
+                  preset: `Relight ${modeLabel}`,
+                  adjustments: { ...DEFAULT_ADJUSTMENTS },
+                }
+              : l
+          ),
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `Relight applied · ${modeLabel}`,
+          },
+        }));
+      }
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Relight failed'),
+        },
+      });
+    }
+  },
+
+  polishPortraitLayer: async (id, mode = 'natural', intensity = 0.65, bakeNewLayer = true) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') return;
+
+    const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'portrait-polish',
+        progress: 20,
+        statusText: `Portrait polish · ${modeLabel}...`,
+        error: undefined,
+      },
+    });
+
+    try {
+      const polishedSrc = await bakePortraitPixels(layer.src, mode, intensity);
+      get().commitHistory(`Portrait · ${modeLabel}`);
+
+      if (bakeNewLayer) {
+        const polished: ImageLayer = {
+          ...deepClone(layer),
+          id: `${Date.now()}_portrait`,
+          name: derivativeName(layer.name, 'Portrait', get().layers),
+          src: polishedSrc,
+          originalSrc: layer.originalSrc || layer.src,
+          preset: `Portrait ${modeLabel}`,
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        set((state) => ({
+          layers: [...state.layers, polished],
+          selectedLayerId: polished.id,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `Portrait polished · ${modeLabel}`,
+          },
+        }));
+      } else {
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === id && l.type === 'image'
+              ? {
+                  ...l,
+                  src: polishedSrc,
+                  preset: `Portrait ${modeLabel}`,
+                  adjustments: { ...DEFAULT_ADJUSTMENTS },
+                }
+              : l
+          ),
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `Portrait polished · ${modeLabel}`,
+          },
+        }));
+      }
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Portrait polish failed'),
+        },
+      });
+    }
+  },
+
+  clarityPhotoLayer: async (id, mode = 'clarity', intensity = 0.7, bakeNewLayer = true) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') return;
+    const modeLabel = mode.charAt(0).toUpperCase() + mode.slice(1);
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'clarity',
+        progress: 25,
+        statusText: `${modeLabel}…`,
+        error: undefined,
+      },
+    });
+
+    try {
+      const nextSrc = await bakeClarityPixels(layer.src, mode, intensity);
+      get().commitHistory(`${modeLabel}`);
+
+      if (bakeNewLayer) {
+        const next: ImageLayer = {
+          ...deepClone(layer),
+          id: `${Date.now()}_clarity`,
+          name: derivativeName(layer.name, modeLabel, get().layers),
+          src: nextSrc,
+          originalSrc: layer.originalSrc || layer.src,
+          preset: modeLabel,
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        set((state) => ({
+          layers: [...state.layers, next],
+          selectedLayerId: next.id,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `${modeLabel} applied`,
+          },
+        }));
+      } else {
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === id && l.type === 'image'
+              ? {
+                  ...l,
+                  src: nextSrc,
+                  preset: modeLabel,
+                  adjustments: { ...DEFAULT_ADJUSTMENTS },
+                }
+              : l
+          ),
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `${modeLabel} applied`,
+          },
+        }));
+      }
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Clarity failed'),
+        },
+      });
+    }
+  },
+
+  colorMatchLayer: async (id, referenceSrc, intensity = 0.8, bakeNewLayer = true) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') return;
+    if (!referenceSrc) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'Choose a reference photo first',
+        },
+      });
+      return;
+    }
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'color-match',
+        progress: 20,
+        statusText: 'Matching grade from reference…',
+        error: undefined,
+      },
+    });
+
+    try {
+      const matched = await bakeColorMatchPixels(layer.src, referenceSrc, intensity);
+      get().commitHistory('Color Match');
+
+      if (bakeNewLayer) {
+        const next: ImageLayer = {
+          ...deepClone(layer),
+          id: `${Date.now()}_grade`,
+          name: derivativeName(layer.name, 'Grade', get().layers),
+          src: matched,
+          originalSrc: layer.originalSrc || layer.src,
+          preset: 'Color Match',
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        set((state) => ({
+          layers: [...state.layers, next],
+          selectedLayerId: next.id,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: 'Color match applied',
+          },
+        }));
+      } else {
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === id && l.type === 'image'
+              ? {
+                  ...l,
+                  src: matched,
+                  preset: 'Color Match',
+                  adjustments: { ...DEFAULT_ADJUSTMENTS },
+                }
+              : l
+          ),
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: 'Color match applied',
+          },
+        }));
+      }
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Color match failed'),
+        },
+      });
+    }
+  },
+
+  outpaintDocument: async ({ preset, useCloud = false, expandRatio = 0.15 }) => {
+    const { canvasWidth, canvasHeight, layers, selectedLayerId } = get();
+    const layout = computeOutpaintLayout(canvasWidth, canvasHeight, preset, expandRatio);
+
+    if (layout.width === canvasWidth && layout.height === canvasHeight) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'Canvas already matches that aspect — try Expand +15%',
+        },
+      });
+      return;
+    }
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'outpaint',
+        progress: 15,
+        statusText: useCloud ? 'Expanding + cloud outpaint…' : 'Expanding canvas…',
+        error: undefined,
+      },
+    });
+
+    try {
+      get().commitHistory(`Outpaint · ${preset}`);
+
+      const imageId =
+        selectedLayerId && layers.find((l) => l.id === selectedLayerId)?.type === 'image'
+          ? selectedLayerId
+          : layers.slice().reverse().find((l) => l.type === 'image')?.id;
+
+      let updatedLayers = layers.map((layer) => ({
+        ...layer,
+        x: layer.x + layout.offsetX,
+        y: layer.y + layout.offsetY,
+      }));
+
+      const padL = layout.offsetX;
+      const padT = layout.offsetY;
+      const padR = layout.width - layout.offsetX - canvasWidth;
+      const padB = layout.height - layout.offsetY - canvasHeight;
+
+      if (imageId) {
+        const imgLayer = updatedLayers.find((l) => l.id === imageId);
+        if (imgLayer && imgLayer.type === 'image') {
+          set({
+            aiStatus: {
+              isProcessing: true,
+              action: 'outpaint',
+              progress: 40,
+              statusText: 'Filling new edges…',
+            },
+          });
+
+          // Flatten to old document size, then pad into the new frame
+          const flat = await rasterizeImageToSize(imgLayer.src, canvasWidth, canvasHeight);
+          const expanded = await expandImageWithEdgeFill(flat, padL, padT, padR, padB);
+          let finalSrc = expanded.src;
+
+          if (useCloud) {
+            set({
+              aiStatus: {
+                isProcessing: true,
+                action: 'outpaint',
+                progress: 55,
+                statusText: 'Cloud outpaint…',
+              },
+            });
+            const maskBase64 = await buildOutpaintBorderMask(
+              expanded.width,
+              expanded.height,
+              padL,
+              padT,
+              canvasWidth,
+              canvasHeight
+            );
+            const apiKey = get().replicateApiKey || undefined;
+            const started = await aiApiClient.outpaint({
+              imageBase64: finalSrc,
+              maskBase64,
+              apiKey,
+            });
+            if (started.fallbackToClient) {
+              throw new Error(started.message || 'Cloud outpaint unavailable');
+            }
+            let resultSrc = started.imageBase64 || '';
+            if (started.predictionId || started.statusUrl) {
+              const poll = await aiApiClient.pollUntilComplete({
+                predictionId: started.predictionId,
+                statusUrl: started.statusUrl,
+                apiKey,
+              });
+              resultSrc = poll.imageBase64 || resultSrc;
+            }
+            if (!resultSrc) throw new Error('Outpaint returned no image');
+            finalSrc = resultSrc;
+          }
+
+          updatedLayers = updatedLayers.map((l) =>
+            l.id === imageId && l.type === 'image'
+              ? {
+                  ...l,
+                  src: finalSrc,
+                  originalSrc: l.originalSrc || l.src,
+                  x: 0,
+                  y: 0,
+                  width: expanded.width,
+                  height: expanded.height,
+                  scaleX: 1,
+                  scaleY: 1,
+                  rotation: 0,
+                }
+              : l
+          );
+        }
+      }
+
+      set({
+        canvasWidth: layout.width,
+        canvasHeight: layout.height,
+        layers: updatedLayers,
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Outpainted to ${layout.width}×${layout.height}`,
+        },
+      });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Outpaint failed'),
+        },
+      });
+    }
+  },
+
+  runBatchLab: async ({
+    revive = false,
+    cleanup = false,
+    cutout = false,
+    reviveMode = 'natural',
+    cleanupMode = 'standard',
+    cutoutProvider = 'client',
+  }) => {
+    if (!revive && !cleanup && !cutout) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'Pick at least one batch recipe',
+        },
+      });
+      return;
+    }
+
+    const imageIds = get()
+      .layers.filter((l) => l.type === 'image')
+      .map((l) => l.id);
+
+    if (!imageIds.length) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'No image layers to batch',
+        },
+      });
+      return;
+    }
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: 'batch',
+        progress: 5,
+        statusText: `Batch Lab · ${imageIds.length} layers…`,
+        error: undefined,
+      },
+    });
+
+    try {
+      for (let i = 0; i < imageIds.length; i++) {
+        const id = imageIds[i];
+        const pct = Math.round(((i + 0.3) / imageIds.length) * 100);
+        set({
+          aiStatus: {
+            isProcessing: true,
+            action: 'batch',
+            progress: Math.min(95, pct),
+            statusText: `Batch ${i + 1}/${imageIds.length}…`,
+          },
+        });
+
+        if (revive) {
+          await get().revivePhotoLayer(id, reviveMode, 0.75, false);
+        }
+        if (cleanup) {
+          await get().cleanPhotoLayer(id, cleanupMode, 0.7, false);
+        }
+        if (cutout) {
+          await get().removeBackground(id, cutoutProvider);
+        }
+      }
+
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Batch done · ${imageIds.length} layers`,
+        },
+      });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Batch Lab failed'),
+        },
+      });
+    }
+  },
+
   removeBackground: async (id, provider = 'client') => {
     const layer = get().layers.find((l) => l.id === id);
     if (!layer || layer.type !== 'image') {
@@ -1017,8 +1663,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       revive: 'Cloud Revive',
       cleanup: 'Cloud Cleanup',
       inpaint: 'Inpaint',
+      'object-remove': 'Object Remove',
+      outpaint: 'Outpaint',
       'face-restore': 'Face Restore',
       style: 'Style Transfer',
+      relight: 'Cloud Relight',
       segment: 'Segmentation',
       caption: 'Caption',
     };
@@ -1037,16 +1686,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const apiKey = get().replicateApiKey || undefined;
       let maskBase64: string | undefined;
 
-      if (kind === 'inpaint') {
+      if (kind === 'inpaint' || kind === 'object-remove') {
         const sel = get().marqueeSelection;
         if (!sel) {
-          throw new Error('Draw a marquee/lasso selection for inpaint first');
+          throw new Error(
+            kind === 'object-remove'
+              ? 'Select the object to remove (marquee or lasso) first'
+              : 'Draw a marquee/lasso selection for inpaint first'
+          );
         }
         maskBase64 = await selectionToMaskDataUrl({
           canvasWidth: get().canvasWidth,
           canvasHeight: get().canvasHeight,
           selection: sel,
         });
+      } else if (kind === 'outpaint') {
+        if (!options.maskBase64) {
+          throw new Error('Outpaint needs a border mask — use Lab → Outpaint');
+        }
+        maskBase64 = options.maskBase64;
       }
 
       const jobBody = {
@@ -1055,6 +1713,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         intensity: options.intensity ?? 0.7,
         prompt: options.prompt,
         style: options.style,
+        relight: options.relight,
         maskBase64,
       };
 
@@ -1062,8 +1721,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         cleanup: () => aiApiClient.cleanup(jobBody),
         revive: () => aiApiClient.revive(jobBody),
         inpaint: () => aiApiClient.inpaint(jobBody),
+        'object-remove': () => aiApiClient.objectRemove(jobBody),
+        outpaint: () => aiApiClient.outpaint(jobBody),
         'face-restore': () => aiApiClient.faceRestore(jobBody),
         style: () => aiApiClient.style(jobBody),
+        relight: () => aiApiClient.relight(jobBody),
         segment: () => aiApiClient.segment(jobBody),
         caption: () => aiApiClient.caption(jobBody),
       };
@@ -1129,7 +1791,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set((state) => ({
         layers: [...state.layers, baked],
         selectedLayerId: baked.id,
-        marqueeSelection: kind === 'inpaint' ? null : state.marqueeSelection,
+        marqueeSelection:
+          kind === 'inpaint' || kind === 'object-remove' ? null : state.marqueeSelection,
         aiStatus: {
           isProcessing: false,
           action: null,

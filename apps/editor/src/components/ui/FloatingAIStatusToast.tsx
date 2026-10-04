@@ -21,7 +21,14 @@ const ACTION_LABELS: Record<string, string> = {
   upscale: 'Upscale',
   'face-restore': 'Face Restore',
   inpaint: 'Inpaint',
+  'object-remove': 'Object Remove',
   style: 'Style Transfer',
+  relight: 'Relight',
+  'portrait-polish': 'Portrait Polish',
+  clarity: 'Clarity',
+  'color-match': 'Color Match',
+  outpaint: 'Outpaint',
+  batch: 'Batch Lab',
   segment: 'Segment',
   caption: 'Caption',
 };
@@ -57,10 +64,17 @@ export const FloatingAIStatusToast: React.FC = () => {
       case 'cleanup':
         return <Eraser size={18} className="text-[var(--ink-blue)] animate-pulse" />;
       case 'face-restore':
+      case 'portrait-polish':
         return <ScanFace size={18} className="text-[var(--accent)] animate-pulse" />;
       case 'inpaint':
+      case 'object-remove':
         return <Paintbrush size={18} className="text-[var(--accent-hot)] animate-pulse" />;
       case 'style':
+      case 'relight':
+      case 'clarity':
+      case 'color-match':
+      case 'outpaint':
+      case 'batch':
       case 'segment':
       case 'caption':
         return <Sparkles size={18} className="text-[var(--accent)] animate-pulse" />;

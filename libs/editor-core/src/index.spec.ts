@@ -15,6 +15,8 @@ import {
   mixAdjustments,
   REVIVE_MODES,
   CLEANUP_MODES,
+  RELIGHT_MODES,
+  PORTRAIT_MODES,
 } from './index';
 
 describe('AppError', () => {
@@ -122,13 +124,15 @@ describe('filters & revive', () => {
     expect(DEFAULT_ADJUSTMENTS.brightness).toBe(0);
   });
 
-  it('lists revive and cleanup modes', () => {
+  it('lists revive, cleanup, relight, and portrait modes', () => {
     expect(REVIVE_MODES.map((m) => m.id)).toEqual(
       expect.arrayContaining(['natural', 'vivid', 'shadows'])
     );
     expect(CLEANUP_MODES.map((m) => m.id)).toEqual(
       expect.arrayContaining(['gentle', 'standard', 'strong'])
     );
+    expect(RELIGHT_MODES.map((m) => m.id)).toEqual(['softbox', 'rim', 'golden']);
+    expect(PORTRAIT_MODES.map((m) => m.id)).toEqual(['natural', 'glow', 'matte']);
   });
 
   it('mixAdjustments lerps numeric fields by intensity', () => {

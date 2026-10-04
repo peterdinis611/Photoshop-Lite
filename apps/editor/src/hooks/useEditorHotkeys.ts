@@ -143,10 +143,24 @@ export function useEditorHotkeys(options: {
             s.setOnboardingOpen(false);
             return;
           }
+          if (s.cropSettings.active) {
+            s.cancelCrop();
+            return;
+          }
           s.setMarqueeSelection(null);
           s.setShortcutsModalOpen(false);
         },
         options: { meta: { name: 'Clear Selection / Close', group: 'Select' }, requireReset: true },
+      },
+      {
+        hotkey: 'Enter',
+        callback: () => {
+          const s = useEditorStore.getState();
+          if (s.cropSettings.active) {
+            void s.applyCrop();
+          }
+        },
+        options: { meta: { name: 'Apply Crop', group: 'Image' } },
       },
       {
         hotkey: 'Mod+Shift+/',

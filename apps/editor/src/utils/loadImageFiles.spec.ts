@@ -23,6 +23,10 @@ describe('isImageFile', () => {
     expect(isImageFile(makeFile('photo.WEBP', ''))).toBe(true);
     expect(isImageFile(makeFile('shot.heic', ''))).toBe(true);
     expect(isImageFile(makeFile('scan.tiff', ''))).toBe(true);
+    expect(isImageFile(makeFile('icon.ico', ''))).toBe(true);
+    expect(isImageFile(makeFile('logo.svg', ''))).toBe(true);
+    expect(isImageFile(makeFile('pic.avif', ''))).toBe(true);
+    expect(isImageFile(makeFile('raw.jxl', ''))).toBe(true);
   });
 
   it('rejects non-images', () => {
@@ -108,6 +112,21 @@ describe('loadImageFile / loadImageFiles', () => {
     expect(loaded.src).toBe('blob:mock-image');
     expect(loaded.file).toBe(file);
     expect(URL.createObjectURL).toHaveBeenCalled();
+  });
+
+  it('normalizes HEIC/TIFF/ICO to a baked bitmap', async () => {
+    const toBlob = vi.fn((cb: BlobCallback) => {
+      cb(new Blob(['x'], { type: 'image/png' }));
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(toBlob as never);
+
+    const loaded = await loadImageFile(makeFile('phone.heic', 'image/heic'));
+    expect(loaded.normalized).toBe(true);
+    expect(loaded.src).toBe('blob:mock-image');
+    expect(toBlob).toHaveBeenCalled();
   });
 
   it('downscales huge bitmaps', async () => {

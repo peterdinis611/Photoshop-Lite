@@ -19,10 +19,22 @@ import {
   ImageOff,
   Cpu,
   Globe,
+  Lightbulb,
+  Smile,
+  Trash2,
+  Aperture,
+  Blend,
+  Expand,
+  Layers2,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { REVIVE_MODES, type ReviveMode } from '../../utils/photoRevive';
 import { CLEANUP_MODES, type CleanupMode } from '../../utils/photoCleanup';
+import { RELIGHT_MODES, type RelightMode } from '../../utils/photoRelight';
+import { PORTRAIT_MODES, type PortraitMode } from '../../utils/photoPortrait';
+import { CLARITY_MODES, type ClarityMode } from '../../utils/photoClarity';
+import { OUTPAINT_PRESETS, type OutpaintPreset } from '../../utils/photoOutpaint';
+import { loadImageFiles } from '../../utils/loadImageFiles';
 import type { AiStylePreset } from '@photoshop-lite/shared-types';
 
 const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
@@ -35,7 +47,7 @@ const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
 
 type LabZone = 'local' | 'cloud' | 'extract';
 
-type LocalRecipe = 'revive' | 'cleanup';
+type LocalRecipe = 'revive' | 'cleanup' | 'relight' | 'portrait' | 'clarity' | 'match';
 
 export const AISuitePanel: React.FC = () => {
   const {
@@ -45,6 +57,12 @@ export const AISuitePanel: React.FC = () => {
     upscaleLayer,
     revivePhotoLayer,
     cleanPhotoLayer,
+    relightPhotoLayer,
+    polishPortraitLayer,
+    clarityPhotoLayer,
+    colorMatchLayer,
+    outpaintDocument,
+    runBatchLab,
     runCloudAiJob,
     aiStatus,
     lastCaption,
@@ -69,14 +87,36 @@ export const AISuitePanel: React.FC = () => {
   const [cleanupMode, setCleanupMode] = useState<CleanupMode>('standard');
   const [cleanupIntensity, setCleanupIntensity] = useState(0.7);
   const [cleanupBake, setCleanupBake] = useState(true);
+  const [relightMode, setRelightMode] = useState<RelightMode>('softbox');
+  const [relightIntensity, setRelightIntensity] = useState(0.7);
+  const [relightBake, setRelightBake] = useState(true);
+  const [portraitMode, setPortraitMode] = useState<PortraitMode>('natural');
+  const [portraitIntensity, setPortraitIntensity] = useState(0.65);
+  const [portraitBake, setPortraitBake] = useState(true);
+  const [clarityMode, setClarityMode] = useState<ClarityMode>('clarity');
+  const [clarityIntensity, setClarityIntensity] = useState(0.7);
+  const [clarityBake, setClarityBake] = useState(true);
+  const [matchIntensity, setMatchIntensity] = useState(0.8);
+  const [matchBake, setMatchBake] = useState(true);
+  const [matchRefSrc, setMatchRefSrc] = useState<string | null>(null);
+  const [matchRefName, setMatchRefName] = useState('');
+  const [outpaintPreset, setOutpaintPreset] = useState<OutpaintPreset>('expand');
+  const [outpaintCloud, setOutpaintCloud] = useState(false);
+  const [batchRevive, setBatchRevive] = useState(true);
+  const [batchCleanup, setBatchCleanup] = useState(false);
+  const [batchCutout, setBatchCutout] = useState(false);
   const [cloudStyle, setCloudStyle] = useState<AiStylePreset>('film');
   const [inpaintPrompt, setInpaintPrompt] = useState('');
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImage = selectedLayer?.type === 'image';
   const hasImage = layers.some((l) => l.type === 'image');
+  const imageLayerCount = layers.filter((l) => l.type === 'image').length;
   const activeMode = REVIVE_MODES.find((m) => m.id === reviveMode);
   const activeCleanup = CLEANUP_MODES.find((m) => m.id === cleanupMode);
+  const activeRelight = RELIGHT_MODES.find((m) => m.id === relightMode);
+  const activePortrait = PORTRAIT_MODES.find((m) => m.id === portraitMode);
+  const activeClarity = CLARITY_MODES.find((m) => m.id === clarityMode);
   const busy = aiStatus.isProcessing;
   const keysReady = Boolean(removeBgApiKey || replicateApiKey);
 
@@ -188,26 +228,30 @@ export const AISuitePanel: React.FC = () => {
         <ViewTransition name="lab-zone" update="auto">
           {zone === 'local' && (
             <div key="local" className="lab-zone-body flex flex-col gap-3">
-              <div className="lab-recipe-switch">
-                <button
-                  type="button"
-                  className={localRecipe === 'revive' ? 'on' : ''}
-                  onClick={() => selectRecipe('revive')}
-                >
-                  <SunMedium size={13} />
-                  Revive
-                </button>
-                <button
-                  type="button"
-                  className={localRecipe === 'cleanup' ? 'on' : ''}
-                  onClick={() => selectRecipe('cleanup')}
-                >
-                  <Eraser size={13} />
-                  Cleanup
-                </button>
+              <div className="lab-recipe-switch lab-recipe-switch--wrap">
+                {(
+                  [
+                    ['revive', 'Revive', SunMedium],
+                    ['cleanup', 'Cleanup', Eraser],
+                    ['relight', 'Relight', Lightbulb],
+                    ['portrait', 'Portrait', Smile],
+                    ['clarity', 'Clarity', Aperture],
+                    ['match', 'Match', Blend],
+                  ] as const
+                ).map(([id, label, Icon]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={localRecipe === id ? 'on' : ''}
+                    onClick={() => selectRecipe(id)}
+                  >
+                    <Icon size={13} />
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              {localRecipe === 'revive' ? (
+              {localRecipe === 'revive' && (
                 <section className="lab-card lab-card--hero">
                   <div className="lab-card-head">
                     <div>
@@ -270,7 +314,9 @@ export const AISuitePanel: React.FC = () => {
                     {busy && aiStatus.action === 'revive' ? 'Reviving…' : 'Revive photo'}
                   </button>
                 </section>
-              ) : (
+              )}
+
+              {localRecipe === 'cleanup' && (
                 <section className="lab-card">
                   <div className="lab-card-head">
                     <div>
@@ -336,11 +382,389 @@ export const AISuitePanel: React.FC = () => {
                   </button>
                 </section>
               )}
+
+              {localRecipe === 'relight' && (
+                <section className="lab-card lab-card--hero">
+                  <div className="lab-card-head">
+                    <div>
+                      <h3>Studio Relight</h3>
+                      <p>Softbox, rim, or golden hour — local light map bake.</p>
+                    </div>
+                    <span className="lab-badge lab-badge--accent">Local</span>
+                  </div>
+
+                  <div className="lab-seg lab-seg--3">
+                    {RELIGHT_MODES.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        title={m.blurb}
+                        onClick={() => setRelightMode(m.id)}
+                        className={relightMode === m.id ? 'on' : ''}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                  {activeRelight && <p className="lab-hint">{activeRelight.blurb}</p>}
+
+                  <label className="lab-slider">
+                    <span>
+                      Intensity
+                      <em>{Math.round(relightIntensity * 100)}%</em>
+                    </span>
+                    <input
+                      type="range"
+                      min={0.25}
+                      max={1}
+                      step={0.05}
+                      value={relightIntensity}
+                      onChange={(e) => setRelightIntensity(Number(e.target.value))}
+                    />
+                  </label>
+
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={relightBake}
+                      onChange={(e) => setRelightBake(e.target.checked)}
+                    />
+                    <Layers size={12} />
+                    Bake as new layer
+                  </label>
+
+                  <button
+                    type="button"
+                    disabled={busy || !hasImage}
+                    className="lab-cta"
+                    onClick={() => {
+                      const id = resolveImageId();
+                      if (id) relightPhotoLayer(id, relightMode, relightIntensity, relightBake);
+                    }}
+                  >
+                    <Lightbulb size={15} />
+                    {busy && aiStatus.action === 'relight' ? 'Relighting…' : 'Apply relight'}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={busy || !hasImage}
+                    className="lab-ghost-btn"
+                    onClick={() => {
+                      const id = resolveImageId();
+                      if (id) {
+                        runCloudAiJob(id, 'relight', {
+                          relight: relightMode,
+                          intensity: relightIntensity,
+                        });
+                      }
+                    }}
+                  >
+                    <Cloud size={13} />
+                    Cloud relight (Replicate)
+                  </button>
+                </section>
+              )}
+
+              {localRecipe === 'portrait' && (
+                <section className="lab-card">
+                  <div className="lab-card-head">
+                    <div>
+                      <h3>Portrait Polish</h3>
+                      <p>Skin smooth with texture kept — not plastic.</p>
+                    </div>
+                    <span className="lab-badge">Local</span>
+                  </div>
+
+                  <div className="lab-seg lab-seg--3">
+                    {PORTRAIT_MODES.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        title={m.blurb}
+                        onClick={() => setPortraitMode(m.id)}
+                        className={portraitMode === m.id ? 'on' : ''}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                  {activePortrait && <p className="lab-hint">{activePortrait.blurb}</p>}
+
+                  <label className="lab-slider">
+                    <span>
+                      Intensity
+                      <em>{Math.round(portraitIntensity * 100)}%</em>
+                    </span>
+                    <input
+                      type="range"
+                      min={0.25}
+                      max={1}
+                      step={0.05}
+                      value={portraitIntensity}
+                      onChange={(e) => setPortraitIntensity(Number(e.target.value))}
+                    />
+                  </label>
+
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={portraitBake}
+                      onChange={(e) => setPortraitBake(e.target.checked)}
+                    />
+                    <Layers size={12} />
+                    Bake as new layer
+                  </label>
+
+                  <button
+                    type="button"
+                    disabled={busy || !hasImage}
+                    className="lab-cta lab-cta--quiet"
+                    onClick={() => {
+                      const id = resolveImageId();
+                      if (id) {
+                        polishPortraitLayer(id, portraitMode, portraitIntensity, portraitBake);
+                      }
+                    }}
+                  >
+                    <Smile size={15} />
+                    {busy && aiStatus.action === 'portrait-polish'
+                      ? 'Polishing…'
+                      : 'Polish portrait'}
+                  </button>
+                </section>
+              )}
+
+              {localRecipe === 'clarity' && (
+                <section className="lab-card lab-card--hero">
+                  <div className="lab-card-head">
+                    <div>
+                      <h3>Clarity / Dehaze</h3>
+                      <p>Local midtone snap for haze and flat phone shots.</p>
+                    </div>
+                    <span className="lab-badge lab-badge--accent">Local</span>
+                  </div>
+                  <div className="lab-seg lab-seg--3">
+                    {CLARITY_MODES.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        title={m.blurb}
+                        onClick={() => setClarityMode(m.id)}
+                        className={clarityMode === m.id ? 'on' : ''}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                  {activeClarity && <p className="lab-hint">{activeClarity.blurb}</p>}
+                  <label className="lab-slider">
+                    <span>
+                      Intensity
+                      <em>{Math.round(clarityIntensity * 100)}%</em>
+                    </span>
+                    <input
+                      type="range"
+                      min={0.25}
+                      max={1}
+                      step={0.05}
+                      value={clarityIntensity}
+                      onChange={(e) => setClarityIntensity(Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={clarityBake}
+                      onChange={(e) => setClarityBake(e.target.checked)}
+                    />
+                    <Layers size={12} />
+                    Bake as new layer
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy || !hasImage}
+                    className="lab-cta"
+                    onClick={() => {
+                      const id = resolveImageId();
+                      if (id) clarityPhotoLayer(id, clarityMode, clarityIntensity, clarityBake);
+                    }}
+                  >
+                    <Aperture size={15} />
+                    {busy && aiStatus.action === 'clarity' ? 'Working…' : `Apply ${activeClarity?.label ?? 'Clarity'}`}
+                  </button>
+                </section>
+              )}
+
+              {localRecipe === 'match' && (
+                <section className="lab-card">
+                  <div className="lab-card-head">
+                    <div>
+                      <h3>Color Match</h3>
+                      <p>Transfer tone / grade from a reference photo.</p>
+                    </div>
+                    <span className="lab-badge">Local</span>
+                  </div>
+                  <label className="lab-ghost-btn" style={{ cursor: 'pointer' }}>
+                    <Blend size={13} />
+                    {matchRefName ? matchRefName : 'Upload reference…'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="absolute opacity-0 w-0 h-0 overflow-hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        if (!file) return;
+                        const loaded = await loadImageFiles([file]);
+                        if (loaded[0]) {
+                          setMatchRefSrc(loaded[0].src);
+                          setMatchRefName(loaded[0].name);
+                        }
+                      }}
+                    />
+                  </label>
+                  {matchRefSrc && (
+                    <img
+                      src={matchRefSrc}
+                      alt="Reference"
+                      className="w-full h-20 object-cover rounded-[var(--radius-sm)] border border-[var(--border-subtle)]"
+                    />
+                  )}
+                  <label className="lab-slider">
+                    <span>
+                      Strength
+                      <em>{Math.round(matchIntensity * 100)}%</em>
+                    </span>
+                    <input
+                      type="range"
+                      min={0.2}
+                      max={1}
+                      step={0.05}
+                      value={matchIntensity}
+                      onChange={(e) => setMatchIntensity(Number(e.target.value))}
+                    />
+                  </label>
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={matchBake}
+                      onChange={(e) => setMatchBake(e.target.checked)}
+                    />
+                    <Layers size={12} />
+                    Bake as new layer
+                  </label>
+                  <button
+                    type="button"
+                    disabled={busy || !hasImage || !matchRefSrc}
+                    className="lab-cta lab-cta--quiet"
+                    onClick={() => {
+                      const id = resolveImageId();
+                      if (id && matchRefSrc) {
+                        colorMatchLayer(id, matchRefSrc, matchIntensity, matchBake);
+                      }
+                    }}
+                  >
+                    <Blend size={15} />
+                    {busy && aiStatus.action === 'color-match' ? 'Matching…' : 'Match grade'}
+                  </button>
+                </section>
+              )}
+
+              <section className="lab-card lab-card--compact">
+                <div className="lab-card-head">
+                  <div>
+                    <h3 className="flex items-center gap-1.5">
+                      <Layers2 size={14} className="text-[var(--accent-hot)]" />
+                      Batch Lab
+                    </h3>
+                    <p>Run recipes on all {imageLayerCount} image layer{imageLayerCount === 1 ? '' : 's'}.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={batchRevive}
+                      onChange={(e) => setBatchRevive(e.target.checked)}
+                    />
+                    Revive
+                  </label>
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={batchCleanup}
+                      onChange={(e) => setBatchCleanup(e.target.checked)}
+                    />
+                    Cleanup
+                  </label>
+                  <label className="lab-check">
+                    <input
+                      type="checkbox"
+                      checked={batchCutout}
+                      onChange={(e) => setBatchCutout(e.target.checked)}
+                    />
+                    Cutout
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || imageLayerCount === 0 || (!batchRevive && !batchCleanup && !batchCutout)}
+                  className="lab-ghost-btn"
+                  onClick={() =>
+                    void runBatchLab({
+                      revive: batchRevive,
+                      cleanup: batchCleanup,
+                      cutout: batchCutout,
+                      reviveMode,
+                      cleanupMode,
+                      cutoutProvider: provider,
+                    })
+                  }
+                >
+                  <Layers2 size={13} />
+                  {busy && aiStatus.action === 'batch'
+                    ? 'Batch running…'
+                    : `Run on ${imageLayerCount || 0} layers`}
+                </button>
+              </section>
             </div>
           )}
 
           {zone === 'cloud' && (
             <div key="cloud" className="lab-zone-body flex flex-col gap-3">
+              <section className="lab-card lab-card--hero">
+                <div className="lab-card-head">
+                  <div>
+                    <h3 className="flex items-center gap-1.5">
+                      <Trash2 size={14} className="text-[var(--accent-hot)]" />
+                      Object Remove
+                    </h3>
+                    <p>Select tourists, logos, cables — AI fills the hole. No prompt.</p>
+                  </div>
+                  <span className="lab-badge lab-badge--accent">API</span>
+                </div>
+                <p className="lab-hint">
+                  {marqueeSelection
+                    ? 'Selection ready — remove fills that region.'
+                    : 'Draw a marquee or lasso over the object first.'}
+                </p>
+                <button
+                  type="button"
+                  disabled={busy || !hasImage || !marqueeSelection}
+                  className="lab-cta"
+                  onClick={() => {
+                    const id = resolveImageId();
+                    if (id) runCloudAiJob(id, 'object-remove');
+                  }}
+                >
+                  <Trash2 size={15} />
+                  {busy && aiStatus.action === 'object-remove'
+                    ? 'Removing…'
+                    : 'Remove object'}
+                </button>
+              </section>
+
               <section className="lab-card">
                 <div className="lab-card-head">
                   <div>
@@ -586,6 +1010,55 @@ export const AISuitePanel: React.FC = () => {
                 >
                   <Sparkles size={14} />
                   Upscale {upscaleFactor}×
+                </button>
+              </section>
+
+              <section className="lab-card lab-card--hero">
+                <div className="lab-card-head">
+                  <div>
+                    <h3 className="flex items-center gap-1.5">
+                      <Expand size={14} className="text-[var(--accent-hot)]" />
+                      Outpaint
+                    </h3>
+                    <p>Expand canvas & fill edges — great after Crop.</p>
+                  </div>
+                  <span className="lab-badge">Extend</span>
+                </div>
+                <div className="lab-seg lab-seg--3">
+                  {OUTPAINT_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      title={p.blurb}
+                      onClick={() => setOutpaintPreset(p.id)}
+                      className={outpaintPreset === p.id ? 'on' : ''}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="lab-check">
+                  <input
+                    type="checkbox"
+                    checked={outpaintCloud}
+                    onChange={(e) => setOutpaintCloud(e.target.checked)}
+                  />
+                  <Cloud size={12} />
+                  Cloud generative fill
+                </label>
+                <button
+                  type="button"
+                  disabled={busy || !hasImage}
+                  className="lab-cta"
+                  onClick={() =>
+                    void outpaintDocument({
+                      preset: outpaintPreset,
+                      useCloud: outpaintCloud,
+                    })
+                  }
+                >
+                  <Expand size={15} />
+                  {busy && aiStatus.action === 'outpaint' ? 'Outpainting…' : 'Expand & fill'}
                 </button>
               </section>
             </div>

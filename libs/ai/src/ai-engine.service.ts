@@ -8,6 +8,7 @@ import {
   AiJobRequestDto,
   AiJobResponseDto,
   AiStylePreset,
+  AiRelightPreset,
 } from '@photoshop-lite/shared-types';
 import { REAL_ESRGAN_VERSION, REPLICATE_MODEL_REFS, styleModelRef } from './replicate-models';
 
@@ -213,6 +214,65 @@ export class AiEngineService {
         prompt: dto.prompt || 'seamless photorealistic fill, match lighting and texture',
         negative_prompt: 'blurry, distorted, watermark, text',
         num_inference_steps: 30,
+      },
+    });
+  }
+
+  /** Object remove — same inpaint model, fixed “erase & fill” prompt (no user text). */
+  async objectRemove(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (!dto.maskBase64) throw new Error('Missing maskBase64 for object-remove');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.objectRemove,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        mask: this.ensureDataUrl(dto.maskBase64),
+        prompt:
+          'remove the masked object completely, seamless photorealistic background fill, match surrounding lighting texture and perspective, no people no text no watermark',
+        negative_prompt: 'object remaining, ghosting, blurry, distorted, watermark, text, artifact',
+        num_inference_steps: 32,
+      },
+    });
+  }
+
+  /** Outpaint — generate white-masked border; keep black region. */
+  async outpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (!dto.maskBase64) throw new Error('Missing maskBase64 for outpaint');
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.outpaint,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        mask: this.ensureDataUrl(dto.maskBase64),
+        prompt:
+          dto.prompt ||
+          'extend the scene seamlessly beyond the frame, photorealistic continuation, match lighting perspective and texture, natural environment',
+        negative_prompt: 'border, frame, watermark, text, distorted, blurry, hard edge seam',
+        num_inference_steps: 32,
+      },
+    });
+  }
+
+  async relight(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    const mode: AiRelightPreset = dto.relight || 'softbox';
+    const promptMap: Record<AiRelightPreset, string> = {
+      softbox:
+        'professional studio softbox lighting, even soft key light, photorealistic, preserve identity and composition',
+      rim: 'dramatic rim lighting, cinematic edge light separating subject, photorealistic, preserve identity',
+      golden:
+        'golden hour warm sunlight, soft amber highlights, gentle contrast, photorealistic, preserve identity',
+    };
+
+    return this.startPrediction({
+      model: REPLICATE_MODEL_REFS.relight,
+      apiKey: dto.apiKey,
+      input: {
+        image: this.ensureDataUrl(dto.imageBase64),
+        prompt: dto.prompt || promptMap[mode],
+        strength: Math.min(0.75, Math.max(0.35, dto.intensity ?? 0.55)),
       },
     });
   }
