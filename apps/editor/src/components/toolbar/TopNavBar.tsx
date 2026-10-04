@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useDebouncedCallback } from '@tanstack/react-pacer';
 import {
   Undo2,
   Redo2,
@@ -30,10 +31,13 @@ import {
   SunMedium,
   Eraser,
   Cloud,
+  Keyboard,
+  Compass,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
+import { loadImageFiles } from '../../utils/loadImageFiles';
 import type { ReviveMode } from '../../utils/photoRevive';
 import type { CleanupMode } from '../../utils/photoCleanup';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
@@ -80,7 +84,7 @@ const MenuPanel: React.FC<{
   children: React.ReactNode;
 }> = ({ width = 'w-56', onClose, children }) => (
   <div
-    className={`absolute top-full left-0 mt-1 ${width} bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]`}
+    className={`menu-flyout absolute top-full left-0 mt-1 ${width} bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]`}
     onMouseLeave={onClose}
   >
     {children}
@@ -135,6 +139,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     setExportModalOpen,
     setSettingsModalOpen,
     setNewCanvasModalOpen,
+    setShortcutsModalOpen,
+    setOnboardingOpen,
     showGrid,
     showRulers,
     toggleGrid,
@@ -184,33 +190,36 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   }, []);
 
   const close = () => setActiveMenu(null);
+
+  const refreshCloudProjects = useDebouncedCallback(
+    () => {
+      listCloudProjects()
+        .then(setCloudProjects)
+        .catch(() => setCloudProjects([]));
+    },
+    { wait: 250, leading: true, trailing: false }
+  );
+
   const toggle = (id: MenuId) => {
     setActiveMenu((m) => {
       const next = m === id ? null : id;
       if (next === 'file') {
-        listCloudProjects()
-          .then(setCloudProjects)
-          .catch(() => setCloudProjects([]));
+        refreshCloudProjects();
       }
       return next;
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const src = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        addImageLayer(src, file.name.replace(/\.[^/.]+$/, ''), img.naturalWidth, img.naturalHeight);
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
     close();
+    if (!files.length) return;
+    const loaded = await loadImageFiles(files);
+    for (const img of loaded) {
+      addImageLayer(img.src, img.name, img.width, img.height);
+    }
+    if (loaded.length) onFitToScreen();
   };
 
   const handleProjectFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,9 +284,16 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   return (
     <header
       ref={barRef}
-      className="h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 z-50 select-none"
+      className="shell-nav h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 z-50 select-none"
     >
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
       <input
         ref={projectInputRef}
         type="file"
@@ -400,8 +416,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               <Item disabled={!selectedLayer} onClick={centerLayer}>
                 <Maximize2 size={13} /> Center on Canvas
               </Item>
-              <Item onClick={() => { setSettingsModalOpen(true); close(); }}>
+              <Item onClick={() => { setSettingsModalOpen(true); close(); }} hint="⌘,">
                 <Settings size={13} /> Preferences…
+              </Item>
+              <Item onClick={() => { setShortcutsModalOpen(true); close(); }} hint="⌘/">
+                <Keyboard size={13} /> Keyboard Shortcuts…
+              </Item>
+              <Item onClick={() => { setOnboardingOpen(true); close(); }} hint="⌘⇧/">
+                <Compass size={13} /> Product Tour…
               </Item>
             </MenuPanel>
           )}
@@ -605,211 +627,233 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               <Item onClick={() => { setZoom(1); close(); }} hint="⌘1">
                 100%
               </Item>
+              <Item onClick={() => { setZoom((z) => Math.min(8, z * 1.25)); close(); }} hint="⌘=">
+                Zoom In
+              </Item>
+              <Item onClick={() => { setZoom((z) => Math.max(0.1, z / 1.25)); close(); }} hint="⌘-">
+                Zoom Out
+              </Item>
               <Sep />
-              <Item onClick={() => { toggleRulers(); close(); }}>
+              <Item onClick={() => { toggleRulers(); close(); }} hint="⌘;">
                 Rulers {showRulers ? '✓' : ''}
               </Item>
-              <Item onClick={() => { toggleGrid(); close(); }}>
+              <Item onClick={() => { toggleGrid(); close(); }} hint="⌘'">
                 Pixel Grid {showGrid ? '✓' : ''}
+              </Item>
+              <Sep />
+              <Item onClick={() => { setShortcutsModalOpen(true); close(); }} hint="⌘/">
+                <Keyboard size={13} /> Shortcuts
+              </Item>
+              <Item onClick={() => { setOnboardingOpen(true); close(); }} hint="⌘⇧/">
+                <Compass size={13} /> Product Tour
               </Item>
             </MenuPanel>
           )}
         </div>
       </nav>
 
-      <div className="flex-1" />
+      <div className="flex-1 min-w-2" />
 
-      {/* History + Zoom cluster */}
-      <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-        <div className="flex items-center bg-[var(--bg-elevated)] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] p-0.5">
+      {/* Action dock — History · Zoom · Lab · Export */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="dock-rail hidden sm:flex" aria-label="History">
           <button
             disabled={past.length === 0}
             onClick={undo}
-            title="Undo"
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 rounded-[4px] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            title="Undo (⌘Z)"
+            className="dock-btn dock-btn-icon"
           >
             <Undo2 size={14} />
           </button>
           <button
             disabled={future.length === 0}
             onClick={redo}
-            title="Redo"
-            className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-30 rounded-[4px] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            title="Redo (⌘⇧Z)"
+            className="dock-btn dock-btn-icon"
           >
             <Redo2 size={14} />
           </button>
         </div>
 
-        <div className="flex items-center bg-[var(--bg-elevated)] rounded-[var(--radius-sm)] border border-[var(--border-subtle)] px-1 py-0.5 text-[var(--text-muted)]">
+        <div className="dock-rail hidden sm:flex" aria-label="Zoom">
           <button
             onClick={() => setZoom((z) => Math.max(0.1, z / 1.2))}
-            className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-subtle)] cursor-pointer"
+            title="Zoom out (⌘-)"
+            className="dock-btn dock-btn-icon"
           >
             <ZoomOut size={13} />
           </button>
-          <span className="w-11 text-center font-mono-ui text-[11px] text-[var(--text-primary)]">
+          <button
+            type="button"
+            title="Reset to 100% (⌘1)"
+            onClick={() => setZoom(1)}
+            className="dock-zoom-value"
+          >
             {Math.round(zoom * 100)}%
-          </span>
+          </button>
           <button
             onClick={() => setZoom((z) => Math.min(8, z * 1.2))}
-            className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-subtle)] cursor-pointer"
+            title="Zoom in (⌘=)"
+            className="dock-btn dock-btn-icon"
           >
             <ZoomIn size={13} />
           </button>
-          <div className="h-3 w-px bg-[var(--border-subtle)] mx-0.5" />
+          <div className="dock-split" />
           <button
             onClick={onFitToScreen}
-            title="Fit"
-            className="p-1 hover:text-[var(--text-primary)] rounded hover:bg-[var(--bg-subtle)] cursor-pointer"
+            title="Fit to screen (⌘0)"
+            className="dock-btn dock-btn-icon"
           >
             <Maximize2 size={13} />
           </button>
         </div>
-      </div>
 
-      {/* Action dock — Photoshop-like grouped tools */}
-      <div className="flex items-center gap-1.5 shrink-0 pl-1.5 border-l border-[var(--border-subtle)]">
-        {/* Place / Demo segmented */}
-        <div className="hidden lg:flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] overflow-hidden">
+        <div className="dock-rail" aria-label="Neural lab actions">
           <button
             onClick={() => fileInputRef.current?.click()}
             title="Place image"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] cursor-pointer border-r border-[var(--border-subtle)]"
+            className="dock-btn"
           >
-            <FolderOpen size={12} />
-            Place
+            <FolderOpen size={13} />
+            <span className="hidden lg:inline">Place</span>
           </button>
           <button
             onClick={() => handleLoadSample('sample-portrait')}
             title="Load demo photo"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] cursor-pointer"
+            className="dock-btn hidden md:inline-flex"
           >
-            <ImageIcon size={12} />
-            Demo
+            <ImageIcon size={13} />
+            <span className="hidden lg:inline">Demo</span>
           </button>
-        </div>
 
-        {/* Enhance group with Revive dropdown */}
-        <div className="relative flex items-center bg-[var(--bg-elevated)] border border-[var(--accent)]/40 rounded-[var(--radius-sm)] overflow-hidden">
+          <div className="dock-split" />
+
+          <div className="relative flex items-center">
+            <button
+              disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
+              onClick={() => runRevive('natural')}
+              title="Photo Revive"
+              className="dock-btn dock-btn-ai"
+            >
+              <SunMedium size={13} />
+              <span className="hidden md:inline">Revive</span>
+            </button>
+            <button
+              onClick={() => toggle('revive')}
+              className="dock-btn dock-btn-icon dock-btn-ai"
+              title="Revive modes"
+              aria-label="Revive modes"
+            >
+              <ChevronDown size={12} />
+            </button>
+            {activeMenu === 'revive' && (
+              <div className="menu-flyout absolute top-full right-0 mt-1.5 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
+                <Label>Revive mode</Label>
+                {(
+                  [
+                    ['natural', 'Natural'],
+                    ['vivid', 'Vivid'],
+                    ['shadows', 'Shadow Lift'],
+                    ['clarity', 'Clarity'],
+                    ['film', 'Film Glow'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <Item key={mode} onClick={() => runRevive(mode)}>
+                    <Sparkles size={12} /> {label}
+                  </Item>
+                ))}
+                <Sep />
+                <Item onClick={() => runRevive('vivid', true)}>
+                  <Copy size={12} /> Bake as New Layer
+                </Item>
+              </div>
+            )}
+          </div>
+
+          <div className="relative flex items-center">
+            <button
+              disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
+              onClick={() => runCleanup('standard')}
+              title="Photo Cleanup"
+              className="dock-btn dock-btn-cool"
+            >
+              <Eraser size={13} />
+              <span className="hidden md:inline">Clean</span>
+            </button>
+            <button
+              onClick={() => toggle('cleanup')}
+              className="dock-btn dock-btn-icon dock-btn-cool"
+              title="Cleanup modes"
+              aria-label="Cleanup modes"
+            >
+              <ChevronDown size={12} />
+            </button>
+            {activeMenu === 'cleanup' && (
+              <div className="menu-flyout absolute top-full right-0 mt-1.5 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
+                <Label>Cleanup mode</Label>
+                {(
+                  [
+                    ['gentle', 'Gentle'],
+                    ['standard', 'Standard'],
+                    ['strong', 'Strong'],
+                    ['dust', 'Dust & Spots'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <Item key={mode} onClick={() => runCleanup(mode)}>
+                    <Eraser size={12} /> {label}
+                  </Item>
+                ))}
+                <Sep />
+                <Item onClick={() => runCleanup('standard', false)}>
+                  Replace current layer
+                </Item>
+              </div>
+            )}
+          </div>
+
           <button
             disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
-            onClick={() => runRevive('natural')}
-            title="Photo Revive"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-display font-bold text-[var(--accent-hot)] hover:bg-[var(--accent-dim)] disabled:opacity-40 cursor-pointer"
+            onClick={() => {
+              const id = resolveImageId();
+              if (id) {
+                selectLayer(id);
+                removeBackground(id);
+              }
+            }}
+            title="Remove background"
+            className="dock-btn dock-btn-cool"
           >
-            <SunMedium size={13} />
-            Revive
+            <Scissors size={13} />
+            <span className="hidden lg:inline">Cutout</span>
           </button>
-          <button
-            onClick={() => toggle('revive')}
-            className="px-1.5 py-1.5 border-l border-[var(--accent)]/30 text-[var(--accent-hot)] hover:bg-[var(--accent-dim)] cursor-pointer"
-            title="Revive modes"
-          >
-            <ChevronDown size={12} />
-          </button>
-          {activeMenu === 'revive' && (
-            <div className="absolute top-full right-0 mt-1 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
-              <Label>Revive mode</Label>
-              {(
-                [
-                  ['natural', 'Natural'],
-                  ['vivid', 'Vivid'],
-                  ['shadows', 'Shadow Lift'],
-                  ['clarity', 'Clarity'],
-                  ['film', 'Film Glow'],
-                ] as const
-              ).map(([mode, label]) => (
-                <Item key={mode} onClick={() => runRevive(mode)}>
-                  <Sparkles size={12} /> {label}
-                </Item>
-              ))}
-              <Sep />
-              <Item onClick={() => runRevive('vivid', true)}>
-                <Copy size={12} /> Bake as New Layer
-              </Item>
-            </div>
-          )}
-        </div>
 
-        <div className="relative flex items-center bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] overflow-hidden">
+          <div className="dock-split hidden xl:block" />
+
           <button
-            disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
-            onClick={() => runCleanup('standard')}
-            title="Photo Cleanup"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-display font-bold text-[var(--ink-blue)] hover:bg-[var(--bg-subtle)] disabled:opacity-40 cursor-pointer"
+            disabled={!selectedLayerId}
+            onClick={() => selectedLayerId && duplicateLayer(selectedLayerId)}
+            title="Duplicate layer (⌘D)"
+            className="dock-btn dock-btn-icon hidden xl:inline-flex"
           >
-            <Eraser size={13} />
-            Clean
+            <Copy size={13} />
           </button>
           <button
-            onClick={() => toggle('cleanup')}
-            className="px-1.5 py-1.5 border-l border-[var(--border-subtle)] text-[var(--ink-blue)] hover:bg-[var(--bg-subtle)] cursor-pointer"
-            title="Cleanup modes"
+            disabled={!selectedLayer}
+            onClick={() => flip('h')}
+            title="Flip horizontal"
+            className="dock-btn dock-btn-icon hidden xl:inline-flex"
           >
-            <ChevronDown size={12} />
+            <FlipHorizontal size={13} />
           </button>
-          {activeMenu === 'cleanup' && (
-            <div className="absolute top-full right-0 mt-1 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
-              <Label>Cleanup mode</Label>
-              {(
-                [
-                  ['gentle', 'Gentle'],
-                  ['standard', 'Standard'],
-                  ['strong', 'Strong'],
-                  ['dust', 'Dust & Spots'],
-                ] as const
-              ).map(([mode, label]) => (
-                <Item key={mode} onClick={() => runCleanup(mode)}>
-                  <Eraser size={12} /> {label}
-                </Item>
-              ))}
-              <Sep />
-              <Item onClick={() => runCleanup('standard', false)}>
-                Replace current layer
-              </Item>
-            </div>
-          )}
         </div>
 
         <button
-          disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
-          onClick={() => {
-            const id = resolveImageId();
-            if (id) {
-              selectLayer(id);
-              removeBackground(id);
-            }
-          }}
-          title="Remove background"
-          className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--ink-blue)] hover:border-[var(--ink-blue)]/50 rounded-[var(--radius-sm)] disabled:opacity-40 cursor-pointer"
-        >
-          <Scissors size={12} />
-          <span className="hidden md:inline">Cutout</span>
-        </button>
-
-        <button
-          disabled={!selectedLayerId}
-          onClick={() => selectedLayerId && duplicateLayer(selectedLayerId)}
-          title="Duplicate layer (⌘D)"
-          className="hidden xl:flex p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] disabled:opacity-40 cursor-pointer"
-        >
-          <Copy size={13} />
-        </button>
-
-        <button
-          disabled={!selectedLayer}
-          onClick={() => flip('h')}
-          title="Flip horizontal"
-          className="hidden xl:flex p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] disabled:opacity-40 cursor-pointer"
-        >
-          <FlipHorizontal size={13} />
-        </button>
-
-        <button
+          type="button"
           onClick={() => setExportModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-display font-bold text-[#1a1208] bg-[var(--accent)] hover:bg-[var(--accent-hot)] rounded-[var(--radius-sm)] cursor-pointer active:scale-[0.98]"
+          title="Export (⌘E)"
+          className="dock-export"
         >
-          <Download size={13} />
+          <Download size={13} strokeWidth={2.4} />
           Export
         </button>
       </div>

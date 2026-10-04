@@ -3,4 +3,6 @@ export {
   sampleCanvasColor,
   applySpotHealingToImage,
   applyCloneStampToImage,
+  floodFillImage,
+  applyBlurSpotToImage,
 } from '@photoshop-lite/editor-core';

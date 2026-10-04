@@ -14,6 +14,7 @@ import type {
   ProjectVersionSummaryDto,
   AssetUploadDto,
   AssetResponseDto,
+  GoogleFontsResponseDto,
 } from '@photoshop-lite/shared-types';
 
 const DEFAULT_BASE = '/api';
@@ -176,6 +177,13 @@ export class AiApiClient {
 
   listAssets(): Promise<AssetResponseDto[]> {
     return this.request<AssetResponseDto[]>('/assets', undefined, 'GET');
+  }
+
+  // ── Fonts ──────────────────────────────────────────────────────
+
+  listFonts(query?: string): Promise<GoogleFontsResponseDto> {
+    const q = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+    return this.request<GoogleFontsResponseDto>(`/fonts${q}`, undefined, 'GET');
   }
 }
 

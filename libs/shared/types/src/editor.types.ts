@@ -7,6 +7,8 @@ export type ToolType =
   | 'spotHealing'
   | 'clone'
   | 'eyedropper'
+  | 'fill'
+  | 'blur'
   | 'text'
   | 'shape'
   | 'marquee'

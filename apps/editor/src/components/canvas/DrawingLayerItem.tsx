@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Group, Line as KonvaLine } from 'react-konva';
 import Konva from 'konva';
 import { DrawingLayer } from '../../types/editor';
+import { useEditorStore } from '../../store/editorStore';
 
 interface DrawingLayerItemProps {
   layer: DrawingLayer;
@@ -17,6 +18,8 @@ export const DrawingLayerItem: React.FC<DrawingLayerItemProps> = ({
   onChange,
 }) => {
   const groupRef = useRef<Konva.Group>(null);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const canMove = activeTool === 'select' && !layer.locked;
 
   if (!layer.visible) return null;
 
@@ -30,10 +33,11 @@ export const DrawingLayerItem: React.FC<DrawingLayerItemProps> = ({
       scaleY={layer.scaleY}
       rotation={layer.rotation}
       opacity={layer.opacity}
-      draggable={!layer.locked}
+      draggable={canMove}
+      listening={canMove}
       globalCompositeOperation={layer.blendMode}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={canMove ? onSelect : undefined}
+      onTap={canMove ? onSelect : undefined}
       onDragEnd={(e) => {
         onChange({
           x: Math.round(e.target.x()),

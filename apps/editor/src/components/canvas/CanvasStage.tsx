@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useEffectEvent, useState, useCallback } from 'react';
 import { Stage, Layer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge } from 'react-konva';
 import Konva from 'konva';
+import { useAsyncThrottledCallback, useThrottledCallback } from '@tanstack/react-pacer';
 import { useEditorStore } from '../../store/editorStore';
 import { ImageLayerItem } from './ImageLayerItem';
 import { TextLayerItem } from './TextLayerItem';
@@ -8,7 +9,13 @@ import { ShapeLayerItem } from './ShapeLayerItem';
 import { DrawingLayerItem } from './DrawingLayerItem';
 import { CanvasRulers } from './CanvasRulers';
 import { Check, X } from 'lucide-react';
-import { applySpotHealingToImage, applyCloneStampToImage, sampleCanvasColor } from '../../utils/retouchHelpers';
+import {
+  applySpotHealingToImage,
+  applyCloneStampToImage,
+  sampleCanvasColor,
+  floodFillImage,
+  applyBlurSpotToImage,
+} from '../../utils/retouchHelpers';
 import { registerStage } from '../../utils/stageRegistry';
 import { paintStrokeOnMask, magicWandBounds } from '../../utils/maskHelpers';
 import type { ShapeType } from '../../types/editor';
@@ -111,6 +118,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   // Spot Healing state
   const [isHealing, setIsHealing] = useState(false);
 
+  // Blur tool state
+  const [isBlurring, setIsBlurring] = useState(false);
+
   // Eyedropper cursor color preview
   const [eyedropperPreview, setEyedropperPreview] = useState<string | null>(null);
 
@@ -157,8 +167,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     };
   }, [activeTool]);
 
-  // Update Transformer selection
-  useEffect(() => {
+  // Update Transformer selection (Effect Event keeps latest ids without rebinding)
+  const syncTransformer = useEffectEvent(() => {
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
@@ -176,44 +186,56 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     } else {
       transformer.nodes([]);
     }
+  });
+
+  useEffect(() => {
+    syncTransformer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- useEffectEvent is non-reactive
   }, [selectedLayerId, activeTool, layers]);
 
-  // Mouse wheel zoom and pan
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
+  // Mouse wheel zoom/pan — throttled with TanStack Pacer (~60fps)
+  const applyWheel = useThrottledCallback(
+    (payload: { deltaX: number; deltaY: number; zoomMode: boolean }) => {
       const stage = stageRef.current;
       if (!stage) return;
+      const { zoom: currentZoom, pan: currentPan } = useEditorStore.getState();
 
-      if (e.ctrlKey || e.metaKey || e.altKey) {
-        // Zoom centered on cursor
+      if (payload.zoomMode) {
         const scaleBy = 1.08;
-        const oldScale = zoom;
         const pointer = stage.getPointerPosition();
         if (!pointer) return;
-
         const mousePointTo = {
-          x: (pointer.x - pan.x) / oldScale,
-          y: (pointer.y - pan.y) / oldScale,
+          x: (pointer.x - currentPan.x) / currentZoom,
+          y: (pointer.y - currentPan.y) / currentZoom,
         };
-
-        const newScale = e.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+        const newScale =
+          payload.deltaY < 0 ? currentZoom * scaleBy : currentZoom / scaleBy;
         const clampedScale = Math.max(0.1, Math.min(8, newScale));
-
         setZoom(clampedScale);
         setPan({
           x: pointer.x - mousePointTo.x * clampedScale,
           y: pointer.y - mousePointTo.y * clampedScale,
         });
       } else {
-        // Regular wheel pan
-        setPan((prev) => ({
-          x: Math.round(prev.x - e.deltaX),
-          y: Math.round(prev.y - e.deltaY),
-        }));
+        setPan({
+          x: Math.round(currentPan.x - payload.deltaX),
+          y: Math.round(currentPan.y - payload.deltaY),
+        });
       }
     },
-    [zoom, pan, setZoom, setPan]
+    { wait: 16, leading: true, trailing: true }
+  );
+
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      e.preventDefault();
+      applyWheel({
+        deltaX: e.deltaX,
+        deltaY: e.deltaY,
+        zoomMode: e.ctrlKey || e.metaKey || e.altKey,
+      });
+    },
+    [applyWheel]
   );
 
   // Get pointer coordinate in canvas coordinate space
@@ -231,9 +253,29 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
   // Helper: get the selected image layer
   const getSelectedImageLayer = () => {
-    const layer = layers.find((l) => l.id === selectedLayerId);
+    const state = useEditorStore.getState();
+    const layer = state.layers.find((l) => l.id === state.selectedLayerId);
     return layer?.type === 'image' ? layer : null;
   };
+
+  const applyBlurThrottled = useAsyncThrottledCallback(
+    async (coords: { x: number; y: number }) => {
+      const imageLayer = getSelectedImageLayer();
+      if (!imageLayer) return;
+      const { brushSettings: brush } = useEditorStore.getState();
+      const newSrc = await applyBlurSpotToImage(
+        imageLayer.src,
+        imageLayer.x,
+        imageLayer.y,
+        coords.x,
+        coords.y,
+        brush.size / 2,
+        brush.opacity
+      );
+      updateLayer(imageLayer.id, { src: newSrc });
+    },
+    { wait: 50, leading: true, trailing: true }
+  );
 
   // Perform eyedropper sampling using an off-screen canvas render
   const performEyedropperSample = useCallback(
@@ -296,6 +338,33 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     // Eyedropper: sample color on click
     if (activeTool === 'eyedropper') {
       await performEyedropperSample(coords.x, coords.y);
+      return;
+    }
+
+    // Paint bucket flood fill
+    if (activeTool === 'fill') {
+      const imageLayer = getSelectedImageLayer();
+      if (imageLayer) {
+        const filled = await floodFillImage({
+          src: imageLayer.src,
+          layerX: imageLayer.x,
+          layerY: imageLayer.y,
+          clickX: coords.x,
+          clickY: coords.y,
+          fillColor: brushSettings.color,
+          tolerance: 32,
+        });
+        if (filled) {
+          updateLayer(imageLayer.id, { src: filled });
+        }
+      }
+      return;
+    }
+
+    // Blur tool
+    if (activeTool === 'blur') {
+      setIsBlurring(true);
+      void applyBlurThrottled(coords);
       return;
     }
 
@@ -422,6 +491,10 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     const coords = getCanvasCoords(e);
     setCursorPos(coords);
 
+    if (activeTool === 'blur' && isBlurring) {
+      void applyBlurThrottled(coords);
+    }
+
     // Eyedropper: show color preview while hovering
     if (activeTool === 'eyedropper') {
       // Light sampling for preview using raw stage pixel (simplified)
@@ -492,6 +565,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   };
 
   const handleMouseUp = async () => {
+    if (isBlurring) {
+      setIsBlurring(false);
+    }
     if (isPanning) {
       setIsPanning(false);
       panStartRef.current = null;
@@ -605,6 +681,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     if (activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'refineBrush') return 'cursor-crosshair';
     if (activeTool === 'marquee' || activeTool === 'lasso' || activeTool === 'wand') return 'cursor-crosshair';
     if (activeTool === 'spotHealing') return 'cursor-crosshair';
+    if (activeTool === 'fill' || activeTool === 'blur') return 'cursor-crosshair';
     if (activeTool === 'clone') return cloneSource ? 'cursor-crosshair' : 'cursor-copy';
     if (activeTool === 'eyedropper') return 'cursor-crosshair';
     if (activeTool === 'text') return 'cursor-text';
@@ -753,7 +830,13 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           )}
 
           {/* Spot Healing / Clone cursor ring preview */}
-          {(activeTool === 'spotHealing' || activeTool === 'clone' || activeTool === 'brush' || activeTool === 'eraser') && cursorPos && (
+          {(activeTool === 'spotHealing' ||
+            activeTool === 'clone' ||
+            activeTool === 'brush' ||
+            activeTool === 'eraser' ||
+            activeTool === 'blur' ||
+            activeTool === 'fill') &&
+            cursorPos && (
             <Line
               points={[cursorPos.x, cursorPos.y]}
               stroke={activeTool === 'clone' && !cloneSource ? '#e8a84a' : activeTool === 'spotHealing' ? '#e85d5d' : '#d4923a'}

@@ -37,3 +37,6 @@ export {
   applySpotHealingToImage,
   applyCloneStampToImage,
 } from './retouchHelpers';
+
+export { floodFillImage } from './floodFill';
+export { applyBlurSpotToImage } from './blurSpot';

@@ -23,6 +23,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
   const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
   const [maskElement, setMaskElement] = useState<HTMLImageElement | null>(null);
   const layers = useEditorStore((s) => s.layers);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const canMove = activeTool === 'select' && !layer.locked;
 
   useEffect(() => {
     const img = new window.Image();
@@ -111,11 +113,12 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
         scaleY={layer.scaleY}
         rotation={layer.rotation}
         opacity={layer.opacity}
-        draggable={!layer.locked}
+        draggable={canMove}
+        listening={canMove}
         globalCompositeOperation={layer.blendMode}
         clipFunc={clipFunc}
-        onClick={onSelect}
-        onTap={onSelect}
+        onClick={canMove ? onSelect : undefined}
+        onTap={canMove ? onSelect : undefined}
         onDragEnd={(e) => {
           onChange({
             x: Math.round(e.target.x()),
@@ -154,11 +157,12 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
       scaleY={layer.scaleY}
       rotation={layer.rotation}
       opacity={layer.opacity}
-      draggable={!layer.locked}
+      draggable={canMove}
+      listening={canMove}
       globalCompositeOperation={layer.blendMode}
       clipFunc={clipFunc}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={canMove ? onSelect : undefined}
+      onTap={canMove ? onSelect : undefined}
       onDragEnd={(e) => {
         onChange({
           x: Math.round(e.target.x()),

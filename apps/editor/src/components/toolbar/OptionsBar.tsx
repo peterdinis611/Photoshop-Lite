@@ -13,6 +13,10 @@ import {
   Move,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
+import { ColorField } from '../ui/ColorField';
+import { FontPicker } from '../ui/FontPicker';
+import { DebouncedRange } from '../ui/DebouncedRange';
+import { loadGoogleFont } from '../../utils/googleFonts';
 
 export const OptionsBar: React.FC = () => {
   const {
@@ -70,6 +74,8 @@ export const OptionsBar: React.FC = () => {
     spotHealing: 'Spot Heal',
     clone: 'Clone Stamp',
     eyedropper: 'Eyedropper',
+    fill: 'Paint Bucket',
+    blur: 'Blur',
     text: 'Type',
     shape: 'Shape',
     hand: 'Hand',
@@ -77,7 +83,7 @@ export const OptionsBar: React.FC = () => {
   };
 
   return (
-    <div className="h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto">
+    <div className="shell-options h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto">
       {/* Active tool badge */}
       <div className="flex items-center gap-1.5 shrink-0 pr-2.5 border-r border-[var(--border-subtle)]">
         <Move size={12} className="text-[var(--accent)]" />
@@ -127,13 +133,12 @@ export const OptionsBar: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[var(--text-faint)]">Opacity</span>
-                <input
-                  type="range"
+                <DebouncedRange
                   min={0}
                   max={1}
                   step={0.05}
                   value={selectedLayer.opacity}
-                  onChange={(e) => updateLayer(selectedLayer.id, { opacity: Number(e.target.value) })}
+                  onCommit={(opacity) => updateLayer(selectedLayer.id, { opacity })}
                   className="w-20 cursor-pointer"
                 />
                 <span className="font-mono-ui w-7 text-[var(--text-primary)]">
@@ -146,7 +151,8 @@ export const OptionsBar: React.FC = () => {
           )}
           {selectedLayer && (
             <span className="text-[var(--text-faint)] ml-1">
-              · hold <kbd className="text-[var(--accent-hot)]">Shift</kbd> for proportional scale
+              · <kbd className="text-[var(--accent-hot)]">Shift</kbd> scale · arrows nudge ·{' '}
+              <kbd className="text-[var(--accent-hot)]">⌘/</kbd> shortcuts
             </span>
           )}
         </div>
@@ -220,25 +226,23 @@ export const OptionsBar: React.FC = () => {
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5">
             <span>Size</span>
-            <input
-              type="range"
-              min="2"
-              max="150"
+            <DebouncedRange
+              min={2}
+              max={150}
               value={brushSettings.size}
-              onChange={(e) => updateBrushSettings({ size: Number(e.target.value) })}
+              onCommit={(size) => updateBrushSettings({ size })}
               className="w-24 cursor-pointer"
             />
             <span className="font-mono-ui w-8 text-[var(--text-primary)]">{brushSettings.size}</span>
           </label>
           <label className="flex items-center gap-1.5">
             <span>Hardness</span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
+            <DebouncedRange
+              min={0}
+              max={1}
+              step={0.05}
               value={brushSettings.hardness}
-              onChange={(e) => updateBrushSettings({ hardness: Number(e.target.value) })}
+              onCommit={(hardness) => updateBrushSettings({ hardness })}
               className="w-20 cursor-pointer"
             />
             <span className="font-mono-ui w-8 text-[var(--text-primary)]">
@@ -247,13 +251,12 @@ export const OptionsBar: React.FC = () => {
           </label>
           <label className="flex items-center gap-1.5">
             <span>Opacity</span>
-            <input
-              type="range"
-              min="0.05"
-              max="1"
-              step="0.05"
+            <DebouncedRange
+              min={0.05}
+              max={1}
+              step={0.05}
               value={brushSettings.opacity}
-              onChange={(e) => updateBrushSettings({ opacity: Number(e.target.value) })}
+              onCommit={(opacity) => updateBrushSettings({ opacity })}
               className="w-20 cursor-pointer"
             />
             <span className="font-mono-ui w-8 text-[var(--text-primary)]">
@@ -261,16 +264,61 @@ export const OptionsBar: React.FC = () => {
             </span>
           </label>
           {activeTool === 'brush' && (
-            <label className="flex items-center gap-1.5">
-              <span>Color</span>
-              <input
-                type="color"
+            <>
+              <ColorField
+                label="Color"
                 value={brushSettings.color}
-                onChange={(e) => updateBrushSettings({ color: e.target.value })}
-                className="w-6 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
+                onChange={(hex) => updateBrushSettings({ color: hex })}
               />
-            </label>
+              <span className="text-[var(--text-faint)]">
+                <kbd>[</kbd>/<kbd>]</kbd> size · <kbd>Shift+[</kbd>/<kbd>]</kbd> hardness ·{' '}
+                <kbd>X</kbd> swap
+              </span>
+            </>
           )}
+        </div>
+      )}
+
+      {activeTool === 'fill' && (
+        <div className="flex items-center gap-3">
+          <ColorField
+            label="Fill"
+            value={brushSettings.color}
+            onChange={(hex) => updateBrushSettings({ color: hex })}
+          />
+          <span className="text-[var(--text-faint)]">
+            Click image region to flood-fill · select an image layer first
+          </span>
+        </div>
+      )}
+
+      {activeTool === 'blur' && (
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5">
+            <span>Radius</span>
+            <input
+              type="range"
+              min="6"
+              max="80"
+              value={brushSettings.size}
+              onChange={(e) => updateBrushSettings({ size: Number(e.target.value) })}
+              className="w-24 cursor-pointer"
+            />
+            <span className="font-mono-ui text-[var(--text-primary)]">{brushSettings.size}px</span>
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span>Strength</span>
+            <input
+              type="range"
+              min="0.2"
+              max="1"
+              step="0.05"
+              value={brushSettings.opacity}
+              onChange={(e) => updateBrushSettings({ opacity: Number(e.target.value) })}
+              className="w-20 cursor-pointer"
+            />
+          </label>
+          <span className="text-[var(--text-faint)]">Click / drag to soften areas</span>
         </div>
       )}
 
@@ -361,21 +409,15 @@ export const OptionsBar: React.FC = () => {
 
       {(activeTool === 'text' || selectedLayer?.type === 'text') && (
         <div className="flex items-center gap-2.5">
-          <select
-            value={selectedLayer?.type === 'text' ? selectedLayer.fontFamily : 'Figtree'}
-            onChange={(e) => {
+          <FontPicker
+            value={selectedLayer?.type === 'text' ? selectedLayer.fontFamily : 'Source Sans 3'}
+            onChange={async (family) => {
+              await loadGoogleFont(family);
               if (selectedLayer?.type === 'text') {
-                updateLayer(selectedLayer.id, { fontFamily: e.target.value });
+                updateLayer(selectedLayer.id, { fontFamily: family });
               }
             }}
-            className="bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-2 py-0.5 text-[11px] text-[var(--text-primary)] outline-none cursor-pointer"
-          >
-            <option value="Figtree">Figtree</option>
-            <option value="Syne">Syne</option>
-            <option value="Georgia">Georgia</option>
-            <option value="IBM Plex Mono">IBM Plex Mono</option>
-            <option value="Impact">Impact</option>
-          </select>
+          />
           <input
             type="number"
             min={8}
@@ -437,13 +479,13 @@ export const OptionsBar: React.FC = () => {
               </button>
             ))}
           </div>
-          <input
-            type="color"
+          <ColorField
+            size="sm"
+            showPresets={false}
             value={selectedLayer?.type === 'text' ? selectedLayer.fill : '#ffffff'}
-            onChange={(e) => {
-              if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { fill: e.target.value });
+            onChange={(hex) => {
+              if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { fill: hex });
             }}
-            className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
           />
           {selectedLayer?.type === 'text' && (
             <>

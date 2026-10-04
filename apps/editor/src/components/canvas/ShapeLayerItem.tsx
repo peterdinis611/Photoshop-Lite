@@ -17,6 +17,7 @@ import {
 } from 'react-konva';
 import Konva from 'konva';
 import { ShapeLayer } from '../../types/editor';
+import { useEditorStore } from '../../store/editorStore';
 
 interface ShapeLayerItemProps {
   layer: ShapeLayer;
@@ -31,6 +32,8 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
   onChange,
 }) => {
   const shapeRef = useRef<Konva.Group>(null);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const canMove = activeTool === 'select' && !layer.locked;
 
   if (!layer.visible) return null;
 
@@ -171,7 +174,7 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
             />
             <KonvaText
               text="Callout"
-              fontFamily="Figtree"
+              fontFamily="Source Sans 3"
               fontSize={Math.max(12, Math.min(22, layer.height * 0.35))}
               padding={10}
               fill={layer.stroke || '#ece8e1'}
@@ -197,10 +200,11 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
       scaleY={layer.scaleY}
       rotation={layer.rotation}
       opacity={layer.opacity}
-      draggable={!layer.locked}
+      draggable={canMove}
+      listening={canMove}
       globalCompositeOperation={layer.blendMode}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={canMove ? onSelect : undefined}
+      onTap={canMove ? onSelect : undefined}
       onDragEnd={(e) => {
         onChange({
           x: Math.round(e.target.x()),

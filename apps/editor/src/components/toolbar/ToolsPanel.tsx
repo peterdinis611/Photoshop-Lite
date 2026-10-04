@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   MousePointer,
   Crop,
@@ -27,18 +27,24 @@ import {
   PieChart,
   MessageSquare,
   ChevronRight,
+  PaintBucket,
+  Droplets,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ToolType, ShapeType } from '../../types/editor';
 import { BeforeAfterSlider } from '../canvas/BeforeAfterSlider';
+import { ColorField } from '../ui/ColorField';
 
 interface ToolItem {
-  id: ToolType | 'beforeAfter' | 'marqueeMenu';
+  id: ToolType | 'beforeAfter' | 'marqueeMenu' | 'brushMenu';
   label: string;
   shortcut: string;
   icon: React.ReactNode;
   separator?: boolean;
 }
+
+const BRUSH_SIZES = [4, 12, 24, 48, 80];
+const QUICK_COLORS = ['#d4923a', '#ece8e1', '#0b0c0f', '#e85d5d', '#5ecf9a', '#5b8def', '#ffffff'];
 
 export const ToolsPanel: React.FC = () => {
   const {
@@ -52,12 +58,17 @@ export const ToolsPanel: React.FC = () => {
     addShapeLayer,
     marqueeMode,
     setMarqueeMode,
+    secondaryColor,
+    setSecondaryColor,
+    swapBrushColors,
+    resetBrushColors,
+    isBeforeAfterOpen,
+    setBeforeAfterOpen,
   } = useEditorStore();
 
-  const [secondaryColor, setSecondaryColor] = useState('#ece8e1');
   const [showShapeMenu, setShowShapeMenu] = useState(false);
   const [showMarqueeMenu, setShowMarqueeMenu] = useState(false);
-  const [showBeforeAfter, setShowBeforeAfter] = useState(false);
+  const [showBrushMenu, setShowBrushMenu] = useState(false);
 
   const tools: ToolItem[] = [
     {
@@ -97,10 +108,15 @@ export const ToolsPanel: React.FC = () => {
       separator: true,
     },
     {
-      id: 'brush',
-      label: 'Brush Tool',
+      id: 'brushMenu',
+      label: 'Brush Tool — color & size',
       shortcut: 'B',
-      icon: <Paintbrush size={18} />,
+      icon: (
+        <div className="relative">
+          <Paintbrush size={18} />
+          <ChevronRight size={9} className="absolute -right-0.5 -bottom-0.5 opacity-70" />
+        </div>
+      ),
     },
     {
       id: 'eraser',
@@ -109,9 +125,21 @@ export const ToolsPanel: React.FC = () => {
       icon: <Eraser size={18} />,
     },
     {
+      id: 'fill',
+      label: 'Paint Bucket — Flood Fill',
+      shortcut: 'G',
+      icon: <PaintBucket size={18} className="text-sky-300" />,
+    },
+    {
+      id: 'blur',
+      label: 'Blur Tool',
+      shortcut: 'R',
+      icon: <Droplets size={18} className="text-cyan-300" />,
+    },
+    {
       id: 'refineBrush',
       label: 'Edge Refinement Brush (Fix Cutouts)',
-      shortcut: 'R',
+      shortcut: 'Shift+R',
       icon: <Sparkles size={18} className="text-amber-400" />,
     },
     {
@@ -196,79 +224,58 @@ export const ToolsPanel: React.FC = () => {
     { type: 'callout', label: 'Callout', icon: <MessageSquare size={14} /> },
   ];
 
+  const closeMenus = () => {
+    setShowShapeMenu(false);
+    setShowMarqueeMenu(false);
+    setShowBrushMenu(false);
+  };
+
   const handleToolClick = (toolId: ToolItem['id']) => {
     if (toolId === 'beforeAfter') {
-      setShowBeforeAfter(true);
-      setShowShapeMenu(false);
-      setShowMarqueeMenu(false);
+      setBeforeAfterOpen(true);
+      closeMenus();
       return;
     }
     if (toolId === 'marqueeMenu') {
       setShowMarqueeMenu((v) => !v);
       setShowShapeMenu(false);
+      setShowBrushMenu(false);
       setActiveTool('marquee');
+      return;
+    }
+    if (toolId === 'brushMenu') {
+      setShowBrushMenu((v) => !v);
+      setShowShapeMenu(false);
+      setShowMarqueeMenu(false);
+      setActiveTool('brush');
       return;
     }
     if (toolId === 'text') {
       addTextLayer();
-      setShowShapeMenu(false);
-      setShowMarqueeMenu(false);
+      closeMenus();
+      setActiveTool('text');
     } else if (toolId === 'shape') {
       setShowShapeMenu((v) => !v);
       setShowMarqueeMenu(false);
+      setShowBrushMenu(false);
       setActiveTool('shape');
     } else {
-      setShowShapeMenu(false);
-      setShowMarqueeMenu(false);
+      closeMenus();
       setActiveTool(toolId as ToolType);
     }
   };
 
-  const swapColors = () => {
-    const temp = brushSettings.color;
-    updateBrushSettings({ color: secondaryColor });
-    setSecondaryColor(temp);
-  };
-
-  const resetColors = () => {
-    updateBrushSettings({ color: '#d4923a' });
-    setSecondaryColor('#ece8e1');
-  };
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
-      ) {
-        return;
-      }
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key.toLowerCase() === 'x') {
-        e.preventDefault();
-        const temp = brushSettings.color;
-        updateBrushSettings({ color: secondaryColor });
-        setSecondaryColor(temp);
-      }
-      if (e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        updateBrushSettings({ color: '#d4923a' });
-        setSecondaryColor('#ece8e1');
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [brushSettings.color, secondaryColor, updateBrushSettings]);
-
   return (
     <>
-      <aside className="w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between">
+      <aside className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between">
         <div className="flex flex-col items-center gap-0.5 w-full px-1.5 relative">
           {tools.map((tool) => {
             const isActive =
               tool.id === 'marqueeMenu'
                 ? activeTool === 'marquee'
-                : activeTool === tool.id;
+                : tool.id === 'brushMenu'
+                  ? activeTool === 'brush'
+                  : activeTool === tool.id;
 
             return (
               <React.Fragment key={tool.id}>
@@ -277,16 +284,16 @@ export const ToolsPanel: React.FC = () => {
                   <button
                     onClick={() => handleToolClick(tool.id)}
                     title={`${tool.label} (${tool.shortcut})`}
-                    className={`w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] transition-all cursor-pointer ${
+                    className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
                       isActive
-                        ? 'bg-[var(--accent)] text-[#1a1208]'
+                        ? 'tool-btn-active bg-[var(--accent)] text-[#1a1208]'
                         : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
                     {tool.icon}
                   </button>
 
-                  <div className="absolute left-full ml-2 px-2.5 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-[var(--radius-sm)] shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex items-center gap-2">
+                  <div className="absolute left-full ml-2 px-2.5 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-[var(--radius-sm)] shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 flex items-center gap-2">
                     <span>{tool.label}</span>
                     <span className="text-[10px] font-mono-ui text-[var(--text-faint)] bg-[var(--bg-app)] px-1 rounded">
                       {tool.shortcut}
@@ -297,8 +304,51 @@ export const ToolsPanel: React.FC = () => {
             );
           })}
 
+          {showBrushMenu && (
+            <div className="menu-flyout absolute left-full top-36 ml-2 w-56 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-2 z-50 flex flex-col gap-2">
+              <div className="px-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
+                Brush color
+              </div>
+              <ColorField
+                value={brushSettings.color}
+                onChange={(hex) => updateBrushSettings({ color: hex })}
+              />
+              <div className="flex gap-1 flex-wrap px-0.5">
+                {QUICK_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    title={c}
+                    onClick={() => updateBrushSettings({ color: c })}
+                    className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer"
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+              <div className="px-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
+                Size
+              </div>
+              <div className="flex gap-1 flex-wrap">
+                {BRUSH_SIZES.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => updateBrushSettings({ size })}
+                    className={`px-2 py-1 rounded-[var(--radius-sm)] text-[10px] font-mono-ui cursor-pointer border ${
+                      brushSettings.size === size
+                        ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
+                        : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+                    }`}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {showMarqueeMenu && (
-            <div className="absolute left-full top-12 ml-2 w-44 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
+            <div className="menu-flyout absolute left-full top-12 ml-2 w-44 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
               <div className="px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
                 Marquee
               </div>
@@ -334,7 +384,7 @@ export const ToolsPanel: React.FC = () => {
           )}
 
           {showShapeMenu && (
-            <div className="absolute left-full top-64 ml-2 w-44 max-h-[70vh] overflow-y-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
+            <div className="menu-flyout absolute left-full top-64 ml-2 w-44 max-h-[70vh] overflow-y-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
               <div className="px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
                 Shape
               </div>
@@ -361,18 +411,18 @@ export const ToolsPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-col items-center gap-2 pb-2">
-          {activeTool === 'eyedropper' && (
+          {(activeTool === 'eyedropper' || activeTool === 'brush' || activeTool === 'fill') && (
             <div
-              className="w-6 h-6 rounded border-2 border-[var(--success)] shadow-lg"
+              className="w-7 h-7 rounded-md border-2 border-[var(--accent)] shadow-lg"
               style={{ backgroundColor: brushSettings.color }}
-              title="Sampled Color"
+              title="Active color"
             />
           )}
 
-          <div className="relative w-8 h-8">
+          <div className="relative w-10 h-10">
             <label
               title="Secondary Color"
-              className="absolute bottom-0 right-0 w-5 h-5 rounded-md border-2 border-[var(--bg-panel)] shadow cursor-pointer overflow-hidden z-10"
+              className="absolute bottom-0 right-0 w-6 h-6 rounded-md border-2 border-[var(--bg-panel)] shadow cursor-pointer overflow-hidden z-10 hover:scale-105 transition-transform"
               style={{ backgroundColor: secondaryColor }}
             >
               <input
@@ -383,8 +433,8 @@ export const ToolsPanel: React.FC = () => {
               />
             </label>
             <label
-              title="Primary / Brush Color"
-              className="absolute top-0 left-0 w-5 h-5 rounded-md border-2 border-[var(--bg-panel)] shadow cursor-pointer overflow-hidden z-20"
+              title="Primary / Brush Color — click to pick"
+              className="absolute top-0 left-0 w-6 h-6 rounded-md border-2 border-[var(--accent)] shadow cursor-pointer overflow-hidden z-20 hover:scale-105 transition-transform"
               style={{ backgroundColor: brushSettings.color }}
             >
               <input
@@ -398,14 +448,14 @@ export const ToolsPanel: React.FC = () => {
 
           <div className="flex items-center gap-1 text-[var(--text-faint)]">
             <button
-              onClick={swapColors}
+              onClick={swapBrushColors}
               title="Swap Colors (X)"
               className="p-1 hover:text-[var(--text-primary)] cursor-pointer"
             >
               <ArrowLeftRight size={11} />
             </button>
             <button
-              onClick={resetColors}
+              onClick={resetBrushColors}
               title="Default Colors (D)"
               className="w-2.5 h-2.5 rounded-sm bg-[var(--border-strong)] hover:bg-[var(--accent)] cursor-pointer"
             />
@@ -413,7 +463,7 @@ export const ToolsPanel: React.FC = () => {
         </div>
       </aside>
 
-      {showBeforeAfter && <BeforeAfterSlider onClose={() => setShowBeforeAfter(false)} />}
+      {isBeforeAfterOpen && <BeforeAfterSlider onClose={() => setBeforeAfterOpen(false)} />}
     </>
   );
 };

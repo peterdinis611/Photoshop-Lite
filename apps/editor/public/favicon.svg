@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PhotoshopLite">
+  <rect width="64" height="64" rx="14" fill="#0b0c0f"/>
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#12141a" stroke="#d4923a" stroke-width="2"/>
+  <text x="32" y="42" text-anchor="middle" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#d4923a">Px</text>
+</svg>

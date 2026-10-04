@@ -148,3 +148,16 @@ export interface AssetResponseDto {
   url: string;
   createdAt: string;
 }
+
+// ─── Google Fonts ────────────────────────────────────────────────
+
+export interface GoogleFontItem {
+  family: string;
+  category: string;
+  variants: string[];
+}
+
+export interface GoogleFontsResponseDto {
+  items: GoogleFontItem[];
+  source: 'google-api' | 'fallback';
+}

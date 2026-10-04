@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://photoshoplite.app/</loc>
+    <lastmod>2026-10-04</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://photoshoplite.app/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://photoshoplite.app/" />
+    <image:image>
+      <image:loc>https://photoshoplite.app/og-image.png</image:loc>
+      <image:title>PhotoshopLite editor workspace</image:title>
+      <image:caption>Browser darkroom photo editor with layers and Neural Lab</image:caption>
+    </image:image>
+  </url>
+</urlset>

@@ -43,8 +43,8 @@ export const NewCanvasModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="bg-[#18191d] border border-[#2c2f38] rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+    <div className="modal-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+      <div className="modal-card bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#2c2f38] flex items-center justify-between">
           <div className="flex items-center gap-2">

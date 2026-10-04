@@ -2,19 +2,161 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Photoshop-Lite — darkroom-grade web photo editor with layers, AI cutouts, and Photo Revive." />
-    <title>Photoshop-Lite · Darkroom Editor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Primary -->
+    <title>PhotoshopLite — Free Browser Photo Editor | Layers, AI Cutout &amp; Revive</title>
+    <meta
+      name="description"
+      content="Free darkroom-grade photo editor in your browser. Layers, retouch tools, AI background removal, Photo Revive, cleanup, upscale, and optional cloud Neural Lab — no install."
+    />
+    <meta
+      name="keywords"
+      content="photo editor, online photoshop, browser photo editor, AI background removal, photo revive, image editor, layers, cutout, upscale, web darkroom, PhotoshopLite"
+    />
+    <meta name="author" content="PhotoshopLite" />
+    <meta name="creator" content="PhotoshopLite" />
+    <meta name="publisher" content="PhotoshopLite" />
+    <meta name="application-name" content="PhotoshopLite" />
+    <meta name="apple-mobile-web-app-title" content="PhotoshopLite" />
+    <meta name="theme-color" content="#0b0c0f" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Canonical & hreflang -->
+    <link rel="canonical" href="%SITE_URL%/" />
+    <link rel="alternate" hreflang="en" href="%SITE_URL%/" />
+    <link rel="alternate" hreflang="x-default" href="%SITE_URL%/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PhotoshopLite" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta
+      property="og:title"
+      content="PhotoshopLite — Free Browser Photo Editor"
+    />
+    <meta
+      property="og:description"
+      content="Darkroom-grade web editor with layers, AI cutouts, Photo Revive, cleanup, and export to PNG/JPEG/WEBP. Runs in the browser."
+    />
+    <meta property="og:image" content="%SITE_URL%/og-image.png" />
+    <meta property="og:image:secure_url" content="%SITE_URL%/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="PhotoshopLite editor workspace with canvas, tools, and Neural Lab" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PhotoshopLite — Free Browser Photo Editor" />
+    <meta
+      name="twitter:description"
+      content="Layers, AI cutout, Photo Revive, and retouch tools — a darkroom-grade editor that runs in your browser."
+    />
+    <meta name="twitter:image" content="%SITE_URL%/og-image.png" />
+    <meta name="twitter:image:alt" content="PhotoshopLite editor workspace" />
+
+    <!-- PWA / icons -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+    <!-- Performance -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "%SITE_URL%/#app",
+            "name": "PhotoshopLite",
+            "alternateName": ["Photoshop Lite", "Photoshop-Lite"],
+            "url": "%SITE_URL%/",
+            "description": "Free darkroom-grade photo editor in the browser with layers, AI background removal, Photo Revive, cleanup, upscale, and export.",
+            "applicationCategory": "MultimediaApplication",
+            "applicationSubCategory": "PhotoEditingApplication",
+            "operatingSystem": "Web Browser",
+            "browserRequirements": "Requires JavaScript and a modern browser (Chrome, Firefox, Safari, Edge).",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "Layer-based canvas editing",
+              "AI background removal (WASM / remove.bg)",
+              "Photo Revive and Cleanup",
+              "Brush, heal, clone, and selection tools",
+              "Cloud Neural Lab via Replicate",
+              "Export PNG, JPEG, WEBP",
+              "Local and cloud project save"
+            ],
+            "screenshot": "%SITE_URL%/og-image.png",
+            "image": "%SITE_URL%/og-image.png",
+            "inLanguage": "en"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "%SITE_URL%/#website",
+            "name": "PhotoshopLite",
+            "url": "%SITE_URL%/",
+            "description": "Browser darkroom editor for photo retouch, layers, and AI tools.",
+            "inLanguage": "en",
+            "publisher": {
+              "@type": "Organization",
+              "name": "PhotoshopLite",
+              "url": "%SITE_URL%/"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "%SITE_URL%/#organization",
+            "name": "PhotoshopLite",
+            "url": "%SITE_URL%/",
+            "logo": "%SITE_URL%/favicon.svg"
+          }
+        ]
+      }
+    </script>
+
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Crawlable fallback when JS is disabled -->
+    <noscript>
+      <main style="max-width: 40rem; margin: 3rem auto; padding: 0 1.25rem; font-family: system-ui, sans-serif; color: #ece8e1; background: #0b0c0f">
+        <h1>PhotoshopLite — Free Browser Photo Editor</h1>
+        <p>
+          Darkroom-grade web photo editor with layers, retouch tools, AI cutouts, Photo Revive,
+          cleanup, upscale, and PNG/JPEG/WEBP export. Enable JavaScript to open the editor.
+        </p>
+        <p><a href="%SITE_URL%/" style="color: #d4923a">Launch PhotoshopLite</a></p>
+      </main>
+    </noscript>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

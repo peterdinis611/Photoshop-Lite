@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
 import { TextLayer } from '../../types/editor';
+import { useEditorStore } from '../../store/editorStore';
 
 interface TextLayerItemProps {
   layer: TextLayer;
@@ -17,6 +18,8 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
   onChange,
 }) => {
   const textRef = useRef<Konva.Text>(null);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const canMove = activeTool === 'select' && !layer.locked;
 
   if (!layer.visible) return null;
 
@@ -106,7 +109,8 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       letterSpacing={layer.letterSpacing}
       lineHeight={layer.lineHeight}
       textDecoration={layer.textDecoration}
-      draggable={!layer.locked}
+      draggable={canMove}
+      listening={canMove || activeTool === 'text'}
       globalCompositeOperation={layer.blendMode}
       shadowColor={useGlow ? styles.outerGlowColor || '#e8a84a' : styles.shadowColor}
       shadowBlur={useGlow ? styles.outerGlowBlur || 0 : styles.shadowBlur || 0}
@@ -116,10 +120,10 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
           : { x: styles.shadowOffsetX || 0, y: styles.shadowOffsetY || 0 }
       }
       shadowOpacity={useGlow ? 0.85 : styles.shadowOpacity || 0}
-      onClick={onSelect}
-      onTap={onSelect}
-      onDblClick={handleDblClick}
-      onDblTap={handleDblClick}
+      onClick={canMove ? onSelect : undefined}
+      onTap={canMove ? onSelect : undefined}
+      onDblClick={canMove || activeTool === 'text' ? handleDblClick : undefined}
+      onDblTap={canMove || activeTool === 'text' ? handleDblClick : undefined}
       onDragEnd={(e) => {
         onChange({
           x: Math.round(e.target.x()),

@@ -74,6 +74,10 @@ interface EditorState {
 
   // Modals & Panels
   isExportModalOpen: boolean;
+  isShortcutsModalOpen: boolean;
+  isOnboardingOpen: boolean;
+  isBeforeAfterOpen: boolean;
+  secondaryColor: string;
   isSettingsModalOpen: boolean;
   isNewCanvasModalOpen: boolean;
 
@@ -160,6 +164,13 @@ interface EditorState {
   setExportModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setNewCanvasModalOpen: (open: boolean) => void;
+  setShortcutsModalOpen: (open: boolean) => void;
+  setOnboardingOpen: (open: boolean) => void;
+  setBeforeAfterOpen: (open: boolean) => void;
+  setSecondaryColor: (color: string) => void;
+  swapBrushColors: () => void;
+  resetBrushColors: () => void;
+  nudgeSelectedLayer: (dx: number, dy: number) => void;
   setApiKeys: (keys: { removeBgApiKey?: string; replicateApiKey?: string }) => void;
 
   // Project I/O
@@ -224,6 +235,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   replicateApiKey: localStorage.getItem('px_replicate_key') || '',
 
   isExportModalOpen: false,
+  isShortcutsModalOpen: false,
+  isOnboardingOpen: false,
+  isBeforeAfterOpen: false,
+  secondaryColor: '#ece8e1',
   isSettingsModalOpen: false,
   isNewCanvasModalOpen: false,
   projectTitle: 'Untitled',
@@ -1189,7 +1204,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       scaleY: 1,
       rotation: 0,
       text: 'Double click to edit',
-      fontFamily: 'Figtree',
+      fontFamily: 'Source Sans 3',
       fontSize: 36,
       fill: '#ece8e1',
       fontStyle: 'bold',
@@ -1368,6 +1383,30 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setExportModalOpen: (open) => set({ isExportModalOpen: open }),
   setSettingsModalOpen: (open) => set({ isSettingsModalOpen: open }),
   setNewCanvasModalOpen: (open) => set({ isNewCanvasModalOpen: open }),
+  setShortcutsModalOpen: (open) => set({ isShortcutsModalOpen: open }),
+  setOnboardingOpen: (open) => set({ isOnboardingOpen: open }),
+  setBeforeAfterOpen: (open) => set({ isBeforeAfterOpen: open }),
+  setSecondaryColor: (color) => set({ secondaryColor: color }),
+  swapBrushColors: () =>
+    set((state) => ({
+      secondaryColor: state.brushSettings.color,
+      brushSettings: { ...state.brushSettings, color: state.secondaryColor },
+    })),
+  resetBrushColors: () =>
+    set({
+      secondaryColor: '#ece8e1',
+      brushSettings: { ...get().brushSettings, color: '#d4923a' },
+    }),
+  nudgeSelectedLayer: (dx, dy) => {
+    const { selectedLayerId, layers } = get();
+    if (!selectedLayerId) return;
+    const layer = layers.find((l) => l.id === selectedLayerId);
+    if (!layer || layer.locked) return;
+    get().updateLayer(selectedLayerId, {
+      x: Math.round(layer.x + dx),
+      y: Math.round(layer.y + dy),
+    });
+  },
   setApiKeys: ({ removeBgApiKey, replicateApiKey }) => {
     if (removeBgApiKey !== undefined) {
       localStorage.setItem('px_remove_bg_key', removeBgApiKey);

@@ -17,6 +17,8 @@ export type {
   ProjectVersionSummaryDto,
   AssetUploadDto,
   AssetResponseDto,
+  GoogleFontItem,
+  GoogleFontsResponseDto,
 } from './api.types';
 export type * from './editor.types';
 

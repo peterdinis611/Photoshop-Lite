@@ -1,0 +1,9 @@
+# PhotoshopLite — https://photoshoplite.app
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /assets/ort-
+Disallow: /*.wasm$
+
+Sitemap: https://photoshoplite.app/sitemap.xml
+Host: https://photoshoplite.app
