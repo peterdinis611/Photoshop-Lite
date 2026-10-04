@@ -267,7 +267,10 @@ export const ToolsPanel: React.FC = () => {
 
   return (
     <>
-      <aside className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between">
+      <aside
+        className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between"
+        data-tour="tour-tools"
+      >
         <div className="flex flex-col items-center gap-0.5 w-full px-1.5 relative">
           {tools.map((tool) => {
             const isActive =

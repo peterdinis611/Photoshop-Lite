@@ -20,6 +20,7 @@ import {
 import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, buildProjectFile, downloadProjectFile, selectionToMaskDataUrl, type ReviveMode, type CleanupMode } from '@photoshop-lite/editor-core';
 import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { AiJobKind, AiStylePreset, ProjectSummaryDto } from '@photoshop-lite/shared-types';
+import { resizeImageSource } from '../utils/resizeImage';
 
 /** Unique layer name: "Portrait · Revived", "Portrait · Revived 2", … */
 function uniqueLayerName(base: string, layers: EditorLayer[]): string {
@@ -80,6 +81,7 @@ interface EditorState {
   secondaryColor: string;
   isSettingsModalOpen: boolean;
   isNewCanvasModalOpen: boolean;
+  isImageSizeModalOpen: boolean;
 
   // Actions - Canvas & View
   setCanvasDimensions: (width: number, height: number) => void;
@@ -166,6 +168,17 @@ interface EditorState {
   setNewCanvasModalOpen: (open: boolean) => void;
   setShortcutsModalOpen: (open: boolean) => void;
   setOnboardingOpen: (open: boolean) => void;
+  setImageSizeModalOpen: (open: boolean) => void;
+  resizeImageLayer: (
+    id: string,
+    options: {
+      width: number;
+      height: number;
+      format?: 'image/jpeg' | 'image/webp' | 'image/png';
+      quality?: number;
+      resizeCanvas?: boolean;
+    }
+  ) => Promise<void>;
   setBeforeAfterOpen: (open: boolean) => void;
   setSecondaryColor: (color: string) => void;
   swapBrushColors: () => void;
@@ -235,6 +248,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   replicateApiKey: localStorage.getItem('px_replicate_key') || '',
 
   isExportModalOpen: false,
+  isImageSizeModalOpen: false,
   isShortcutsModalOpen: false,
   isOnboardingOpen: false,
   isBeforeAfterOpen: false,
@@ -1398,6 +1412,75 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setNewCanvasModalOpen: (open) => set({ isNewCanvasModalOpen: open }),
   setShortcutsModalOpen: (open) => set({ isShortcutsModalOpen: open }),
   setOnboardingOpen: (open) => set({ isOnboardingOpen: open }),
+  setImageSizeModalOpen: (open) => set({ isImageSizeModalOpen: open }),
+
+  resizeImageLayer: async (id, options) => {
+    const layer = get().layers.find((l) => l.id === id);
+    if (!layer || layer.type !== 'image') {
+      throw new Error('Select an image layer to resize');
+    }
+
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 35,
+        statusText: 'Optimizing image size…',
+      },
+    });
+
+    try {
+      const result = await resizeImageSource(layer.src, {
+        width: options.width,
+        height: options.height,
+        format: options.format,
+        quality: options.quality,
+      });
+
+      get().commitHistory(`Resize ${layer.name}`);
+      set((state) => ({
+        canvasWidth: options.resizeCanvas
+          ? result.width
+          : state.canvasWidth,
+        canvasHeight: options.resizeCanvas
+          ? result.height
+          : state.canvasHeight,
+        layers: state.layers.map((l) =>
+          l.id === id && l.type === 'image'
+            ? {
+                ...l,
+                src: result.src,
+                originalSrc: result.src,
+                width: result.width,
+                height: result.height,
+                scaleX: 1,
+                scaleY: 1,
+                x: options.resizeCanvas ? 0 : l.x,
+                y: options.resizeCanvas ? 0 : l.y,
+              }
+            : l
+        ),
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Resized to ${result.width}×${result.height}`,
+        },
+      }));
+    } catch (e: unknown) {
+      const err = getErrorMessage(e, 'Resize failed');
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: err,
+        },
+      });
+      throw e;
+    }
+  },
   setBeforeAfterOpen: (open) => set({ isBeforeAfterOpen: open }),
   setSecondaryColor: (color) => set({ secondaryColor: color }),
   swapBrushColors: () =>

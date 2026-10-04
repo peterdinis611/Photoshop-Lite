@@ -1401,3 +1401,71 @@ input[type='range'] {
   font-size: 11px;
   line-height: 1.4;
 }
+
+/* ── driver.js darkroom tour ── */
+.px-driver-popover.driver-popover {
+  background: #12141a;
+  color: #ece8e1;
+  border: 1px solid #2a303c;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(212, 146, 58, 0.12);
+  max-width: 320px;
+}
+
+.px-driver-popover .driver-popover-title {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  color: #ece8e1;
+}
+
+.px-driver-popover .driver-popover-description {
+  font-family: "Source Sans 3", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #8b929e;
+}
+
+.px-driver-popover .driver-popover-progress-text {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: #d4923a;
+  letter-spacing: 0.06em;
+}
+
+.px-driver-popover .driver-popover-navigation-btns {
+  gap: 6px;
+}
+
+.px-driver-popover .driver-popover-prev-btn,
+.px-driver-popover .driver-popover-next-btn {
+  font-family: "Bricolage Grotesque", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 6px;
+  text-shadow: none;
+  border: 1px solid #2a303c;
+  background: #1c2029;
+  color: #ece8e1;
+}
+
+.px-driver-popover .driver-popover-next-btn {
+  background: linear-gradient(180deg, #e8a84a, #d4923a);
+  border-color: transparent;
+  color: #1a1208;
+}
+
+.px-driver-popover .driver-popover-close-btn {
+  color: #5c6470;
+}
+
+.px-driver-popover .driver-popover-arrow-side-left.driver-popover-arrow,
+.px-driver-popover .driver-popover-arrow-side-right.driver-popover-arrow,
+.px-driver-popover .driver-popover-arrow-side-top.driver-popover-arrow,
+.px-driver-popover .driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-color: #12141a;
+}
+
+.driver-overlay {
+  background: #0b0c0f !important;
+}

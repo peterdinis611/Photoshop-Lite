@@ -12,6 +12,7 @@ import { ExportModal } from '../components/modals/ExportModal';
 import { SettingsModal } from '../components/modals/SettingsModal';
 import { NewCanvasModal } from '../components/modals/NewCanvasModal';
 import { ShortcutsModal } from '../components/modals/ShortcutsModal';
+import { ImageSizeModal } from '../components/modals/ImageSizeModal';
 import {
   OnboardingTour,
   useAutoStartOnboarding,
@@ -45,6 +46,7 @@ function EditorShell() {
         <main
           ref={canvasContainerRef}
           className="shell-canvas flex-1 relative overflow-hidden h-full"
+          data-tour="tour-canvas"
         >
           <CanvasStage containerRef={canvasContainerRef} />
           <CanvasDropZone onImagesAdded={handleFit} />
@@ -55,6 +57,7 @@ function EditorShell() {
       <ExportModal />
       <SettingsModal />
       <NewCanvasModal />
+      <ImageSizeModal />
       <ShortcutsModal />
       <OnboardingTour />
       <FloatingAIStatusToast />

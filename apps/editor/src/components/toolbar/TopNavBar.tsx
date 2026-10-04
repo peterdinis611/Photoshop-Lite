@@ -33,6 +33,8 @@ import {
   Cloud,
   Keyboard,
   Compass,
+  Scaling,
+  Pencil,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
@@ -123,9 +125,12 @@ const Label = ({ children }: { children: React.ReactNode }) => (
 export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<MenuId>(null);
   const [cloudProjects, setCloudProjects] = useState<ProjectSummaryDto[]>([]);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   const {
     zoom,
@@ -141,6 +146,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     setNewCanvasModalOpen,
     setShortcutsModalOpen,
     setOnboardingOpen,
+    setImageSizeModalOpen,
     showGrid,
     showRulers,
     toggleGrid,
@@ -160,6 +166,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     listCloudProjects,
     loadProjectFromCloud,
     projectTitle,
+    setProjectTitle,
     updateLayer,
     updateAdjustments,
     reorderLayers,
@@ -169,6 +176,18 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     canvasWidth,
     canvasHeight,
   } = useEditorStore();
+
+  const beginRename = () => {
+    setTitleDraft(projectTitle || 'Untitled');
+    setEditingTitle(true);
+    window.setTimeout(() => titleInputRef.current?.select(), 0);
+  };
+
+  const commitRename = () => {
+    const next = titleDraft.trim() || 'Untitled';
+    setProjectTitle(next);
+    setEditingTitle(false);
+  };
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImageSelected = selectedLayer?.type === 'image';
@@ -285,6 +304,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     <header
       ref={barRef}
       className="shell-nav h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 z-50 select-none"
+      data-tour="tour-nav"
     >
       <input
         ref={fileInputRef}
@@ -307,13 +327,42 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
         <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent)] flex items-center justify-center font-display font-extrabold text-[#1a1208] text-[11px]">
           Ps
         </div>
-        <div className="hidden md:flex flex-col leading-none">
+        <div className="hidden md:flex flex-col leading-none min-w-0">
           <span className="font-display font-bold text-[13px] text-[var(--text-primary)] tracking-tight">
             Photoshop<span className="text-[var(--accent-hot)]">Lite</span>
           </span>
-          <span className="text-[9px] font-mono-ui text-[var(--text-faint)] truncate max-w-[110px]">
-            {projectTitle || 'Untitled'}
-          </span>
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              data-tour="tour-project-title"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') {
+                  setEditingTitle(false);
+                }
+              }}
+              className="mt-0.5 w-[140px] bg-[var(--bg-app)] border border-[var(--accent)]/50 rounded px-1 py-0.5 text-[10px] font-mono-ui text-[var(--text-primary)] outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              data-tour="tour-project-title"
+              title="Rename project"
+              onClick={beginRename}
+              className="group mt-0.5 flex items-center gap-1 max-w-[140px] text-left cursor-pointer"
+            >
+              <span className="text-[9px] font-mono-ui text-[var(--text-faint)] truncate group-hover:text-[var(--accent-hot)]">
+                {projectTitle || 'Untitled'}
+              </span>
+              <Pencil
+                size={9}
+                className="shrink-0 text-[var(--text-faint)] opacity-0 group-hover:opacity-100"
+              />
+            </button>
+          )}
         </div>
       </div>
 
@@ -333,6 +382,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Item onClick={() => projectInputRef.current?.click()}>
                 <FolderOpen size={13} /> Open Project…
+              </Item>
+              <Item
+                onClick={() => {
+                  beginRename();
+                  close();
+                }}
+              >
+                <Pencil size={13} /> Rename Project…
               </Item>
               <Item onClick={() => { saveProject(); close(); }} hint="⌘S">
                 <Save size={13} /> Save Project
@@ -473,13 +530,22 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               <Sep />
               <Label>Size</Label>
               <Item
+                disabled={!isImageSelected}
+                onClick={() => {
+                  setImageSizeModalOpen(true);
+                  close();
+                }}
+              >
+                <Scaling size={13} /> Image Size… / Optimize
+              </Item>
+              <Item
                 disabled={!isImageSelected || aiStatus.isProcessing}
                 onClick={() => {
                   if (selectedLayerId) upscaleLayer(selectedLayerId, 2);
                   close();
                 }}
               >
-                <Maximize size={13} /> Image Size · Upscale 2×
+                <Maximize size={13} /> Upscale 2×
               </Item>
               <Item
                 disabled={!isImageSelected || aiStatus.isProcessing}
@@ -488,7 +554,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
                   close();
                 }}
               >
-                <Maximize size={13} /> Image Size · Upscale 4×
+                <Maximize size={13} /> Upscale 4×
               </Item>
               <Item onClick={() => { setNewCanvasModalOpen(true); close(); }}>
                 Canvas Size…

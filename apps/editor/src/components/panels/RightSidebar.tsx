@@ -66,6 +66,7 @@ export const RightSidebar: React.FC = () => {
     <aside
       className="shell-sidebar w-80 bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex flex-col h-full z-40 select-none"
       data-testid="right-sidebar"
+      data-tour="tour-sidebar"
     >
       <div className="flex items-center bg-[var(--bg-app)] border-b border-[var(--border-subtle)] p-1 gap-0.5">
         {tabs.map((tab) => {
