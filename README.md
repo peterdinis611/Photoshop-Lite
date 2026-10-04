@@ -17,7 +17,9 @@ Browser darkroom editor — layers, retouch tools, local Neural Lab, and optiona
 - **Canvas** — Konva stage with layers, marquee / lasso / wand, brush, heal, clone, shapes, text
 - **Local AI** — Photo Revive, Cleanup, WASM cutout, client upscale
 - **Cloud Lab** — Denoise, colorize, face restore, inpaint, style, segment, caption (Replicate via API)
-- **Projects** — `.pslite` local save + Save to Cloud / Open from Cloud (`apps/api/data`)
+- **Projects** — `.pslite` local save + Save to Cloud / Open from Cloud (`apps/api/data/workspaces/{id}`)
+- **Workspace isolation** — each browser gets `X-Workspace-Id` so person A never overwrites person B
+- **API cache** — Nest `CacheModule` for project lists/details, assets list, and fonts catalog
 - **Export** — PNG / JPEG / WEBP with transparent background and scale
 
 ## Quick start
@@ -76,8 +78,10 @@ libs/shared/types    Shared DTOs
 ## Architecture (AI + storage)
 
 ```
-Editor Neural Lab → editor-ai-client → NestJS /api → AiEngineService → Replicate / remove.bg
-                                    → ProjectsService → apps/api/data
+Editor Neural Lab → editor-ai-client (+ X-Workspace-Id) → NestJS /api
+  → AiEngineService → Replicate / remove.bg
+  → ProjectsService / AssetsService → data/workspaces/{workspaceId}/…
+  → CacheService (in-memory TTL, workspace-scoped keys)
 ```
 
 ## License

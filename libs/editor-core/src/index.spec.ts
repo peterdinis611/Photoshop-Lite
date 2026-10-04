@@ -1,14 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AppError,
   getErrorMessage,
   clamp,
   deepClone,
+  debounce,
   parseProjectFile,
   buildProjectFile,
+  serializeProject,
+  PROJECT_FILE_EXTENSION,
   DEFAULT_ADJUSTMENTS,
   FILTER_PRESETS,
   computeReviveAdjustments,
+  mixAdjustments,
+  REVIVE_MODES,
+  CLEANUP_MODES,
 } from './index';
 
 describe('AppError', () => {
@@ -44,9 +50,30 @@ describe('optimize helpers', () => {
     expect(copy).not.toBe(src);
     expect(copy.b).not.toBe(src.b);
   });
+
+  it('debounces calls and supports cancel', () => {
+    vi.useFakeTimers();
+    const spy = vi.fn();
+    const debounced = debounce(spy, 50);
+    debounced();
+    debounced();
+    expect(spy).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(50);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    debounced();
+    debounced.cancel();
+    vi.advanceTimersByTime(50);
+    expect(spy).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
 });
 
 describe('projectFile', () => {
+  it('uses the .psl.json extension', () => {
+    expect(PROJECT_FILE_EXTENSION).toBe('.psl.json');
+  });
+
   it('round-trips a project', () => {
     const project = buildProjectFile({
       title: 'Test',
@@ -61,6 +88,19 @@ describe('projectFile', () => {
     expect(parsed.layers).toEqual([]);
   });
 
+  it('serializeProject returns valid JSON', () => {
+    const project = buildProjectFile({
+      title: 'Ser',
+      canvasWidth: 100,
+      canvasHeight: 100,
+      backgroundColor: '#fff',
+      layers: [{ id: '1', type: 'image', name: 'A' }],
+    });
+    const raw = serializeProject(project);
+    expect(() => JSON.parse(raw)).not.toThrow();
+    expect(parseProjectFile(raw).title).toBe('Ser');
+  });
+
   it('rejects invalid JSON', () => {
     expect(() => parseProjectFile('{nope')).toThrow(AppError);
   });
@@ -73,9 +113,37 @@ describe('projectFile', () => {
 });
 
 describe('filters & revive', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('exports presets and defaults', () => {
     expect(FILTER_PRESETS.length).toBeGreaterThan(3);
     expect(DEFAULT_ADJUSTMENTS.brightness).toBe(0);
+  });
+
+  it('lists revive and cleanup modes', () => {
+    expect(REVIVE_MODES.map((m) => m.id)).toEqual(
+      expect.arrayContaining(['natural', 'vivid', 'shadows'])
+    );
+    expect(CLEANUP_MODES.map((m) => m.id)).toEqual(
+      expect.arrayContaining(['gentle', 'standard', 'strong'])
+    );
+  });
+
+  it('mixAdjustments lerps numeric fields by intensity', () => {
+    const base = { ...DEFAULT_ADJUSTMENTS, brightness: 0, contrast: 0 };
+    const target = { ...DEFAULT_ADJUSTMENTS, brightness: 100, contrast: 50 };
+    const mid = mixAdjustments(base, target, 0.5);
+    expect(mid.brightness).toBe(50);
+    expect(mid.contrast).toBe(25);
+
+    const full = mixAdjustments(base, target, 1);
+    expect(full.brightness).toBe(100);
+    expect(full.contrast).toBe(50);
+
+    const none = mixAdjustments(base, target, 0);
+    expect(none.brightness).toBe(0);
   });
 
   it('computeReviveAdjustments returns defaults for empty image', () => {

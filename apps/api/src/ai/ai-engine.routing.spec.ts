@@ -116,4 +116,62 @@ describe('AiEngineService routing', () => {
       /imageBase64/
     );
   });
+
+  it('pollPrediction returns text captions without downloading', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: 'succeeded',
+          output: 'a portrait of a woman',
+        }),
+      })
+    );
+
+    const poll = await engine.pollPrediction({ predictionId: 'pred_cap' });
+    expect(poll.status).toBe('succeeded');
+    expect(poll.text).toBe('a portrait of a woman');
+    expect(poll.imageBase64).toBeUndefined();
+  });
+
+  it('pollPrediction downloads image outputs as data URLs', async () => {
+    const pngBytes = Uint8Array.from([137, 80, 78, 71]); // PNG magic
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            status: 'succeeded',
+            output: 'https://cdn.example.com/out.png',
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'image/png' },
+          arrayBuffer: async () => pngBytes.buffer,
+        })
+    );
+
+    const poll = await engine.pollPrediction({ predictionId: 'pred_img' });
+    expect(poll.status).toBe('succeeded');
+    expect(poll.imageBase64).toMatch(/^data:image\/png;base64,/);
+    expect(poll.outputUrl).toBe('https://cdn.example.com/out.png');
+  });
+
+  it('pollPrediction surfaces failed status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'failed', error: 'gpu OOM' }),
+      })
+    );
+
+    const poll = await engine.pollPrediction({ predictionId: 'pred_fail' });
+    expect(poll.status).toBe('failed');
+    expect(poll.error).toMatch(/gpu OOM/);
+  });
 });

@@ -16,11 +16,25 @@ import type {
   AssetResponseDto,
   GoogleFontsResponseDto,
 } from '@photoshop-lite/shared-types';
+import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
 const DEFAULT_BASE = '/api';
 
+export type WorkspaceIdProvider = () => string | null | undefined;
+
 export class AiApiClient {
-  constructor(private readonly baseUrl: string = DEFAULT_BASE) {}
+  constructor(
+    private readonly baseUrl: string = DEFAULT_BASE,
+    private readonly getWorkspaceId: WorkspaceIdProvider = () => getOrCreateWorkspaceId()
+  ) {}
+
+  private buildHeaders(hasBody: boolean): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (hasBody) headers['Content-Type'] = 'application/json';
+    const workspaceId = this.getWorkspaceId()?.trim();
+    if (workspaceId) headers[WORKSPACE_HEADER] = workspaceId;
+    return headers;
+  }
 
   private async request<T>(
     path: string,
@@ -31,7 +45,7 @@ export class AiApiClient {
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         method,
-        headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        headers: this.buildHeaders(body !== undefined),
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (cause) {

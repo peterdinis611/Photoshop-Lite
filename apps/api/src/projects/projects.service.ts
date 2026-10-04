@@ -12,6 +12,8 @@ import {
   ProjectVersionSummaryDto,
 } from '@photoshop-lite/shared-types';
 import { ensureDir, newId, projectsRoot } from '../common/data-paths';
+import { requireWorkspaceId } from '../common/workspace';
+import { CacheKeys, CacheService } from '../cache/cache.service';
 
 interface StoredProject {
   id: string;
@@ -23,10 +25,13 @@ interface StoredProject {
   createdAt: string;
   updatedAt: string;
   savedAt: string;
+  workspaceId: string;
 }
 
 @Injectable()
 export class ProjectsService {
+  constructor(private readonly cache: CacheService) {}
+
   private projectDir(id: string): string {
     return path.join(projectsRoot(), id);
   }
@@ -44,7 +49,13 @@ export class ProjectsService {
     if (!fs.existsSync(file)) {
       throw new NotFoundException({ error: `Project ${id} not found`, code: 'NOT_FOUND' });
     }
-    return JSON.parse(fs.readFileSync(file, 'utf8')) as StoredProject;
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as StoredProject;
+    const workspaceId = requireWorkspaceId();
+    // Defense in depth: refuse cross-workspace reads if file was copied
+    if (raw.workspaceId && raw.workspaceId !== workspaceId) {
+      throw new NotFoundException({ error: `Project ${id} not found`, code: 'NOT_FOUND' });
+    }
+    return raw;
   }
 
   private writeProject(project: StoredProject): void {
@@ -80,28 +91,48 @@ export class ProjectsService {
     };
   }
 
-  list(): ProjectSummaryDto[] {
-    const root = projectsRoot();
-    if (!fs.existsSync(root)) return [];
-    return fs
-      .readdirSync(root, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => {
-        try {
-          return this.toSummary(this.readProject(d.name));
-        } catch {
-          return null;
-        }
-      })
-      .filter((p): p is ProjectSummaryDto => Boolean(p))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  private async bustWorkspaceProjectCache(workspaceId: string, id?: string): Promise<void> {
+    await this.cache.invalidatePrefix(CacheKeys.workspacePrefix(workspaceId) + 'projects');
+    if (id) {
+      await this.cache.del(CacheKeys.project(workspaceId, id));
+      await this.cache.del(CacheKeys.projectVersions(workspaceId, id));
+    }
   }
 
-  get(id: string): ProjectDetailDto {
-    return this.toDetail(this.readProject(id));
+  async list(): Promise<ProjectSummaryDto[]> {
+    const workspaceId = requireWorkspaceId();
+    return this.cache.wrap(
+      CacheKeys.projectList(workspaceId),
+      () => {
+        const root = projectsRoot();
+        if (!fs.existsSync(root)) return [];
+        return fs
+          .readdirSync(root, { withFileTypes: true })
+          .filter((d) => d.isDirectory())
+          .map((d) => {
+            try {
+              return this.toSummary(this.readProject(d.name));
+            } catch {
+              return null;
+            }
+          })
+          .filter((p): p is ProjectSummaryDto => Boolean(p))
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      },
+      30_000
+    );
   }
 
-  create(dto: ProjectCreateDto): ProjectDetailDto {
+  async get(id: string): Promise<ProjectDetailDto> {
+    const workspaceId = requireWorkspaceId();
+    return this.cache.wrap(
+      CacheKeys.project(workspaceId, id),
+      () => this.toDetail(this.readProject(id)),
+      30_000
+    );
+  }
+
+  async create(dto: ProjectCreateDto): Promise<ProjectDetailDto> {
     if (!dto.title?.trim()) {
       throw new BadRequestException({ error: 'title is required', code: 'VALIDATION' });
     }
@@ -112,17 +143,19 @@ export class ProjectsService {
       });
     }
 
+    const workspaceId = requireWorkspaceId();
     const now = new Date().toISOString();
     const id = dto.id?.trim() || newId('proj');
     if (fs.existsSync(this.projectFile(id))) {
       throw new BadRequestException({
-        error: `Project id ${id} already exists`,
+        error: `Project id ${id} already exists in this workspace`,
         code: 'VALIDATION',
       });
     }
 
     const project: StoredProject = {
       id,
+      workspaceId,
       title: dto.title.trim(),
       canvasWidth: dto.canvasWidth,
       canvasHeight: dto.canvasHeight,
@@ -135,15 +168,18 @@ export class ProjectsService {
 
     this.writeProject(project);
     this.snapshot(project, 'create');
+    await this.bustWorkspaceProjectCache(workspaceId, id);
     return this.toDetail(project);
   }
 
-  update(id: string, dto: ProjectCreateDto): ProjectDetailDto {
+  async update(id: string, dto: ProjectCreateDto): Promise<ProjectDetailDto> {
+    const workspaceId = requireWorkspaceId();
     const existing = this.readProject(id);
     const now = new Date().toISOString();
 
     const project: StoredProject = {
       ...existing,
+      workspaceId,
       title: dto.title?.trim() || existing.title,
       canvasWidth: dto.canvasWidth || existing.canvasWidth,
       canvasHeight: dto.canvasHeight || existing.canvasHeight,
@@ -155,36 +191,48 @@ export class ProjectsService {
 
     this.snapshot(existing, 'before-update');
     this.writeProject(project);
+    await this.bustWorkspaceProjectCache(workspaceId, id);
     return this.toDetail(project);
   }
 
-  remove(id: string): { success: boolean } {
+  async remove(id: string): Promise<{ success: boolean }> {
+    const workspaceId = requireWorkspaceId();
     const dir = this.projectDir(id);
     if (!fs.existsSync(dir)) {
       throw new NotFoundException({ error: `Project ${id} not found`, code: 'NOT_FOUND' });
     }
+    // Ensure it belongs to this workspace before delete
+    this.readProject(id);
     fs.rmSync(dir, { recursive: true, force: true });
+    await this.bustWorkspaceProjectCache(workspaceId, id);
     return { success: true };
   }
 
-  listVersions(id: string): ProjectVersionSummaryDto[] {
-    this.readProject(id);
-    const dir = this.versionsDir(id);
-    if (!fs.existsSync(dir)) return [];
-    return fs
-      .readdirSync(dir)
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        const raw = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as StoredProject & {
-          versionId?: string;
-        };
-        return {
-          id: f.replace(/\.json$/, ''),
-          savedAt: raw.savedAt || raw.updatedAt,
-          title: raw.title,
-        };
-      })
-      .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  async listVersions(id: string): Promise<ProjectVersionSummaryDto[]> {
+    const workspaceId = requireWorkspaceId();
+    return this.cache.wrap(
+      CacheKeys.projectVersions(workspaceId, id),
+      () => {
+        this.readProject(id);
+        const dir = this.versionsDir(id);
+        if (!fs.existsSync(dir)) return [];
+        return fs
+          .readdirSync(dir)
+          .filter((f) => f.endsWith('.json'))
+          .map((f) => {
+            const raw = JSON.parse(
+              fs.readFileSync(path.join(dir, f), 'utf8')
+            ) as StoredProject & { versionId?: string };
+            return {
+              id: f.replace(/\.json$/, ''),
+              savedAt: raw.savedAt || raw.updatedAt,
+              title: raw.title,
+            };
+          })
+          .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+      },
+      30_000
+    );
   }
 
   private snapshot(project: StoredProject, reason: string): void {
@@ -197,7 +245,6 @@ export class ProjectsService {
       'utf8'
     );
 
-    // Keep last 40 versions
     const files = fs
       .readdirSync(dir)
       .filter((f) => f.endsWith('.json'))

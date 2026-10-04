@@ -1140,24 +1140,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({ aiStatus: { ...state.aiStatus, ...status } })),
 
   addImageLayer: (src, name = 'Image Layer', naturalWidth, naturalHeight) => {
-    const { canvasWidth, canvasHeight } = get();
-    const w = naturalWidth || 600;
-    const h = naturalHeight || 400;
+    const state = get();
+    let { canvasWidth, canvasHeight } = state;
+    const w = Math.max(1, Math.round(naturalWidth || 600));
+    const h = Math.max(1, Math.round(naturalHeight || 400));
 
-    // Scale down image if larger than canvas
     let targetW = w;
     let targetH = h;
-    const maxAllowedW = canvasWidth * 0.85;
-    const maxAllowedH = canvasHeight * 0.85;
+    let x = 0;
+    let y = 0;
 
-    if (targetW > maxAllowedW || targetH > maxAllowedH) {
-      const scale = Math.min(maxAllowedW / targetW, maxAllowedH / targetH);
-      targetW = Math.round(targetW * scale);
-      targetH = Math.round(targetH * scale);
+    // First image opens as the document (supports large photos)
+    if (state.layers.length === 0) {
+      canvasWidth = w;
+      canvasHeight = h;
+      targetW = w;
+      targetH = h;
+      x = 0;
+      y = 0;
+      set({ canvasWidth, canvasHeight });
+    } else {
+      // Additional images fit inside the current canvas
+      const maxAllowedW = canvasWidth * 0.85;
+      const maxAllowedH = canvasHeight * 0.85;
+      if (targetW > maxAllowedW || targetH > maxAllowedH) {
+        const scale = Math.min(maxAllowedW / targetW, maxAllowedH / targetH);
+        targetW = Math.round(targetW * scale);
+        targetH = Math.round(targetH * scale);
+      }
+      x = Math.round((canvasWidth - targetW) / 2);
+      y = Math.round((canvasHeight - targetH) / 2);
     }
-
-    const x = Math.round((canvasWidth - targetW) / 2);
-    const y = Math.round((canvasHeight - targetH) / 2);
 
     const newLayer: ImageLayer = {
       id: `${Date.now()}_img_${Math.random().toString(36).substring(2, 6)}`,
@@ -1180,8 +1193,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     };
 
     get().commitHistory(`Add ${name}`);
-    set((state) => ({
-      layers: [...state.layers, newLayer],
+    set((s) => ({
+      layers: [...s.layers, newLayer],
       selectedLayerId: newLayer.id,
     }));
   },

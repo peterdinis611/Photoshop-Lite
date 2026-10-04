@@ -8,12 +8,12 @@ export class AssetsController {
   constructor(private readonly assets: AssetsService) {}
 
   @Get()
-  list(): AssetResponseDto[] {
+  list(): Promise<AssetResponseDto[]> {
     return this.assets.list();
   }
 
   @Post('upload')
-  upload(@Body() body: AssetUploadDto): AssetResponseDto {
+  upload(@Body() body: AssetUploadDto): Promise<AssetResponseDto> {
     return this.assets.upload(body);
   }
 
@@ -21,7 +21,7 @@ export class AssetsController {
   get(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
     const { stream, mimeType } = this.assets.getFile(id);
     res.setHeader('Content-Type', mimeType);
-    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
     return stream;
   }
 }

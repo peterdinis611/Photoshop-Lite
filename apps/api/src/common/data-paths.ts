@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { requireWorkspaceId } from './workspace';
 
 export function getDataRoot(): string {
   if (process.env.DATA_DIR) {
@@ -12,14 +13,22 @@ export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-export function projectsRoot(): string {
-  const dir = path.join(getDataRoot(), 'projects');
+/** Per-workspace root: data/workspaces/{workspaceId}/… */
+export function workspaceRoot(workspaceId?: string): string {
+  const id = workspaceId ?? requireWorkspaceId();
+  const dir = path.join(getDataRoot(), 'workspaces', id);
   ensureDir(dir);
   return dir;
 }
 
-export function assetsRoot(): string {
-  const dir = path.join(getDataRoot(), 'assets');
+export function projectsRoot(workspaceId?: string): string {
+  const dir = path.join(workspaceRoot(workspaceId), 'projects');
+  ensureDir(dir);
+  return dir;
+}
+
+export function assetsRoot(workspaceId?: string): string {
+  const dir = path.join(workspaceRoot(workspaceId), 'assets');
   ensureDir(dir);
   return dir;
 }

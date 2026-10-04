@@ -19,8 +19,9 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // Large cloud project / asset payloads (multi‑MP images as base64)
+  app.use(express.json({ limit: '120mb' }));
+  app.use(express.urlencoded({ limit: '120mb', extended: true }));
 
   const PORT = process.env.PORT || 3001;
   await app.listen(PORT);

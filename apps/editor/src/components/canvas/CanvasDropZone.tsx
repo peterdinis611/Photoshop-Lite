@@ -1,15 +1,24 @@
 import React, { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react';
-import { ImagePlus, Upload, Layers } from 'lucide-react';
+import { ImagePlus, Upload, Layers, Aperture } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import {
   collectImageFiles,
   dragEventHasFiles,
   loadImageFiles,
+  type LoadImageProgress,
 } from '../../utils/loadImageFiles';
 
 interface CanvasDropZoneProps {
   onImagesAdded?: () => void;
 }
+
+const PHASE_LABEL: Record<LoadImageProgress['phase'], string> = {
+  read: 'Reading negative',
+  decode: 'Exposing plate',
+  optimize: 'Reducing grain',
+  done: 'Fixed',
+  error: 'Skipped frame',
+};
 
 export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded }) => {
   const layersCount = useEditorStore((s) => s.layers.length);
@@ -18,6 +27,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   const dragDepthRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [progress, setProgress] = useState<LoadImageProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isEmpty = layersCount === 0;
 
@@ -31,11 +41,19 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
 
     setIsImporting(true);
     setError(null);
+    setProgress({
+      fileName: images[0].name,
+      index: 0,
+      total: images.length,
+      phase: 'read',
+      percent: 2,
+    });
+
     try {
-      const loaded = await loadImageFiles(images);
+      const loaded = await loadImageFiles(images, setProgress);
       if (loaded.length === 0) {
-        setError('Could not read those images');
-        window.setTimeout(() => setError(null), 2800);
+        setError('Could not read those images — try JPEG/PNG/WEBP');
+        window.setTimeout(() => setError(null), 3200);
         return;
       }
 
@@ -44,10 +62,16 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
           addImageLayer(img.src, img.name, img.width, img.height);
         }
       });
-      window.setTimeout(() => onImagesAdded?.(), 120);
+      window.setTimeout(() => onImagesAdded?.(), 140);
+
+      if (loaded.some((img) => img.downscaled)) {
+        setError('Very large photo was optimized to fit the browser safely');
+        window.setTimeout(() => setError(null), 3600);
+      }
     } finally {
       setIsImporting(false);
       setIsDragging(false);
+      setProgress(null);
       dragDepthRef.current = 0;
     }
   });
@@ -99,10 +123,12 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
     e.target.value = '';
   };
 
-  const showEmpty = isEmpty && !isDragging;
+  const showEmpty = isEmpty && !isDragging && !isImporting;
   const showOverlay = isDragging || isImporting;
 
   if (!showEmpty && !showOverlay && !error) return null;
+
+  const percent = progress?.percent ?? (isImporting ? 8 : 0);
 
   return (
     <div
@@ -141,8 +167,8 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
             <h2 className="mt-2 font-display text-[1.55rem] font-extrabold tracking-tight text-[var(--text-primary)]">
               Drop images here
             </h2>
-            <p className="mx-auto mt-2 max-w-[28ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
-              Drag photos onto the canvas, or browse from disk. PNG, JPEG, WEBP, GIF — multiple at once.
+            <p className="mx-auto mt-2 max-w-[30ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
+              Large photos welcome — the document sizes to your image. PNG, JPEG, WEBP, GIF.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
@@ -165,7 +191,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
             </div>
 
             <p className="mt-5 font-mono-ui text-[10px] text-[var(--text-faint)]">
-              Tip · File → Open Image · samples still in the menu
+              Tip · File → Open Image · up to ~8K edge
             </p>
           </div>
         </div>
@@ -174,28 +200,57 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       {showOverlay && (
         <div
           className={`drop-active-veil absolute inset-0 flex items-center justify-center ${
-            isImporting ? 'drop-active-veil--busy' : ''
+            isImporting ? 'drop-active-veil--busy' : 'drop-active-veil--armed'
           }`}
         >
-          <div className="drop-active-card">
+          <div className={`drop-active-card ${isImporting ? 'drop-active-card--developing' : ''}`}>
             <div className="drop-active-ring" aria-hidden />
-            <Upload
-              size={28}
-              strokeWidth={1.8}
-              className={`text-[var(--accent)] ${isImporting ? 'animate-pulse' : ''}`}
-            />
+            {isImporting && <div className="drop-scanline" aria-hidden />}
+            {isImporting && <div className="drop-grain" aria-hidden />}
+
+            <div className={`drop-active-icon ${isImporting ? 'drop-active-icon--spin' : ''}`}>
+              {isImporting ? (
+                <Aperture size={28} strokeWidth={1.7} className="text-[var(--accent)]" />
+              ) : (
+                <Upload size={28} strokeWidth={1.8} className="text-[var(--accent)]" />
+              )}
+            </div>
+
             <p className="mt-3 font-display text-lg font-bold text-[var(--text-primary)]">
               {isImporting ? 'Developing…' : 'Release to add layers'}
             </p>
             <p className="mt-1 font-mono-ui text-[10px] uppercase tracking-[0.14em] text-[var(--accent-hot)]">
-              {isImporting ? 'Importing plates' : 'Darkroom intake'}
+              {isImporting
+                ? progress
+                  ? PHASE_LABEL[progress.phase]
+                  : 'Importing plates'
+                : 'Darkroom intake'}
             </p>
+
+            {isImporting && (
+              <div className="drop-progress mt-4 w-full">
+                <div className="drop-progress-meta">
+                  <span className="truncate">
+                    {progress
+                      ? `${progress.index + 1}/${progress.total} · ${progress.fileName}`
+                      : 'Preparing…'}
+                  </span>
+                  <span className="font-mono-ui tabular-nums">{percent}%</span>
+                </div>
+                <div className="drop-progress-track">
+                  <div
+                    className="drop-progress-fill"
+                    style={{ width: `${Math.max(4, percent)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {error && (
-        <div className="absolute bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-[var(--radius-sm)] border border-[var(--danger)]/50 bg-red-950/90 px-3 py-2 text-[12px] text-red-100 shadow-xl">
+        <div className="drop-toast absolute bottom-6 left-1/2 z-40 -translate-x-1/2">
           {error}
         </div>
       )}

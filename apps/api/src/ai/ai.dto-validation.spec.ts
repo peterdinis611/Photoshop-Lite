@@ -38,4 +38,27 @@ describe('AiService validation', () => {
     expect(result.predictionId).toBe('p1');
     expect(revive).toHaveBeenCalled();
   });
+
+  it('rejects empty caption body', async () => {
+    await expect(service.caption({} as never)).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('passes style jobs through', async () => {
+    const engine = (service as unknown as { aiEngine: { styleTransfer: ReturnType<typeof vi.fn> } })
+      .aiEngine;
+    const styleTransfer = vi.fn().mockResolvedValue({
+      success: true,
+      predictionId: 'style_1',
+    });
+    engine.styleTransfer = styleTransfer;
+
+    const result = await service.style({
+      imageBase64: 'data:image/png;base64,abc',
+      style: 'noir',
+    });
+    expect(result.predictionId).toBe('style_1');
+    expect(styleTransfer).toHaveBeenCalledWith(
+      expect.objectContaining({ style: 'noir' })
+    );
+  });
 });
