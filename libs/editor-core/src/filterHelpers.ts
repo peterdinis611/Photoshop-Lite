@@ -1,4 +1,4 @@
-import { ImageAdjustments } from '@photoshop-lite/shared-types';
+import type { ImageAdjustments } from '@photoshop-lite/shared-types';
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   brightness: 0,

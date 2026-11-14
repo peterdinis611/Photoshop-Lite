@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { GoogleFontItem, GoogleFontsResponseDto } from '@photoshop-lite/shared-types';
+import type { GoogleFontItem, GoogleFontsResponseDto } from '@photoshop-lite/shared-types';
 import { FALLBACK_GOOGLE_FONTS } from './fallback-fonts';
 import { CacheKeys, CacheService } from '../cache/cache.service';
 

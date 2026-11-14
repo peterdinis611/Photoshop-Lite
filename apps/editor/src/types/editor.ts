@@ -1,1 +1,1 @@
-export * from '@photoshop-lite/shared-types';
+export type * from '@photoshop-lite/shared-types';

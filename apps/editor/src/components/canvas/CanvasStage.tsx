@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useEffectEvent, useState, useCallback } from 'react';
-import { Stage, Layer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge } from 'react-konva';
+import { Stage, Layer, FastLayer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge } from 'react-konva';
 import Konva from 'konva';
 import { useAsyncThrottledCallback, useThrottledCallback } from '@tanstack/react-pacer';
+import { registerStage, listeningPolicy } from '@photoshop-lite/editor-konva';
 import { useEditorStore } from '../../store/editorStore';
 import { ImageLayerItem } from './ImageLayerItem';
 import { TextLayerItem } from './TextLayerItem';
@@ -16,7 +17,6 @@ import {
   floodFillImage,
   applyBlurSpotToImage,
 } from '../../utils/retouchHelpers';
-import { registerStage } from '../../utils/stageRegistry';
 import { paintStrokeOnMask, magicWandBounds } from '../../utils/maskHelpers';
 import type { ShapeType } from '../../types/editor';
 
@@ -676,17 +676,15 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   };
 
   // Cursor style computation
+  const pointerPolicy = listeningPolicy(activeTool);
+
   const getCursorClass = () => {
     if (isSpacePressed || isPanning || activeTool === 'hand') return 'cursor-grab active:cursor-grabbing';
-    if (activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'refineBrush') return 'cursor-crosshair';
-    if (activeTool === 'marquee' || activeTool === 'lasso' || activeTool === 'wand') return 'cursor-crosshair';
-    if (activeTool === 'spotHealing') return 'cursor-crosshair';
-    if (activeTool === 'fill' || activeTool === 'blur') return 'cursor-crosshair';
     if (activeTool === 'clone') return cloneSource ? 'cursor-crosshair' : 'cursor-copy';
-    if (activeTool === 'eyedropper') return 'cursor-crosshair';
     if (activeTool === 'text') return 'cursor-text';
-    if (activeTool === 'shape' || activeTool === 'crop') return 'cursor-crosshair';
     if (activeTool === 'zoom') return 'cursor-zoom-in';
+    if (pointerPolicy.cursor === 'crosshair') return 'cursor-crosshair';
+    if (pointerPolicy.cursor === 'grab') return 'cursor-grab active:cursor-grabbing';
     return 'cursor-default';
   };
 
@@ -712,11 +710,19 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
         ref={setStageRef}
         width={containerSize.width}
         height={containerSize.height}
+        listening={pointerPolicy.stageListening}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
       >
-        <Layer id="export-content" x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom}>
+        <Layer
+          id="export-content"
+          x={pan.x}
+          y={pan.y}
+          scaleX={zoom}
+          scaleY={zoom}
+          listening={pointerPolicy.contentListening || activeTool === 'select'}
+        >
           {/* Canvas Background (swapped during export for transparent/solid) */}
           <Rect
             id="export-bg"
@@ -784,7 +790,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           })}
         </Layer>
 
-        <Layer id="export-ui" x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom} listening>
+        {/* FastLayer: guides / previews — no hit-testing, cheaper redraws */}
+        <FastLayer id="export-guides" x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom} listening={false}>
           {/* Grid overlay */}
           {showGrid && (
             <>
@@ -922,7 +929,17 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
               listening={false}
             />
           )}
+        </FastLayer>
 
+        {/* Interactive UI: crop handles + Transformer */}
+        <Layer
+          id="export-ui"
+          x={pan.x}
+          y={pan.y}
+          scaleX={zoom}
+          scaleY={zoom}
+          listening={pointerPolicy.overlayListening || activeTool === 'select'}
+        >
           {/* Crop Overlay — darkened outside, clear hole + resize handles */}
           {cropSettings.active && (() => {
             const cx = cropSettings.x;

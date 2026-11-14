@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { HealthService } from './health.service';
-import { HealthCheckResponse } from '@photoshop-lite/shared-types';
+import type { HealthCheckResponse } from '@photoshop-lite/shared-types';
 
 @Controller('health')
 export class HealthController {

@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AiEngineService } from '@photoshop-lite/ai';
-import {
+import type {
   RemoveBgRequestDto,
   RemoveBgResponseDto,
   UpscaleRequestDto,

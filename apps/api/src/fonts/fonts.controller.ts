@@ -1,6 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { FontsService } from './fonts.service';
-import { GoogleFontsResponseDto } from '@photoshop-lite/shared-types';
+import type { GoogleFontsResponseDto } from '@photoshop-lite/shared-types';
 
 @Controller('fonts')
 export class FontsController {

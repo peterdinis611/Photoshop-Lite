@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AssetsService } from './assets.service';
-import { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
+import type { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
 
 @Controller('assets')
 export class AssetsController {

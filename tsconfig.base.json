@@ -23,7 +23,8 @@
       "@photoshop-lite/shared-types": ["libs/shared/types/src/index.ts"],
       "@photoshop-lite/ai": ["libs/ai/src/index.ts"],
       "@photoshop-lite/editor-core": ["libs/editor-core/src/index.ts"],
-      "@photoshop-lite/editor-ai-client": ["libs/editor-ai-client/src/index.ts"]
+      "@photoshop-lite/editor-ai-client": ["libs/editor-ai-client/src/index.ts"],
+      "@photoshop-lite/editor-konva": ["libs/editor-konva/src/index.ts"]
     },
     "customConditions": ["@photoshop-lite/source"]
   }

@@ -1,11 +1,2 @@
-import type Konva from 'konva';
-
-let stage: Konva.Stage | null = null;
-
-export function registerStage(next: Konva.Stage | null): void {
-  stage = next;
-}
-
-export function getStage(): Konva.Stage | null {
-  return stage;
-}
+/** @deprecated Import from `@photoshop-lite/editor-konva` instead. */
+export { registerStage, getStage } from '@photoshop-lite/editor-konva';

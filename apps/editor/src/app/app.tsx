@@ -20,6 +20,7 @@ import {
 } from '../components/onboarding/OnboardingTour';
 import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { KonvaStageProvider } from '@photoshop-lite/editor-konva';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
 import { NotFoundPage } from '../pages/NotFoundPage';
 
@@ -71,28 +72,30 @@ function EditorShell() {
 export function App() {
   return (
     <ErrorBoundary>
-      <PacerProvider
-        defaultOptions={{
-          debouncer: { wait: 200 },
-          throttler: { wait: 16, leading: true, trailing: true },
-          asyncThrottler: { wait: 50, leading: true, trailing: true },
-        }}
-      >
-        <HotkeysProvider
+      <KonvaStageProvider>
+        <PacerProvider
           defaultOptions={{
-            hotkey: {
-              preventDefault: true,
-              stopPropagation: true,
-              conflictBehavior: 'allow',
-            },
+            debouncer: { wait: 200 },
+            throttler: { wait: 16, leading: true, trailing: true },
+            asyncThrottler: { wait: 50, leading: true, trailing: true },
           }}
         >
-          <Routes>
-            <Route path="/" element={<EditorShell />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </HotkeysProvider>
-      </PacerProvider>
+          <HotkeysProvider
+            defaultOptions={{
+              hotkey: {
+                preventDefault: true,
+                stopPropagation: true,
+                conflictBehavior: 'allow',
+              },
+            }}
+          >
+            <Routes>
+              <Route path="/" element={<EditorShell />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </HotkeysProvider>
+        </PacerProvider>
+      </KonvaStageProvider>
     </ErrorBoundary>
   );
 }

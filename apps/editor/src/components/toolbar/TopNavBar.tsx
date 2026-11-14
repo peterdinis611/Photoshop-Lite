@@ -174,7 +174,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     reorderLayers,
     toggleLayerVisibility,
     toggleLayerLock,
-    setActiveTool,
     canvasWidth,
     canvasHeight,
   } = useEditorStore();

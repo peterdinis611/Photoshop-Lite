@@ -64,6 +64,7 @@ export default defineConfig(() => {
         '@photoshop-lite/shared-types': resolve(root, 'libs/shared/types/src/index.ts'),
         '@photoshop-lite/editor-core': resolve(root, 'libs/editor-core/src/index.ts'),
         '@photoshop-lite/editor-ai-client': resolve(root, 'libs/editor-ai-client/src/index.ts'),
+        '@photoshop-lite/editor-konva': resolve(root, 'libs/editor-konva/src/index.ts'),
         '@photoshop-lite/ai': resolve(root, 'libs/ai/src/index.ts'),
       },
     },

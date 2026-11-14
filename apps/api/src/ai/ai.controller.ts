@@ -1,6 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AiService } from './ai.service';
-import {
+import type {
   RemoveBgRequestDto,
   RemoveBgResponseDto,
   UpscaleRequestDto,

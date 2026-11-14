@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { HealthCheckResponse } from '@photoshop-lite/shared-types';
+import type { HealthCheckResponse } from '@photoshop-lite/shared-types';
 
 @Injectable()
 export class HealthService {

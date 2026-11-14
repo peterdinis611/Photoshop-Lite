@@ -1,4 +1,4 @@
-import { ImageAdjustments } from '@photoshop-lite/shared-types';
+import type { ImageAdjustments } from '@photoshop-lite/shared-types';
 import { DEFAULT_ADJUSTMENTS } from './filterHelpers';
 
 export type ReviveMode = 'natural' | 'vivid' | 'shadows' | 'clarity' | 'film';

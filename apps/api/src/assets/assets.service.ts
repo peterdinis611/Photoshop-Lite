@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
+import type { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
 import { assetsRoot, ensureDir, newId } from '../common/data-paths';
 import { requireWorkspaceId } from '../common/workspace';
 import { CacheKeys, CacheService } from '../cache/cache.service';

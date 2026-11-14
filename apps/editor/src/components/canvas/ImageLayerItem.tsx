@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Group, Image as KonvaImage } from 'react-konva';
 import Konva from 'konva';
+import { applyImageNodeFilters, useKonvaImage } from '@photoshop-lite/editor-konva';
 import { ImageLayer } from '../../types/editor';
-import { applyImageNodeFilters } from './konvaFilters';
 import { useEditorStore } from '../../store/editorStore';
 
 interface ImageLayerItemProps {
@@ -14,43 +14,25 @@ interface ImageLayerItemProps {
 
 export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
   layer,
-  isSelected,
   onSelect,
   onChange,
 }) => {
   const imageRef = useRef<Konva.Image>(null);
   const groupRef = useRef<Konva.Group>(null);
-  const [imageElement, setImageElement] = useState<HTMLImageElement | null>(null);
-  const [maskElement, setMaskElement] = useState<HTMLImageElement | null>(null);
+  const { image: imageElement } = useKonvaImage(layer.src);
+  const { image: maskElement } = useKonvaImage(
+    layer.hasLayerMask ? layer.layerMaskSrc : null
+  );
   const layers = useEditorStore((s) => s.layers);
   const activeTool = useEditorStore((s) => s.activeTool);
   const canMove = activeTool === 'select' && !layer.locked;
 
   useEffect(() => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.src = layer.src;
-    img.onload = () => setImageElement(img);
-  }, [layer.src]);
-
-  useEffect(() => {
-    if (!layer.hasLayerMask || !layer.layerMaskSrc) {
-      setMaskElement(null);
-      return;
-    }
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.src = layer.layerMaskSrc;
-    img.onload = () => setMaskElement(img);
-  }, [layer.hasLayerMask, layer.layerMaskSrc]);
-
-  // Apply filters whenever adjustments change
-  useEffect(() => {
     if (imageRef.current && imageElement) {
       applyImageNodeFilters(imageRef.current, layer.adjustments);
       imageRef.current.getLayer()?.batchDraw();
     }
-  }, [layer.adjustments, imageElement, layer.width, layer.height]);
+  }, [layer.adjustments, imageElement, layer.width, layer.height, layer.src]);
 
   if (!layer.visible || !imageElement) {
     return null;
@@ -75,13 +57,11 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
         shadowOpacity: styles.shadowOpacity || 0,
       };
 
-  // Clipping mask: clip this layer to the bounds of the target layer below
   let clipFunc: ((ctx: Konva.Context) => void) | undefined;
   if (layer.clippingMaskToId) {
     const clipTarget = layers.find((l) => l.id === layer.clippingMaskToId);
     if (clipTarget) {
       clipFunc = (ctx) => {
-        // Clip in group-local space: convert target bounds relative to this layer
         const lx = clipTarget.x - layer.x;
         const ly = clipTarget.y - layer.y;
         ctx.rect(lx, ly, clipTarget.width * clipTarget.scaleX, clipTarget.height * clipTarget.scaleY);
@@ -101,32 +81,33 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
     });
   };
 
-  // With layer mask: composite via destination-in (white=show, black=hide → use luminance as alpha)
+  const groupProps = {
+    ref: groupRef,
+    id: layer.id,
+    x: layer.x,
+    y: layer.y,
+    scaleX: layer.scaleX,
+    scaleY: layer.scaleY,
+    rotation: layer.rotation,
+    opacity: layer.opacity,
+    draggable: canMove,
+    listening: canMove,
+    globalCompositeOperation: layer.blendMode,
+    clipFunc,
+    onClick: canMove ? onSelect : undefined,
+    onTap: canMove ? onSelect : undefined,
+    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
+      onChange({
+        x: Math.round(e.target.x()),
+        y: Math.round(e.target.y()),
+      });
+    },
+    onTransformEnd: commonTransformEnd,
+  };
+
   if (layer.hasLayerMask && maskElement) {
     return (
-      <Group
-        ref={groupRef}
-        id={layer.id}
-        x={layer.x}
-        y={layer.y}
-        scaleX={layer.scaleX}
-        scaleY={layer.scaleY}
-        rotation={layer.rotation}
-        opacity={layer.opacity}
-        draggable={canMove}
-        listening={canMove}
-        globalCompositeOperation={layer.blendMode}
-        clipFunc={clipFunc}
-        onClick={canMove ? onSelect : undefined}
-        onTap={canMove ? onSelect : undefined}
-        onDragEnd={(e) => {
-          onChange({
-            x: Math.round(e.target.x()),
-            y: Math.round(e.target.y()),
-          });
-        }}
-        onTransformEnd={commonTransformEnd}
-      >
+      <Group {...groupProps}>
         <KonvaImage
           ref={imageRef}
           image={imageElement}
@@ -134,6 +115,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
           height={layer.height}
           stroke={styles.stroke}
           strokeWidth={styles.strokeWidth || 0}
+          perfectDrawEnabled={false}
           {...shadowProps}
         />
         <KonvaImage
@@ -142,35 +124,14 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
           height={layer.height}
           globalCompositeOperation="destination-in"
           listening={false}
+          perfectDrawEnabled={false}
         />
       </Group>
     );
   }
 
   return (
-    <Group
-      ref={groupRef}
-      id={layer.id}
-      x={layer.x}
-      y={layer.y}
-      scaleX={layer.scaleX}
-      scaleY={layer.scaleY}
-      rotation={layer.rotation}
-      opacity={layer.opacity}
-      draggable={canMove}
-      listening={canMove}
-      globalCompositeOperation={layer.blendMode}
-      clipFunc={clipFunc}
-      onClick={canMove ? onSelect : undefined}
-      onTap={canMove ? onSelect : undefined}
-      onDragEnd={(e) => {
-        onChange({
-          x: Math.round(e.target.x()),
-          y: Math.round(e.target.y()),
-        });
-      }}
-      onTransformEnd={commonTransformEnd}
-    >
+    <Group {...groupProps}>
       <KonvaImage
         ref={imageRef}
         image={imageElement}
@@ -178,6 +139,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
         height={layer.height}
         stroke={styles.stroke}
         strokeWidth={styles.strokeWidth || 0}
+        perfectDrawEnabled={false}
         {...shadowProps}
       />
     </Group>
