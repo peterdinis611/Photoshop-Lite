@@ -16,6 +16,8 @@ import type {
   AssetResponseDto,
   GoogleFontsResponseDto,
   HealthCheckResponse,
+  StockFetchResponseDto,
+  StockSearchResponseDto,
 } from '@photoshop-lite/shared-types';
 import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
@@ -215,6 +217,26 @@ export class AiApiClient {
   listFonts(query?: string): Promise<GoogleFontsResponseDto> {
     const q = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
     return this.request<GoogleFontsResponseDto>(`/fonts${q}`, undefined, 'GET');
+  }
+
+  // ── Stock / CC photos ──────────────────────────────────────────
+
+  searchStock(query: string, page = 1): Promise<StockSearchResponseDto> {
+    const q = encodeURIComponent(query.trim() || 'nature');
+    return this.request<StockSearchResponseDto>(
+      `/stock/search?q=${q}&page=${Math.max(1, page)}`,
+      undefined,
+      'GET'
+    );
+  }
+
+  /** Proxy remote stock/CC image through API → data URL (CORS-safe). */
+  fetchStockImage(url: string): Promise<StockFetchResponseDto> {
+    return this.request<StockFetchResponseDto>(
+      `/stock/fetch?url=${encodeURIComponent(url)}`,
+      undefined,
+      'GET'
+    );
   }
 }
 

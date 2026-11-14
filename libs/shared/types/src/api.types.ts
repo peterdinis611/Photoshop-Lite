@@ -7,6 +7,12 @@ export interface HealthCheckResponse {
   replicateConfigured?: boolean;
   /** Server has REMOVE_BG_API_KEY */
   removeBgConfigured?: boolean;
+  /** Server has UNSPLASH_ACCESS_KEY */
+  unsplashConfigured?: boolean;
+  /** Server has PEXELS_API_KEY */
+  pexelsConfigured?: boolean;
+  /** Openverse needs no key — always available when API is up */
+  openverseAvailable?: boolean;
 }
 
 export interface RemoveBgRequestDto {
@@ -170,4 +176,36 @@ export interface GoogleFontItem {
 export interface GoogleFontsResponseDto {
   items: GoogleFontItem[];
   source: 'google-api' | 'fallback';
+}
+
+// ─── Stock / CC photos ───────────────────────────────────────────
+
+export type StockProvider = 'unsplash' | 'pexels' | 'openverse';
+
+export interface StockPhotoItem {
+  id: string;
+  provider: StockProvider;
+  title: string;
+  author: string;
+  authorUrl?: string;
+  thumbUrl: string;
+  fullUrl: string;
+  width: number;
+  height: number;
+  license?: string;
+  sourcePageUrl?: string;
+}
+
+export interface StockSearchResponseDto {
+  items: StockPhotoItem[];
+  query: string;
+  providers: StockProvider[];
+  sources: Partial<Record<StockProvider, 'ok' | 'missing-key' | 'error' | 'skipped'>>;
+}
+
+/** Server-proxied image bytes as data URL (avoids browser CORS on place). */
+export interface StockFetchResponseDto {
+  dataUrl: string;
+  contentType: string;
+  byteLength: number;
 }

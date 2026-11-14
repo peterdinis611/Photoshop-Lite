@@ -10,6 +10,7 @@ interface AnimatedMenuProps {
   origin?: MenuOrigin;
   widthClass?: string;
   className?: string;
+  style?: React.CSSProperties;
   role?: string;
   children: React.ReactNode;
 }
@@ -30,6 +31,7 @@ export const AnimatedMenu: React.FC<AnimatedMenuProps> = ({
   origin = 'tl',
   widthClass = 'w-56',
   className = '',
+  style,
   role = 'menu',
   children,
 }) => {
@@ -72,6 +74,7 @@ export const AnimatedMenu: React.FC<AnimatedMenuProps> = ({
     <div
       ref={panelRef}
       role={role}
+      style={style}
       className={`menu-flyout menu-flyout--stagger ${ORIGIN_CLASS[origin]} ${widthClass} ${className}`}
       onMouseLeave={closeOnLeave ? onClose : undefined}
     >

@@ -1,5 +1,6 @@
 import Konva from 'konva';
 import type { ImageAdjustments } from '@photoshop-lite/shared-types';
+import { applyCurvesToImageData, applyLevelsToImageData } from '@photoshop-lite/editor-core';
 
 declare module 'konva' {
   // eslint-disable-next-line @typescript-eslint/no-namespace -- Konva exposes Filters as a namespace
@@ -10,7 +11,7 @@ declare module 'konva' {
 
 let photoAdjustRegistered = false;
 
-/** Register custom PhotoAdjust filter once (exposure, vibrance, temp, tint, sepia, sharpness). */
+/** Register custom PhotoAdjust filter once (exposure, vibrance, temp, tint, sepia, levels, curves, sharpness). */
 export function registerPhotoAdjustFilter(): void {
   if (photoAdjustRegistered) return;
   photoAdjustRegistered = true;
@@ -86,6 +87,11 @@ export function registerPhotoAdjustFilter(): void {
         data[i + 1] = g;
         data[i + 2] = b;
       }
+
+      // Levels first, then Curves (same order as bakeCurvesLevels). Both are RGB LUTs
+      // built by editor-core, which depends only on shared-types — no import cycle.
+      if (adj.levels) applyLevelsToImageData(imageData, adj.levels);
+      if (adj.curves) applyCurvesToImageData(imageData, adj.curves);
 
       if (sharpness > 0) {
         const w = imageData.width;

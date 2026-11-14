@@ -11,10 +11,15 @@ import {
   Eye,
   SunMedium,
   Eraser,
+  Spline,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { FILTER_PRESETS, DEFAULT_ADJUSTMENTS } from '../../utils/filterHelpers';
 import { ImageAdjustments } from '../../types/editor';
+import type { CurvePoint } from '../../types/editor';
+import { DEFAULT_CURVES, DEFAULT_LEVELS } from '@photoshop-lite/editor-core';
+import { CurvesEditor } from './CurvesEditor';
 import { REVIVE_MODES, type ReviveMode } from '../../utils/photoRevive';
 import { CLEANUP_MODES, type CleanupMode } from '../../utils/photoCleanup';
 
@@ -23,12 +28,15 @@ const SliderRow: React.FC<{
   value: number;
   min?: number;
   max?: number;
+  format?: (v: number) => string;
   onChange: (v: number) => void;
-}> = ({ label, value, min = -100, max = 100, onChange }) => (
+}> = ({ label, value, min = -100, max = 100, format, onChange }) => (
   <div className="flex flex-col gap-1">
     <div className="flex justify-between text-[var(--text-muted)]">
       <span className="flex items-center gap-1">{label}</span>
-      <span className="font-mono-ui text-[11px] text-[var(--text-faint)]">{value}</span>
+      <span className="font-mono-ui text-[11px] text-[var(--text-faint)]">
+        {format ? format(value) : value}
+      </span>
     </div>
     <input
       type="range"
@@ -62,6 +70,26 @@ export const AdjustmentsPanel: React.FC = () => {
   const handleSliderChange = (key: keyof ImageAdjustments, value: number) => {
     if (!selectedLayer || !isImage) return;
     updateAdjustments(selectedLayer.id, { [key]: value });
+  };
+
+  const levels = { ...DEFAULT_LEVELS, ...(isImage ? selectedLayer.adjustments.levels : undefined) };
+  const curves = isImage ? selectedLayer.adjustments.curves : undefined;
+  const levelsDirty = (Object.keys(DEFAULT_LEVELS) as (keyof typeof DEFAULT_LEVELS)[]).some(
+    (k) => levels[k] !== DEFAULT_LEVELS[k]
+  );
+
+  const handleCurvesChange = (rgb: CurvePoint[]) => {
+    if (!selectedLayer || !isImage) return;
+    updateAdjustments(selectedLayer.id, { curves: { ...DEFAULT_CURVES, ...curves, rgb } });
+  };
+
+  const handleLevelsChange = (key: keyof typeof DEFAULT_LEVELS, value: number) => {
+    if (!selectedLayer || !isImage) return;
+    const next = { ...levels, [key]: value };
+    // Keep the black point strictly below the white point.
+    if (key === 'inBlack') next.inBlack = Math.min(value, next.inWhite - 1);
+    if (key === 'inWhite') next.inWhite = Math.max(value, next.inBlack + 1);
+    updateAdjustments(selectedLayer.id, { levels: next });
   };
 
   const handleReset = () => {
@@ -182,7 +210,70 @@ export const AdjustmentsPanel: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 pt-1 border-t border-[var(--border-subtle)]">
+      <div className="flex flex-col gap-2.5 pt-1 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 font-display font-bold text-[var(--accent-hot)] text-[12px]">
+            <Spline size={13} /> Curves
+          </span>
+          <span className="px-chip text-[var(--text-faint)]">RGB</span>
+        </div>
+        <CurvesEditor points={curves?.rgb} onChange={handleCurvesChange} />
+      </div>
+
+      <div className="flex flex-col gap-3 pt-3 border-t border-[var(--border-subtle)]">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 font-display font-bold text-[var(--accent-hot)] text-[12px]">
+            <SlidersHorizontal size={13} /> Levels
+          </span>
+          {levelsDirty && (
+            <button
+              type="button"
+              onClick={() => updateAdjustments(selectedLayer.id, { levels: { ...DEFAULT_LEVELS } })}
+              className="flex items-center gap-1 text-[11px] text-[var(--text-faint)] hover:text-[var(--text-primary)] cursor-pointer"
+            >
+              <RotateCcw size={11} /> Reset
+            </button>
+          )}
+        </div>
+        <SliderRow
+          label="Input black"
+          value={levels.inBlack}
+          min={0}
+          max={254}
+          onChange={(v) => handleLevelsChange('inBlack', v)}
+        />
+        <SliderRow
+          label="Gamma"
+          value={Math.round(levels.inGamma * 100)}
+          min={10}
+          max={999}
+          format={(v) => (v / 100).toFixed(2)}
+          onChange={(v) => handleLevelsChange('inGamma', v / 100)}
+        />
+        <SliderRow
+          label="Input white"
+          value={levels.inWhite}
+          min={1}
+          max={255}
+          onChange={(v) => handleLevelsChange('inWhite', v)}
+        />
+        <SliderRow
+          label="Output black"
+          value={levels.outBlack}
+          min={0}
+          max={255}
+          onChange={(v) => handleLevelsChange('outBlack', v)}
+        />
+        <SliderRow
+          label="Output white"
+          value={levels.outWhite}
+          min={0}
+          max={255}
+          onChange={(v) => handleLevelsChange('outWhite', v)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-3 pt-3 border-t border-[var(--border-subtle)]">
         <span className="font-semibold text-[var(--text-faint)] uppercase tracking-wider text-[10px]">
           Manual
         </span>

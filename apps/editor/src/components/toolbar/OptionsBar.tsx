@@ -13,12 +13,34 @@ import {
   Move,
   RotateCw,
   RotateCcw,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
-import { ColorField } from '../ui/ColorField';
+import type { TransformMode } from '../../types/editor';
 import { FontPicker } from '../ui/FontPicker';
-import { DebouncedRange } from '../ui/DebouncedRange';
 import { loadGoogleFont } from '../../utils/googleFonts';
+import {
+  ColorOpt,
+  OptChip,
+  OptHint,
+  OptLabel,
+  OptSep,
+  SizeOpt,
+} from '../ui/OptionControls';
+
+const SHAPE_TYPES = [
+  'rectangle',
+  'ellipse',
+  'circle',
+  'line',
+  'arrow',
+  'star',
+  'polygon',
+  'arc',
+  'ring',
+  'wedge',
+  'callout',
+] as const;
 
 export const OptionsBar: React.FC = () => {
   const {
@@ -29,6 +51,10 @@ export const OptionsBar: React.FC = () => {
     updateBrushSettings,
     penSettings,
     updatePenSettings,
+    shapeSettings,
+    updateShapeSettings,
+    textSettings,
+    updateTextSettings,
     cropSettings,
     setCropSettings,
     applyCrop,
@@ -46,7 +72,29 @@ export const OptionsBar: React.FC = () => {
     setMarqueeMode,
     wandTolerance,
     setWandTolerance,
+    gradientSettings,
+    updateGradientSettings,
+    toneBrushSettings,
+    updateToneBrushSettings,
+    transformMode,
+    setTransformMode,
   } = useEditorStore();
+
+  const stops = gradientSettings.colorStops;
+  const stopStart = stops[0]?.color ?? '#000000';
+  const stopEnd = stops[stops.length - 1]?.color ?? '#ffffff';
+  const setEndStop = (which: 'start' | 'end', color: string) => {
+    const next = stops.map((st, i) =>
+      (which === 'start' && i === 0) || (which === 'end' && i === stops.length - 1)
+        ? { ...st, color }
+        : st
+    );
+    updateGradientSettings({ colorStops: next });
+  };
+  const gradientCss = `linear-gradient(90deg, ${[...stops]
+    .sort((a, b) => a.offset - b.offset)
+    .map((st) => `${st.color} ${Math.round(st.offset * 100)}%`)
+    .join(', ')})`;
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
 
@@ -71,11 +119,24 @@ export const OptionsBar: React.FC = () => {
   const toolLabel: Record<string, string> = {
     select: 'Move',
     marquee: 'Marquee',
+    lasso: 'Lasso',
+    polyLasso: 'Polygonal Lasso',
+    magneticLasso: 'Magnetic Lasso',
+    quickSelect: 'Quick Select',
+    wand: 'Wand',
     crop: 'Crop',
     brush: 'Brush',
     eraser: 'Eraser',
     refineBrush: 'Refine Edge',
     spotHealing: 'Spot Heal',
+    healing: 'Healing Brush',
+    patch: 'Patch',
+    gradient: 'Gradient',
+    dodge: 'Dodge',
+    burn: 'Burn',
+    sharpenTool: 'Sharpen',
+    liquify: 'Liquify',
+    transform: 'Transform',
     clone: 'Clone Stamp',
     eyedropper: 'Eyedropper',
     fill: 'Paint Bucket',
@@ -89,7 +150,6 @@ export const OptionsBar: React.FC = () => {
 
   return (
     <div className="shell-options h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto">
-      {/* Active tool badge */}
       <div className="flex items-center gap-1.5 shrink-0 pr-2.5 border-r border-[var(--border-subtle)]">
         <Move size={12} className="text-[var(--accent)]" />
         <span className="font-display font-bold text-[var(--text-primary)] text-[11px]">
@@ -97,6 +157,7 @@ export const OptionsBar: React.FC = () => {
         </span>
       </div>
 
+      {/* ── Move / Select ── */}
       {activeTool === 'select' && (
         <div className="flex items-center gap-2.5">
           {selectedLayer ? (
@@ -124,7 +185,7 @@ export const OptionsBar: React.FC = () => {
                   ∠ <b className="text-[var(--text-primary)] font-medium">{Math.round(selectedLayer.rotation)}°</b>
                 </span>
               </div>
-              <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
+              <OptSep />
               <div className="flex items-center gap-0.5 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
                 <button onClick={handleFlipH} title="Flip H" className="p-1 hover:bg-[var(--bg-subtle)] rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]">
                   <FlipHorizontal size={13} />
@@ -136,199 +197,495 @@ export const OptionsBar: React.FC = () => {
                   <AlignCenter size={13} />
                 </button>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[var(--text-faint)]">Opacity</span>
-                <DebouncedRange
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={selectedLayer.opacity}
-                  onCommit={(opacity) => updateLayer(selectedLayer.id, { opacity })}
-                  className="w-20 cursor-pointer"
-                />
-                <span className="font-mono-ui w-7 text-[var(--text-primary)]">
-                  {Math.round(selectedLayer.opacity * 100)}%
-                </span>
-              </div>
+              <SizeOpt
+                label="Opacity"
+                value={selectedLayer.opacity}
+                min={0}
+                max={1}
+                step={0.05}
+                onCommit={(opacity) => updateLayer(selectedLayer.id, { opacity })}
+              />
+
+              {selectedLayer.type === 'shape' && (
+                <>
+                  <OptSep />
+                  <ColorOpt
+                    label="Fill"
+                    value={selectedLayer.fill}
+                    onChange={(fill) => updateLayer(selectedLayer.id, { fill })}
+                    allowNone
+                    isNone={selectedLayer.fill === 'transparent'}
+                    onNone={() => updateLayer(selectedLayer.id, { fill: 'transparent' })}
+                  />
+                  <ColorOpt
+                    label="Stroke"
+                    value={selectedLayer.stroke}
+                    onChange={(stroke) => updateLayer(selectedLayer.id, { stroke })}
+                    allowNone
+                    isNone={selectedLayer.stroke === 'transparent' || selectedLayer.strokeWidth === 0}
+                    onNone={() => updateLayer(selectedLayer.id, { strokeWidth: 0 })}
+                  />
+                  <SizeOpt
+                    label="Weight"
+                    value={selectedLayer.strokeWidth}
+                    min={0}
+                    max={40}
+                    unit="px"
+                    onCommit={(strokeWidth) => updateLayer(selectedLayer.id, { strokeWidth })}
+                  />
+                  {(selectedLayer.shapeType === 'rectangle' ||
+                    selectedLayer.shapeType === 'callout') && (
+                    <SizeOpt
+                      label="Radius"
+                      value={selectedLayer.cornerRadius ?? 0}
+                      min={0}
+                      max={80}
+                      onCommit={(cornerRadius) => updateLayer(selectedLayer.id, { cornerRadius })}
+                    />
+                  )}
+                </>
+              )}
+
+              {selectedLayer.type === 'path' && (
+                <>
+                  <OptSep />
+                  <ColorOpt
+                    label="Stroke"
+                    value={selectedLayer.stroke}
+                    onChange={(stroke) => updateLayer(selectedLayer.id, { stroke })}
+                  />
+                  <SizeOpt
+                    label="Weight"
+                    value={selectedLayer.strokeWidth}
+                    min={1}
+                    max={40}
+                    unit="px"
+                    onCommit={(strokeWidth) => updateLayer(selectedLayer.id, { strokeWidth })}
+                  />
+                  <ColorOpt
+                    label="Fill"
+                    value={selectedLayer.fill === 'transparent' ? '#000000' : selectedLayer.fill}
+                    onChange={(fill) => updateLayer(selectedLayer.id, { fill })}
+                    allowNone
+                    isNone={selectedLayer.fill === 'transparent'}
+                    onNone={() => updateLayer(selectedLayer.id, { fill: 'transparent' })}
+                  />
+                </>
+              )}
+
+              {selectedLayer.type === 'text' && (
+                <>
+                  <OptSep />
+                  <ColorOpt
+                    label="Fill"
+                    value={selectedLayer.fill}
+                    onChange={(fill) => updateLayer(selectedLayer.id, { fill })}
+                  />
+                  <ColorOpt
+                    label="Stroke"
+                    value={selectedLayer.stroke || '#000000'}
+                    onChange={(stroke) => updateLayer(selectedLayer.id, { stroke })}
+                    allowNone
+                    isNone={!selectedLayer.strokeWidth}
+                    onNone={() => updateLayer(selectedLayer.id, { strokeWidth: 0 })}
+                  />
+                  <SizeOpt
+                    label="Weight"
+                    value={selectedLayer.strokeWidth ?? 0}
+                    min={0}
+                    max={12}
+                    unit="px"
+                    onCommit={(strokeWidth) => updateLayer(selectedLayer.id, { strokeWidth })}
+                  />
+                  <SizeOpt
+                    label="Size"
+                    value={selectedLayer.fontSize}
+                    min={8}
+                    max={200}
+                    unit="px"
+                    onCommit={(fontSize) => updateLayer(selectedLayer.id, { fontSize })}
+                  />
+                </>
+              )}
             </>
           ) : (
-            <span className="text-[var(--text-faint)] italic">No layer selected — click a layer or press V</span>
-          )}
-          {selectedLayer && (
-            <span className="text-[var(--text-faint)] ml-1">
-              · <kbd className="text-[var(--accent-hot)]">Shift</kbd> scale · arrows nudge ·{' '}
-              <kbd className="text-[var(--accent-hot)]">⌘/</kbd> shortcuts
-            </span>
+            <OptHint>No layer selected — click a layer or press V</OptHint>
           )}
         </div>
       )}
 
+      {/* ── Marquee ── */}
       {activeTool === 'marquee' && (
         <div className="flex items-center gap-3">
           <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
-            <button
-              onClick={() => setMarqueeMode('rect')}
-              className={`px-2 py-0.5 rounded text-[10px] cursor-pointer ${
-                marqueeMode === 'rect'
-                  ? 'bg-[var(--accent)] text-[#1a1208] font-semibold'
-                  : 'text-[var(--text-muted)]'
-              }`}
-            >
+            <OptChip active={marqueeMode === 'rect'} onClick={() => setMarqueeMode('rect')}>
               Rect
-            </button>
-            <button
-              onClick={() => setMarqueeMode('ellipse')}
-              className={`px-2 py-0.5 rounded text-[10px] cursor-pointer ${
-                marqueeMode === 'ellipse'
-                  ? 'bg-[var(--accent)] text-[#1a1208] font-semibold'
-                  : 'text-[var(--text-muted)]'
-              }`}
-            >
+            </OptChip>
+            <OptChip active={marqueeMode === 'ellipse'} onClick={() => setMarqueeMode('ellipse')}>
               Ellipse
-            </button>
+            </OptChip>
           </div>
-          <span className="text-[var(--text-faint)]">
+          <OptHint>
             Drag to select · <kbd className="text-[var(--accent-hot)]">Del</kbd> clears ·{' '}
             <kbd className="text-[var(--accent-hot)]">Esc</kbd> deselects
-          </span>
+          </OptHint>
           {marqueeSelection && (
-            <button
-              onClick={() => setMarqueeSelection(null)}
-              className="px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer text-[10px]"
-            >
-              Deselect
-            </button>
+            <OptChip onClick={() => setMarqueeSelection(null)}>Deselect</OptChip>
           )}
         </div>
       )}
 
       {activeTool === 'lasso' && (
-        <span className="text-[var(--text-faint)]">
-          Drag freehand path · release to close · <kbd className="text-[var(--accent-hot)]">Del</kbd>{' '}
-          clears inside path
-        </span>
+        <div className="flex items-center gap-3">
+          <OptHint>
+            Drag freehand · release to close · <kbd className="text-[var(--accent-hot)]">Del</kbd>{' '}
+            clears
+          </OptHint>
+          {marqueeSelection && (
+            <OptChip onClick={() => setMarqueeSelection(null)}>Deselect</OptChip>
+          )}
+        </div>
+      )}
+
+      {activeTool === 'polyLasso' && (
+        <div className="flex items-center gap-3">
+          <OptHint>
+            Click to add points · double-click or{' '}
+            <kbd className="text-[var(--accent-hot)]">Enter</kbd> to close ·{' '}
+            <kbd className="text-[var(--accent-hot)]">Esc</kbd> cancels
+          </OptHint>
+          {marqueeSelection && (
+            <OptChip onClick={() => setMarqueeSelection(null)}>Deselect</OptChip>
+          )}
+        </div>
+      )}
+
+      {activeTool === 'magneticLasso' && (
+        <div className="flex items-center gap-3">
+          <OptHint>Trace along an edge — the path snaps to contrast · click to close</OptHint>
+          {marqueeSelection && (
+            <OptChip onClick={() => setMarqueeSelection(null)}>Deselect</OptChip>
+          )}
+        </div>
+      )}
+
+      {activeTool === 'quickSelect' && (
+        <div className="flex items-center gap-3">
+          <SizeOpt
+            label="Tolerance"
+            value={wandTolerance}
+            min={0}
+            max={96}
+            onCommit={setWandTolerance}
+          />
+          <OptHint>Paint over the subject — selection grows to similar edges</OptHint>
+          {marqueeSelection && (
+            <OptChip onClick={() => setMarqueeSelection(null)}>Deselect</OptChip>
+          )}
+        </div>
       )}
 
       {activeTool === 'wand' && (
         <div className="flex items-center gap-3">
-          <span className="text-[var(--text-faint)]">Click similar color region</span>
-          <label className="flex items-center gap-1.5">
-            <span>Tolerance</span>
-            <input
-              type="range"
-              min={0}
-              max={96}
-              value={wandTolerance}
-              onChange={(e) => setWandTolerance(Number(e.target.value))}
-              className="w-24 cursor-pointer"
-            />
-            <span className="font-mono-ui text-[var(--text-primary)] w-6">{wandTolerance}</span>
-          </label>
+          <SizeOpt
+            label="Tolerance"
+            value={wandTolerance}
+            min={0}
+            max={96}
+            onCommit={setWandTolerance}
+          />
+          <ColorOpt
+            label="Sample"
+            value={brushSettings.color}
+            onChange={(color) => updateBrushSettings({ color })}
+          />
+          <OptHint>Click similar color region on an image layer</OptHint>
         </div>
       )}
 
-      {(activeTool === 'brush' || activeTool === 'eraser') && (
+      {/* ── Brush / Eraser / healing family ── */}
+      {(activeTool === 'brush' ||
+        activeTool === 'eraser' ||
+        activeTool === 'clone' ||
+        activeTool === 'spotHealing') && (
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5">
-            <span>Size</span>
-            <DebouncedRange
-              min={2}
-              max={150}
-              value={brushSettings.size}
-              onCommit={(size) => updateBrushSettings({ size })}
-              className="w-24 cursor-pointer"
-            />
-            <span className="font-mono-ui w-8 text-[var(--text-primary)]">{brushSettings.size}</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span>Hardness</span>
-            <DebouncedRange
-              min={0}
-              max={1}
-              step={0.05}
-              value={brushSettings.hardness}
-              onCommit={(hardness) => updateBrushSettings({ hardness })}
-              className="w-20 cursor-pointer"
-            />
-            <span className="font-mono-ui w-8 text-[var(--text-primary)]">
-              {Math.round(brushSettings.hardness * 100)}%
-            </span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span>Opacity</span>
-            <DebouncedRange
-              min={0.05}
-              max={1}
-              step={0.05}
-              value={brushSettings.opacity}
-              onCommit={(opacity) => updateBrushSettings({ opacity })}
-              className="w-20 cursor-pointer"
-            />
-            <span className="font-mono-ui w-8 text-[var(--text-primary)]">
-              {Math.round(brushSettings.opacity * 100)}%
-            </span>
-          </label>
-          {activeTool === 'brush' && (
-            <>
-              <ColorField
-                label="Color"
-                value={brushSettings.color}
-                onChange={(hex) => updateBrushSettings({ color: hex })}
+          <SizeOpt
+            label="Size"
+            value={brushSettings.size}
+            min={2}
+            max={150}
+            unit="px"
+            onCommit={(size) => updateBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <SizeOpt
+            label="Hardness"
+            value={brushSettings.hardness}
+            min={0}
+            max={1}
+            step={0.05}
+            onCommit={(hardness) => updateBrushSettings({ hardness })}
+          />
+          <SizeOpt
+            label="Opacity"
+            value={brushSettings.opacity}
+            min={0.05}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => updateBrushSettings({ opacity })}
+          />
+          {(activeTool === 'brush' || activeTool === 'eraser') &&
+            brushSettings.flow !== undefined && (
+              <SizeOpt
+                label="Flow"
+                value={brushSettings.flow}
+                min={0.05}
+                max={1}
+                step={0.05}
+                onCommit={(flow) => updateBrushSettings({ flow })}
               />
-              <span className="text-[var(--text-faint)]">
-                <kbd>[</kbd>/<kbd>]</kbd> size · <kbd>Shift+[</kbd>/<kbd>]</kbd> hardness ·{' '}
-                <kbd>X</kbd> swap
-              </span>
-            </>
+            )}
+          {activeTool === 'brush' && (
+            <ColorOpt
+              label="Color"
+              value={brushSettings.color}
+              onChange={(color) => updateBrushSettings({ color })}
+            />
           )}
-          {activeTool === 'eraser' && (
-            <span className="text-[var(--text-faint)]">
-              Image layer → erase pixels · drawing layer → erase strokes
-            </span>
+          {activeTool === 'brush' && (
+            <OptHint>
+              <kbd>[</kbd>/<kbd>]</kbd> size · <kbd>X</kbd> swap
+            </OptHint>
           )}
+          {activeTool === 'eraser' && <OptHint>Erase strokes / pixels on active layer</OptHint>}
+          {activeTool === 'clone' && <OptHint>Alt+click source · drag to paint</OptHint>}
+          {activeTool === 'spotHealing' && <OptHint>Drag over blemishes on image layer</OptHint>}
         </div>
       )}
 
       {activeTool === 'fill' && (
         <div className="flex items-center gap-3">
-          <ColorField
+          <ColorOpt
             label="Fill"
             value={brushSettings.color}
-            onChange={(hex) => updateBrushSettings({ color: hex })}
+            onChange={(color) => updateBrushSettings({ color })}
           />
-          <span className="text-[var(--text-faint)]">
-            Click image region to flood-fill · select an image layer first
-          </span>
+          <SizeOpt
+            label="Tolerance"
+            value={wandTolerance}
+            min={0}
+            max={96}
+            onCommit={setWandTolerance}
+          />
+          <SizeOpt
+            label="Opacity"
+            value={brushSettings.opacity}
+            min={0.05}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => updateBrushSettings({ opacity })}
+          />
+          <OptHint>Click image region to flood-fill</OptHint>
         </div>
       )}
 
       {activeTool === 'blur' && (
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5">
-            <span>Radius</span>
-            <input
-              type="range"
-              min="6"
-              max="80"
-              value={brushSettings.size}
-              onChange={(e) => updateBrushSettings({ size: Number(e.target.value) })}
-              className="w-24 cursor-pointer"
-            />
-            <span className="font-mono-ui text-[var(--text-primary)]">{brushSettings.size}px</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span>Strength</span>
-            <input
-              type="range"
-              min="0.2"
-              max="1"
-              step="0.05"
-              value={brushSettings.opacity}
-              onChange={(e) => updateBrushSettings({ opacity: Number(e.target.value) })}
-              className="w-20 cursor-pointer"
-            />
-          </label>
-          <span className="text-[var(--text-faint)]">Click / drag to soften areas</span>
+          <SizeOpt
+            label="Radius"
+            value={brushSettings.size}
+            min={6}
+            max={80}
+            unit="px"
+            onCommit={(size) => updateBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <SizeOpt
+            label="Strength"
+            value={brushSettings.opacity}
+            min={0.2}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => updateBrushSettings({ opacity })}
+          />
+          <SizeOpt
+            label="Hardness"
+            value={brushSettings.hardness}
+            min={0}
+            max={1}
+            step={0.05}
+            onCommit={(hardness) => updateBrushSettings({ hardness })}
+          />
+          <OptHint>Click / drag to soften areas</OptHint>
+        </div>
+      )}
+
+      {/* ── Gradient ── */}
+      {activeTool === 'gradient' && (
+        <div className="flex items-center gap-3">
+          <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5 gap-0.5">
+            <OptChip
+              active={gradientSettings.gradientType === 'linear'}
+              onClick={() => updateGradientSettings({ gradientType: 'linear' })}
+            >
+              Linear
+            </OptChip>
+            <OptChip
+              active={gradientSettings.gradientType === 'radial'}
+              onClick={() => updateGradientSettings({ gradientType: 'radial' })}
+            >
+              Radial
+            </OptChip>
+          </div>
+          <OptSep />
+          <ColorOpt label="From" value={stopStart} onChange={(c) => setEndStop('start', c)} />
+          <div
+            title="Gradient preview"
+            className="h-4 w-24 shrink-0 rounded-[var(--radius-sm)] border border-[var(--border-strong)] shadow-inner"
+            style={{ background: gradientCss }}
+          />
+          <ColorOpt label="To" value={stopEnd} onChange={(c) => setEndStop('end', c)} />
+          <button
+            type="button"
+            title="Reverse stops"
+            onClick={() =>
+              updateGradientSettings({
+                colorStops: stops.map((st) => ({ ...st, offset: 1 - st.offset })).reverse(),
+              })
+            }
+            className="p-1 rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)]"
+          >
+            <ArrowLeftRight size={12} />
+          </button>
+          <SizeOpt
+            label="Opacity"
+            value={gradientSettings.opacity}
+            min={0.05}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => updateGradientSettings({ opacity })}
+          />
+          <OptHint>Drag on canvas to set direction</OptHint>
+        </div>
+      )}
+
+      {/* ── Dodge / Burn / Sharpen ── */}
+      {(activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sharpenTool') && (
+        <div className="flex items-center gap-3">
+          <SizeOpt
+            label="Size"
+            value={toneBrushSettings.size}
+            min={4}
+            max={200}
+            unit="px"
+            onCommit={(size) => updateToneBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <SizeOpt
+            label="Hardness"
+            value={toneBrushSettings.hardness}
+            min={0}
+            max={1}
+            step={0.05}
+            onCommit={(hardness) => updateToneBrushSettings({ hardness })}
+          />
+          <SizeOpt
+            label="Exposure"
+            value={toneBrushSettings.exposure}
+            min={1}
+            max={100}
+            unit="%"
+            onCommit={(exposure) => updateToneBrushSettings({ exposure })}
+          />
+          {activeTool !== 'sharpenTool' && (
+            <>
+              <OptSep />
+              <OptLabel>Range</OptLabel>
+              <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5 gap-0.5">
+                {(['shadows', 'midtones', 'highlights'] as const).map((range) => (
+                  <OptChip
+                    key={range}
+                    active={toneBrushSettings.range === range}
+                    onClick={() => updateToneBrushSettings({ range })}
+                  >
+                    {range}
+                  </OptChip>
+                ))}
+              </div>
+            </>
+          )}
+          <OptHint>
+            {activeTool === 'dodge'
+              ? 'Paint to lighten'
+              : activeTool === 'burn'
+                ? 'Paint to darken'
+                : 'Paint to add local detail'}
+          </OptHint>
+        </div>
+      )}
+
+      {/* ── Healing / Patch ── */}
+      {(activeTool === 'healing' || activeTool === 'patch') && (
+        <div className="flex items-center gap-3">
+          <SizeOpt
+            label="Size"
+            value={brushSettings.size}
+            min={2}
+            max={150}
+            unit="px"
+            onCommit={(size) => updateBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <SizeOpt
+            label="Hardness"
+            value={brushSettings.hardness}
+            min={0}
+            max={1}
+            step={0.05}
+            onCommit={(hardness) => updateBrushSettings({ hardness })}
+          />
+          <OptHint>
+            {activeTool === 'healing'
+              ? 'Alt+click source · drag to heal'
+              : 'Draw an area · drag it onto clean texture'}
+          </OptHint>
+        </div>
+      )}
+
+      {/* ── Liquify ── */}
+      {activeTool === 'liquify' && (
+        <div className="flex items-center gap-3">
+          <SizeOpt
+            label="Size"
+            value={brushSettings.size}
+            min={10}
+            max={200}
+            unit="px"
+            onCommit={(size) => updateBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <OptHint>Drag to push pixels on the active image layer</OptHint>
+        </div>
+      )}
+
+      {/* ── Transform ── */}
+      {activeTool === 'transform' && (
+        <div className="flex items-center gap-2">
+          <OptLabel>Mode</OptLabel>
+          <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5 gap-0.5">
+            {(['free', 'skew', 'distort', 'perspective', 'warp'] as TransformMode[]).map(
+              (mode) => (
+                <OptChip
+                  key={mode}
+                  active={transformMode === mode}
+                  onClick={() => setTransformMode(mode)}
+                >
+                  {mode}
+                </OptChip>
+              )
+            )}
+          </div>
+          {!selectedLayer && <OptHint>Select a layer to transform</OptHint>}
         </div>
       )}
 
@@ -337,52 +694,56 @@ export const OptionsBar: React.FC = () => {
           <span className="flex items-center gap-1 text-[var(--accent-hot)] font-semibold">
             <Sparkles size={12} /> Edge
           </span>
-          <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
-            <button
+          <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5 gap-0.5">
+            <OptChip
+              active={brushSettings.refineMode === 'erase'}
               onClick={() => updateBrushSettings({ refineMode: 'erase' })}
-              className={`px-2 py-0.5 rounded text-[10px] cursor-pointer ${
-                brushSettings.refineMode === 'erase'
-                  ? 'bg-[var(--danger)] text-white'
-                  : 'text-[var(--text-muted)]'
-              }`}
             >
               Erase
-            </button>
-            <button
+            </OptChip>
+            <OptChip
+              active={brushSettings.refineMode === 'restore'}
               onClick={() => updateBrushSettings({ refineMode: 'restore' })}
-              className={`px-2 py-0.5 rounded text-[10px] cursor-pointer ${
-                brushSettings.refineMode === 'restore'
-                  ? 'bg-[var(--success)] text-[#0b0c0f]'
-                  : 'text-[var(--text-muted)]'
-              }`}
             >
               Restore
-            </button>
+            </OptChip>
           </div>
-          <label className="flex items-center gap-1.5">
-            <span>Radius</span>
-            <input
-              type="range"
-              min="4"
-              max="80"
-              value={brushSettings.size}
-              onChange={(e) => updateBrushSettings({ size: Number(e.target.value) })}
-              className="w-24 cursor-pointer"
-            />
-            <span className="font-mono-ui text-[var(--text-primary)]">{brushSettings.size}px</span>
-          </label>
-          <span className="text-[var(--text-faint)]">
-            Select image · mask is created automatically if missing
-          </span>
+          <SizeOpt
+            label="Radius"
+            value={brushSettings.size}
+            min={4}
+            max={80}
+            unit="px"
+            onCommit={(size) => updateBrushSettings({ size })}
+            widthClass="w-24"
+          />
+          <SizeOpt
+            label="Hardness"
+            value={brushSettings.hardness}
+            min={0}
+            max={1}
+            step={0.05}
+            onCommit={(hardness) => updateBrushSettings({ hardness })}
+          />
+          <SizeOpt
+            label="Opacity"
+            value={brushSettings.opacity}
+            min={0.05}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => updateBrushSettings({ opacity })}
+          />
         </div>
       )}
 
+      {/* ── Crop ── */}
       {activeTool === 'crop' && (
         <div className="flex items-center gap-2">
-          <span className="text-[var(--text-faint)]">Ratio</span>
+          <OptLabel>Ratio</OptLabel>
           {(['free', '1:1', '16:9', '4:3', '3:2', '9:16'] as const).map((ratio) => (
-            <button
+            <OptChip
               key={ratio}
+              active={cropSettings.aspect === ratio}
               onClick={() => {
                 let w = cropSettings.width;
                 let h = cropSettings.height;
@@ -396,17 +757,12 @@ export const OptionsBar: React.FC = () => {
                 else if (ratio === '9:16') w = Math.round((h * 9) / 16);
                 setCropSettings({ aspect: ratio, width: w, height: h });
               }}
-              className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] font-medium cursor-pointer border ${
-                cropSettings.aspect === ratio
-                  ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
-                  : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-              }`}
             >
               {ratio === 'free' ? 'Free' : ratio}
-            </button>
+            </OptChip>
           ))}
-          <div className="h-3.5 w-px bg-[var(--border-subtle)] mx-1" />
-          <span className="text-[var(--text-faint)]">Rotate</span>
+          <OptSep />
+          <OptLabel>Rotate</OptLabel>
           <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
             <button
               type="button"
@@ -437,36 +793,7 @@ export const OptionsBar: React.FC = () => {
               <RotateCw size={13} />
             </button>
           </div>
-          <label className="flex items-center gap-1.5">
-            <span className="text-[var(--text-faint)]">Straighten</span>
-            <input
-              type="range"
-              min={-45}
-              max={45}
-              step={1}
-              value={(() => {
-                if (!selectedLayer) return 0;
-                const base90 = Math.round(selectedLayer.rotation / 90) * 90;
-                return Math.max(-45, Math.min(45, selectedLayer.rotation - base90));
-              })()}
-              disabled={!selectedLayer}
-              onChange={(e) => {
-                if (!selectedLayer) return;
-                const base90 = Math.round(selectedLayer.rotation / 90) * 90;
-                const next = base90 + Number(e.target.value);
-                updateLayer(selectedLayer.id, { rotation: next });
-                setCropSettings({ rotation: next });
-              }}
-              className="w-24 cursor-pointer disabled:opacity-40"
-            />
-            <span className="font-mono-ui w-8 text-[var(--text-primary)]">
-              {selectedLayer
-                ? Math.round(selectedLayer.rotation - Math.round(selectedLayer.rotation / 90) * 90)
-                : 0}
-              °
-            </span>
-          </label>
-          <div className="h-3.5 w-px bg-[var(--border-subtle)] mx-1" />
+          <OptSep />
           <button
             onClick={() => void applyCrop()}
             className="flex items-center gap-1 px-2 py-0.5 bg-[var(--success)] text-[#0b0c0f] rounded-[var(--radius-sm)] font-semibold cursor-pointer"
@@ -482,42 +809,64 @@ export const OptionsBar: React.FC = () => {
         </div>
       )}
 
-      {(activeTool === 'text' || selectedLayer?.type === 'text') && (
+      {/* ── Text ── */}
+      {(activeTool === 'text' || (activeTool === 'select' && selectedLayer?.type === 'text')) &&
+        activeTool !== 'select' && (
         <div className="flex items-center gap-2.5">
-          {activeTool === 'text' && selectedLayer?.type !== 'text' && (
-            <span className="text-[var(--text-faint)] italic">Click canvas to place text</span>
+          {selectedLayer?.type !== 'text' && (
+            <OptHint>Set style below · click canvas to place</OptHint>
           )}
           <FontPicker
-            value={selectedLayer?.type === 'text' ? selectedLayer.fontFamily : 'Source Sans 3'}
+            value={
+              selectedLayer?.type === 'text'
+                ? selectedLayer.fontFamily
+                : textSettings.fontFamily
+            }
             onChange={async (family) => {
               await loadGoogleFont(family);
+              updateTextSettings({ fontFamily: family });
               if (selectedLayer?.type === 'text') {
                 updateLayer(selectedLayer.id, { fontFamily: family });
               }
             }}
           />
-          <input
-            type="number"
+          <SizeOpt
+            label="Size"
+            value={
+              selectedLayer?.type === 'text' ? selectedLayer.fontSize : textSettings.fontSize
+            }
             min={8}
             max={200}
-            value={selectedLayer?.type === 'text' ? selectedLayer.fontSize : 36}
-            onChange={(e) => {
+            unit="px"
+            onCommit={(fontSize) => {
+              updateTextSettings({ fontSize });
               if (selectedLayer?.type === 'text') {
-                updateLayer(selectedLayer.id, { fontSize: Number(e.target.value) });
+                updateLayer(selectedLayer.id, { fontSize });
               }
             }}
-            className="w-12 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-1 py-0.5 font-mono-ui text-[var(--text-primary)] outline-none"
           />
           <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
             <button
               onClick={() => {
+                const current =
+                  selectedLayer?.type === 'text'
+                    ? selectedLayer.fontStyle
+                    : textSettings.fontStyle;
+                const next = current.includes('bold')
+                  ? (current.replace('bold', '').trim() || 'normal')
+                  : current.includes('italic')
+                    ? 'bold italic'
+                    : 'bold';
+                updateTextSettings({ fontStyle: next as typeof textSettings.fontStyle });
                 if (selectedLayer?.type === 'text') {
-                  const isBold = selectedLayer.fontStyle.includes('bold');
-                  updateLayer(selectedLayer.id, { fontStyle: isBold ? 'normal' : 'bold' });
+                  updateLayer(selectedLayer.id, { fontStyle: next as typeof textSettings.fontStyle });
                 }
               }}
               className={`p-1 rounded cursor-pointer ${
-                selectedLayer?.type === 'text' && selectedLayer.fontStyle.includes('bold')
+                (selectedLayer?.type === 'text'
+                  ? selectedLayer.fontStyle
+                  : textSettings.fontStyle
+                ).includes('bold')
                   ? 'bg-[var(--accent)] text-[#1a1208]'
                   : 'text-[var(--text-muted)]'
               }`}
@@ -526,13 +875,25 @@ export const OptionsBar: React.FC = () => {
             </button>
             <button
               onClick={() => {
+                const current =
+                  selectedLayer?.type === 'text'
+                    ? selectedLayer.fontStyle
+                    : textSettings.fontStyle;
+                const next = current.includes('italic')
+                  ? (current.replace('italic', '').trim() || 'normal')
+                  : current.includes('bold')
+                    ? 'bold italic'
+                    : 'italic';
+                updateTextSettings({ fontStyle: next as typeof textSettings.fontStyle });
                 if (selectedLayer?.type === 'text') {
-                  const isItalic = selectedLayer.fontStyle.includes('italic');
-                  updateLayer(selectedLayer.id, { fontStyle: isItalic ? 'normal' : 'italic' });
+                  updateLayer(selectedLayer.id, { fontStyle: next as typeof textSettings.fontStyle });
                 }
               }}
               className={`p-1 rounded cursor-pointer ${
-                selectedLayer?.type === 'text' && selectedLayer.fontStyle.includes('italic')
+                (selectedLayer?.type === 'text'
+                  ? selectedLayer.fontStyle
+                  : textSettings.fontStyle
+                ).includes('italic')
                   ? 'bg-[var(--accent)] text-[#1a1208]'
                   : 'text-[var(--text-muted)]'
               }`}
@@ -545,295 +906,333 @@ export const OptionsBar: React.FC = () => {
               <button
                 key={align}
                 onClick={() => {
-                  if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { align });
+                  updateTextSettings({ align });
+                  if (selectedLayer?.type === 'text') {
+                    updateLayer(selectedLayer.id, { align });
+                  }
                 }}
                 className={`p-1 rounded cursor-pointer ${
-                  selectedLayer?.type === 'text' && selectedLayer.align === align
+                  (selectedLayer?.type === 'text' ? selectedLayer.align : textSettings.align) ===
+                  align
                     ? 'bg-[var(--accent)] text-[#1a1208]'
                     : 'text-[var(--text-muted)]'
                 }`}
               >
-                {align === 'left' ? <AlignLeft size={12} /> : align === 'center' ? <AlignCenter size={12} /> : <AlignRight size={12} />}
+                {align === 'left' ? (
+                  <AlignLeft size={12} />
+                ) : align === 'center' ? (
+                  <AlignCenter size={12} />
+                ) : (
+                  <AlignRight size={12} />
+                )}
               </button>
             ))}
           </div>
-          <ColorField
-            size="sm"
-            showPresets={false}
-            value={selectedLayer?.type === 'text' ? selectedLayer.fill : '#ffffff'}
-            onChange={(hex) => {
-              if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { fill: hex });
+          <ColorOpt
+            label="Fill"
+            value={selectedLayer?.type === 'text' ? selectedLayer.fill : textSettings.fill}
+            onChange={(fill) => {
+              updateTextSettings({ fill });
+              if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { fill });
             }}
           />
-          {selectedLayer?.type === 'text' && (
-            <>
-              <label className="flex items-center gap-1">
-                <span className="text-[var(--text-faint)]">Track</span>
-                <input
-                  type="number"
-                  min={-20}
-                  max={40}
-                  value={selectedLayer.letterSpacing}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, { letterSpacing: Number(e.target.value) })
-                  }
-                  className="w-12 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded px-1 py-0.5 font-mono-ui text-[var(--text-primary)]"
-                />
-              </label>
-              <button
-                onClick={() =>
-                  updateLayer(selectedLayer.id, {
-                    textDecoration:
-                      selectedLayer.textDecoration === 'underline' ? 'none' : 'underline',
-                  })
-                }
-                className={`px-2 py-0.5 rounded text-[10px] border cursor-pointer ${
-                  selectedLayer.textDecoration === 'underline'
-                    ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
-                    : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                }`}
-              >
-                U
-              </button>
-            </>
-          )}
+          <ColorOpt
+            label="Stroke"
+            value={
+              selectedLayer?.type === 'text'
+                ? selectedLayer.stroke || textSettings.stroke
+                : textSettings.stroke
+            }
+            onChange={(stroke) => {
+              updateTextSettings({ stroke });
+              if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { stroke });
+            }}
+            allowNone
+            isNone={
+              (selectedLayer?.type === 'text'
+                ? selectedLayer.strokeWidth ?? 0
+                : textSettings.strokeWidth) === 0
+            }
+            onNone={() => {
+              updateTextSettings({ strokeWidth: 0, stroke: 'transparent' });
+              if (selectedLayer?.type === 'text') {
+                updateLayer(selectedLayer.id, { strokeWidth: 0, stroke: 'transparent' });
+              }
+            }}
+          />
+          <SizeOpt
+            label="Weight"
+            value={
+              selectedLayer?.type === 'text'
+                ? selectedLayer.strokeWidth ?? 0
+                : textSettings.strokeWidth
+            }
+            min={0}
+            max={12}
+            unit="px"
+            onCommit={(strokeWidth) => {
+              updateTextSettings({ strokeWidth });
+              if (selectedLayer?.type === 'text') {
+                updateLayer(selectedLayer.id, { strokeWidth });
+              }
+            }}
+          />
+          <SizeOpt
+            label="Track"
+            value={
+              selectedLayer?.type === 'text'
+                ? selectedLayer.letterSpacing
+                : textSettings.letterSpacing
+            }
+            min={-20}
+            max={40}
+            onCommit={(letterSpacing) => {
+              updateTextSettings({ letterSpacing });
+              if (selectedLayer?.type === 'text') {
+                updateLayer(selectedLayer.id, { letterSpacing });
+              }
+            }}
+          />
         </div>
       )}
 
+      {/* ── Pen ── */}
       {activeTool === 'pen' && (
         <div className="flex items-center gap-3">
-          <span className="text-[var(--text-faint)]">Stroke</span>
-          <ColorField
-            size="sm"
-            showPresets={false}
-            value={penSettings.stroke}
-            onChange={(hex) => updatePenSettings({ stroke: hex })}
+          <ColorOpt
+            label="Stroke"
+            value={
+              selectedLayer?.type === 'path' ? selectedLayer.stroke : penSettings.stroke
+            }
+            onChange={(stroke) => {
+              updatePenSettings({ stroke });
+              if (selectedLayer?.type === 'path') updateLayer(selectedLayer.id, { stroke });
+            }}
           />
-          <label className="flex items-center gap-1.5">
-            <span className="text-[var(--text-faint)]">Weight</span>
-            <DebouncedRange
-              min={1}
-              max={24}
-              step={1}
-              value={penSettings.strokeWidth}
-              onCommit={(strokeWidth) => updatePenSettings({ strokeWidth })}
-              className="w-20 cursor-pointer"
-            />
-            <span className="font-mono-ui w-5 text-[var(--text-primary)]">{penSettings.strokeWidth}</span>
-          </label>
-          <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
-          <span className="text-[var(--text-faint)]">Fill</span>
-          <ColorField
-            size="sm"
-            showPresets={false}
-            value={penSettings.fill === 'transparent' ? '#00000000' : penSettings.fill}
-            onChange={(hex) => updatePenSettings({ fill: hex })}
+          <SizeOpt
+            label="Weight"
+            value={
+              selectedLayer?.type === 'path'
+                ? selectedLayer.strokeWidth
+                : penSettings.strokeWidth
+            }
+            min={1}
+            max={40}
+            unit="px"
+            onCommit={(strokeWidth) => {
+              updatePenSettings({ strokeWidth });
+              if (selectedLayer?.type === 'path') {
+                updateLayer(selectedLayer.id, { strokeWidth });
+              }
+            }}
           />
-          <button
-            type="button"
-            onClick={() => updatePenSettings({ fill: 'transparent' })}
-            className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] border cursor-pointer ${
-              penSettings.fill === 'transparent'
-                ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
-                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-            }`}
-          >
-            None
-          </button>
-          <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
-          <span className="text-[var(--text-faint)] italic">
-            Click · drag curves · first point closes · <kbd className="text-[var(--accent-hot)]">Enter</kbd> finish ·{' '}
-            <kbd className="text-[var(--accent-hot)]">Esc</kbd> cancel
-          </span>
+          <ColorOpt
+            label="Fill"
+            value={
+              (selectedLayer?.type === 'path' ? selectedLayer.fill : penSettings.fill) ===
+              'transparent'
+                ? '#000000'
+                : selectedLayer?.type === 'path'
+                  ? selectedLayer.fill
+                  : penSettings.fill
+            }
+            onChange={(fill) => {
+              updatePenSettings({ fill });
+              if (selectedLayer?.type === 'path') updateLayer(selectedLayer.id, { fill });
+            }}
+            allowNone
+            isNone={
+              (selectedLayer?.type === 'path' ? selectedLayer.fill : penSettings.fill) ===
+              'transparent'
+            }
+            onNone={() => {
+              updatePenSettings({ fill: 'transparent' });
+              if (selectedLayer?.type === 'path') {
+                updateLayer(selectedLayer.id, { fill: 'transparent' });
+              }
+            }}
+          />
+          <SizeOpt
+            label="Snap"
+            value={penSettings.closeThreshold}
+            min={4}
+            max={32}
+            unit="px"
+            onCommit={(closeThreshold) => updatePenSettings({ closeThreshold })}
+          />
+          <OptHint>
+            Click · drag curves · first closes · <kbd className="text-[var(--accent-hot)]">Enter</kbd>{' '}
+            · <kbd className="text-[var(--accent-hot)]">Esc</kbd>
+          </OptHint>
         </div>
       )}
 
+      {/* ── Shape ── */}
       {activeTool === 'shape' && (
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {(
-              [
-                'rectangle',
-                'ellipse',
-                'circle',
-                'line',
-                'arrow',
-                'star',
-                'polygon',
-                'arc',
-                'ring',
-                'wedge',
-                'callout',
-              ] as const
-            ).map((type) => (
-              <button
+          <div className="flex items-center gap-1 flex-wrap">
+            {SHAPE_TYPES.map((type) => (
+              <OptChip
                 key={type}
+                active={activeShapeType === type}
                 onClick={() => setActiveShapeType(type)}
-                className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] capitalize cursor-pointer border ${
-                  activeShapeType === type
-                    ? 'bg-[var(--accent)] text-[#1a1208] border-transparent font-semibold'
-                    : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                }`}
               >
                 {type}
-              </button>
+              </OptChip>
             ))}
           </div>
-          {selectedLayer?.type === 'shape' && (
-            <>
-              <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
-              <label className="flex items-center gap-1.5">
-                <span>Fill</span>
-                <input
-                  type="color"
-                  value={selectedLayer.fill}
-                  onChange={(e) => updateLayer(selectedLayer.id, { fill: e.target.value })}
-                  className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
-                />
-              </label>
-              <label className="flex items-center gap-1.5">
-                <span>Stroke</span>
-                <input
-                  type="color"
-                  value={selectedLayer.stroke}
-                  onChange={(e) => updateLayer(selectedLayer.id, { stroke: e.target.value })}
-                  className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
-                />
-              </label>
-              {(selectedLayer.shapeType === 'polygon' || selectedLayer.shapeType === 'star') && (
-                <label className="flex items-center gap-1.5">
-                  <span>{selectedLayer.shapeType === 'star' ? 'Points' : 'Sides'}</span>
-                  <input
-                    type="range"
-                    min={3}
-                    max={12}
-                    value={selectedLayer.sides || 5}
-                    onChange={(e) =>
-                      updateLayer(selectedLayer.id, { sides: Number(e.target.value) })
-                    }
-                    className="w-16 cursor-pointer"
-                  />
-                </label>
-              )}
-              {(selectedLayer.shapeType === 'arc' ||
-                selectedLayer.shapeType === 'wedge' ||
-                selectedLayer.shapeType === 'ring' ||
-                selectedLayer.shapeType === 'star') && (
-                <label className="flex items-center gap-1.5">
-                  <span>{selectedLayer.shapeType === 'wedge' || selectedLayer.shapeType === 'arc' ? 'Angle' : 'Inner'}</span>
-                  {selectedLayer.shapeType === 'wedge' || selectedLayer.shapeType === 'arc' ? (
-                    <input
-                      type="range"
-                      min={15}
-                      max={360}
-                      value={selectedLayer.angle || 60}
-                      onChange={(e) =>
-                        updateLayer(selectedLayer.id, { angle: Number(e.target.value) })
-                      }
-                      className="w-16 cursor-pointer"
-                    />
-                  ) : (
-                    <input
-                      type="range"
-                      min={0.15}
-                      max={0.9}
-                      step={0.05}
-                      value={selectedLayer.innerRadius ?? 0.45}
-                      onChange={(e) =>
-                        updateLayer(selectedLayer.id, { innerRadius: Number(e.target.value) })
-                      }
-                      className="w-16 cursor-pointer"
-                    />
-                  )}
-                </label>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {(activeTool === 'clone' || activeTool === 'spotHealing') && (
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5">
-            <span>Size</span>
-            <input
-              type="range"
-              min="4"
-              max="120"
-              value={brushSettings.size}
-              onChange={(e) => updateBrushSettings({ size: Number(e.target.value) })}
-              className="w-24 cursor-pointer"
+          <OptSep />
+          <ColorOpt
+            label="Fill"
+            value={
+              selectedLayer?.type === 'shape' ? selectedLayer.fill : shapeSettings.fill
+            }
+            onChange={(fill) => {
+              updateShapeSettings({ fill });
+              if (selectedLayer?.type === 'shape') updateLayer(selectedLayer.id, { fill });
+            }}
+            allowNone
+            isNone={
+              (selectedLayer?.type === 'shape' ? selectedLayer.fill : shapeSettings.fill) ===
+              'transparent'
+            }
+            onNone={() => {
+              updateShapeSettings({ fill: 'transparent' });
+              if (selectedLayer?.type === 'shape') {
+                updateLayer(selectedLayer.id, { fill: 'transparent' });
+              }
+            }}
+          />
+          <ColorOpt
+            label="Stroke"
+            value={
+              selectedLayer?.type === 'shape' ? selectedLayer.stroke : shapeSettings.stroke
+            }
+            onChange={(stroke) => {
+              updateShapeSettings({ stroke });
+              if (selectedLayer?.type === 'shape') updateLayer(selectedLayer.id, { stroke });
+            }}
+          />
+          <SizeOpt
+            label="Weight"
+            value={
+              selectedLayer?.type === 'shape'
+                ? selectedLayer.strokeWidth
+                : shapeSettings.strokeWidth
+            }
+            min={0}
+            max={40}
+            unit="px"
+            onCommit={(strokeWidth) => {
+              updateShapeSettings({ strokeWidth });
+              if (selectedLayer?.type === 'shape') {
+                updateLayer(selectedLayer.id, { strokeWidth });
+              }
+            }}
+          />
+          <SizeOpt
+            label="Opacity"
+            value={
+              selectedLayer?.type === 'shape' ? selectedLayer.opacity : shapeSettings.opacity
+            }
+            min={0.05}
+            max={1}
+            step={0.05}
+            onCommit={(opacity) => {
+              updateShapeSettings({ opacity });
+              if (selectedLayer?.type === 'shape') {
+                updateLayer(selectedLayer.id, { opacity });
+              }
+            }}
+          />
+          {(activeShapeType === 'rectangle' ||
+            activeShapeType === 'callout' ||
+            (selectedLayer?.type === 'shape' &&
+              (selectedLayer.shapeType === 'rectangle' ||
+                selectedLayer.shapeType === 'callout'))) && (
+            <SizeOpt
+              label="Radius"
+              value={
+                selectedLayer?.type === 'shape'
+                  ? selectedLayer.cornerRadius ?? 0
+                  : shapeSettings.cornerRadius
+              }
+              min={0}
+              max={80}
+              onCommit={(cornerRadius) => {
+                updateShapeSettings({ cornerRadius });
+                if (selectedLayer?.type === 'shape') {
+                  updateLayer(selectedLayer.id, { cornerRadius });
+                }
+              }}
             />
-            <span className="font-mono-ui text-[var(--text-primary)]">{brushSettings.size}px</span>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span>Hardness</span>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={brushSettings.hardness}
-              onChange={(e) => updateBrushSettings({ hardness: Number(e.target.value) })}
-              className="w-20 cursor-pointer"
-            />
-            <span className="font-mono-ui text-[var(--text-primary)]">
-              {Math.round(brushSettings.hardness * 100)}%
-            </span>
-          </label>
-          {activeTool === 'clone' && (
-            <span className="text-[var(--text-faint)]">Alt+click source · drag to paint</span>
           )}
-          {activeTool === 'spotHealing' && (
-            <span className="text-[var(--text-faint)]">
-              Select image layer · drag over blemishes
-            </span>
-          )}
+          {selectedLayer?.type === 'shape' &&
+            (selectedLayer.shapeType === 'polygon' || selectedLayer.shapeType === 'star') && (
+              <SizeOpt
+                label={selectedLayer.shapeType === 'star' ? 'Points' : 'Sides'}
+                value={selectedLayer.sides || 5}
+                min={3}
+                max={12}
+                onCommit={(sides) => updateLayer(selectedLayer.id, { sides })}
+              />
+            )}
+          {selectedLayer?.type === 'shape' &&
+            (selectedLayer.shapeType === 'arc' || selectedLayer.shapeType === 'wedge') && (
+              <SizeOpt
+                label="Angle"
+                value={selectedLayer.angle || 60}
+                min={15}
+                max={360}
+                unit="°"
+                onCommit={(angle) => updateLayer(selectedLayer.id, { angle })}
+              />
+            )}
+          {selectedLayer?.type === 'shape' &&
+            (selectedLayer.shapeType === 'ring' || selectedLayer.shapeType === 'star') && (
+              <SizeOpt
+                label="Inner"
+                value={selectedLayer.innerRadius ?? 0.45}
+                min={0.15}
+                max={0.9}
+                step={0.05}
+                onCommit={(innerRadius) => updateLayer(selectedLayer.id, { innerRadius })}
+              />
+            )}
         </div>
       )}
 
       {activeTool === 'hand' && (
-        <span className="text-[var(--text-faint)]">
-          Drag to pan · hold <kbd className="font-mono-ui text-[var(--accent-hot)]">Space</kbd> anytime ·
-          scroll to zoom
-        </span>
+        <OptHint>
+          Drag to pan · hold <kbd className="font-mono-ui text-[var(--accent-hot)]">Space</kbd> ·
+          scroll zoom
+        </OptHint>
       )}
 
       {activeTool === 'zoom' && (
         <div className="flex items-center gap-3">
-          <span className="text-[var(--text-faint)]">
-            Click zoom in · <kbd className="font-mono-ui text-[var(--accent-hot)]">Alt</kbd>+click zoom out
-          </span>
+          <OptHint>
+            Click zoom in · <kbd className="font-mono-ui text-[var(--accent-hot)]">Alt</kbd>+click
+            out
+          </OptHint>
           <span className="font-mono-ui text-[var(--text-primary)]">{Math.round(zoom * 100)}%</span>
-          <button
-            onClick={() => setZoom((z) => Math.min(8, z * 1.25))}
-            className="px-2 py-0.5 rounded-[var(--radius-sm)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] cursor-pointer"
-          >
-            +
-          </button>
-          <button
-            onClick={() => setZoom((z) => Math.max(0.1, z / 1.25))}
-            className="px-2 py-0.5 rounded-[var(--radius-sm)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] cursor-pointer"
-          >
-            −
-          </button>
-          <button
-            onClick={() => setZoom(1)}
-            className="px-2 py-0.5 rounded-[var(--radius-sm)] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] cursor-pointer text-[10px]"
-          >
-            100%
-          </button>
+          <OptChip onClick={() => setZoom((z) => Math.min(8, z * 1.25))}>+</OptChip>
+          <OptChip onClick={() => setZoom((z) => Math.max(0.1, z / 1.25))}>−</OptChip>
+          <OptChip onClick={() => setZoom(1)}>100%</OptChip>
         </div>
       )}
 
       {activeTool === 'eyedropper' && (
         <div className="flex items-center gap-2">
-          <span className="text-[var(--text-faint)]">Click canvas to sample</span>
-          <div
-            className="w-5 h-5 rounded border border-[var(--border-subtle)]"
-            style={{ backgroundColor: brushSettings.color }}
+          <OptHint>Click canvas to sample → brush / fill color</OptHint>
+          <ColorOpt
+            label="Active"
+            value={brushSettings.color}
+            onChange={(color) => updateBrushSettings({ color })}
           />
-          <span className="font-mono-ui text-[var(--text-primary)] uppercase">{brushSettings.color}</span>
+          <span className="font-mono-ui text-[var(--text-primary)] uppercase">
+            {brushSettings.color}
+          </span>
         </div>
       )}
     </div>

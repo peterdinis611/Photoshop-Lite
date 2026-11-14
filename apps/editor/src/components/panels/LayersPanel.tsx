@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Eye,
   EyeOff,
@@ -17,9 +17,14 @@ import {
   Scissors,
   Layers,
   VenetianMask,
+  Frame,
+  Replace,
+  SlidersHorizontal,
+  Blend,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { BlendMode, EditorLayer } from '../../types/editor';
+import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 
 const BLEND_MODES: { value: BlendMode; label: string }[] = [
   { value: 'source-over', label: 'Normal' },
@@ -41,6 +46,30 @@ const LayerThumb: React.FC<{ layer: EditorLayer }> = ({ layer }) => {
     return (
       <div className="w-8 h-8 rounded-[var(--radius-sm)] overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-app)] shrink-0">
         <img src={layer.src} alt="" className="w-full h-full object-cover" draggable={false} />
+      </div>
+    );
+  }
+  if (layer.type === 'gradient') {
+    const stops = [...layer.colorStops]
+      .sort((a, b) => a.offset - b.offset)
+      .map((stop) => `${stop.color} ${Math.round(stop.offset * 100)}%`)
+      .join(', ');
+    return (
+      <div
+        className="w-8 h-8 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] shrink-0"
+        style={{
+          background:
+            layer.gradientType === 'radial'
+              ? `radial-gradient(circle, ${stops})`
+              : `linear-gradient(90deg, ${stops})`,
+        }}
+      />
+    );
+  }
+  if (layer.type === 'adjustment') {
+    return (
+      <div className="w-8 h-8 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)] flex items-center justify-center shrink-0">
+        <SlidersHorizontal size={12} className="text-[var(--accent-hot)]" />
       </div>
     );
   }
@@ -91,7 +120,12 @@ export const LayersPanel: React.FC = () => {
     setClippingMask,
     removeClippingMask,
     toggleLayerMask,
+    artboards,
+    activeArtboardId,
+    replaceSmartObjectSource,
   } = useEditorStore();
+  const replaceInputRef = useRef<HTMLInputElement>(null);
+  const activeArtboard = artboards.find((a) => a.id === activeArtboardId) ?? null;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -126,6 +160,10 @@ export const LayersPanel: React.FC = () => {
         return <Paintbrush size={11} className="text-[var(--text-muted)]" />;
       case 'path':
         return <PenTool size={11} className="text-[var(--accent-hot)]" />;
+      case 'adjustment':
+        return <SlidersHorizontal size={11} className="text-[var(--accent-hot)]" />;
+      case 'gradient':
+        return <Blend size={11} className="text-[var(--ink-blue)]" />;
       default:
         return <ImageIcon size={11} />;
     }
@@ -142,6 +180,19 @@ export const LayersPanel: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[var(--bg-panel)] select-none text-xs animate-panel-in">
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="hidden"
+        onChange={async (e) => {
+          const files = e.target.files ? Array.from(e.target.files) : [];
+          e.target.value = '';
+          if (!files.length) return;
+          const [loaded] = await loadImageFiles(files.slice(0, 1));
+          if (loaded) replaceSmartObjectSource(loaded.src, loaded.width, loaded.height);
+        }}
+      />
       <div className="p-3 border-b border-[var(--border-subtle)] bg-[var(--bg-toolbar)] flex flex-col gap-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[var(--text-muted)] font-medium">Blend</span>
@@ -290,6 +341,15 @@ export const LayersPanel: React.FC = () => {
                     <span className="flex items-center gap-1 text-[9px] text-[var(--text-faint)] font-mono-ui uppercase tracking-wide">
                       {getLayerIcon(layer.type)}
                       {layer.type}
+                      {layer.type === 'adjustment' && ` · ${layer.kind}`}
+                      {layer.type === 'image' && layer.smartObject && (
+                        <span
+                          title="Smart Object"
+                          className="px-1 rounded-[2px] bg-[var(--accent)] text-[#1a1208] font-bold leading-[1.3] tracking-normal"
+                        >
+                          SO
+                        </span>
+                      )}
                       {layer.hasLayerMask && ' · mask'}
                       {isClippedLayer && ' · clip'}
                     </span>
@@ -319,6 +379,19 @@ export const LayersPanel: React.FC = () => {
                   >
                     <ChevronDown size={12} />
                   </button>
+                  {layer.type === 'image' && layer.smartObject && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectLayer(layer.id);
+                        replaceInputRef.current?.click();
+                      }}
+                      className="p-1 hover:text-[var(--accent-hot)] cursor-pointer"
+                      title="Replace Contents…"
+                    >
+                      <Replace size={12} />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -359,8 +432,20 @@ export const LayersPanel: React.FC = () => {
       </div>
 
       <div className="p-2 border-t border-[var(--border-subtle)] bg-[var(--bg-toolbar)] flex items-center justify-between">
-        <span className="text-[11px] text-[var(--text-faint)] font-mono-ui">
-          {layers.length} {layers.length === 1 ? 'layer' : 'layers'}
+        <span className="flex items-center gap-2 text-[11px] text-[var(--text-faint)] font-mono-ui min-w-0">
+          <span className="shrink-0">
+            {layers.length} {layers.length === 1 ? 'layer' : 'layers'}
+          </span>
+          {activeArtboard && (
+            <span
+              className="flex items-center gap-1 truncate text-[var(--accent-hot)]"
+              title={`Active artboard: ${activeArtboard.name}`}
+              data-testid="active-artboard"
+            >
+              <Frame size={10} className="shrink-0" />
+              <span className="truncate">{activeArtboard.name}</span>
+            </span>
+          )}
         </span>
         <div className="flex items-center gap-1.5">
           <button

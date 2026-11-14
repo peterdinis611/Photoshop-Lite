@@ -65,5 +65,7 @@ export const CacheKeys = {
   assetList: (workspaceId: string) => `ws:${workspaceId}:assets:list`,
   fontsCatalog: () => 'fonts:catalog',
   fontsQuery: (q: string) => `fonts:q:${q}`,
+  stockQuery: (provider: string, q: string, page: number) =>
+    `stock:${provider}:q:${q}:p:${page}`,
   workspacePrefix: (workspaceId: string) => `ws:${workspaceId}:`,
 };

@@ -40,11 +40,27 @@ import {
   RotateCcw,
   ClipboardPaste,
   Type,
+  Images,
+  Info,
+  Palette,
+  FileArchive,
+  Layers as LayersIcon,
+  SquareDashed,
+  Blend,
+  Ruler,
+  Trash,
+  Plus,
+  FileImage,
+  Waves,
+  PenTool,
+  Frame,
+  Replace,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
+import { importPsdFile } from '../../utils/psdImport';
 import type { ReviveMode } from '../../utils/photoRevive';
 import type { CleanupMode } from '../../utils/photoCleanup';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
@@ -102,7 +118,9 @@ const MenuPanel: React.FC<{
     onClose={onClose}
     origin={origin}
     widthClass={width}
-    className="top-full left-0 mt-1.5"
+    // Keep open while moving across the gap into the panel; click-outside closes.
+    closeOnLeave={false}
+    className="top-full left-0 mt-1 z-[100]"
   >
     {children}
   </AnimatedMenu>
@@ -111,6 +129,8 @@ const MenuPanel: React.FC<{
 export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const psdInputRef = useRef<HTMLInputElement>(null);
+  const smartObjectInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLElement>(null);
   const [activeMenu, setActiveMenu] = useState<MenuId>(null);
@@ -133,6 +153,10 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     setShortcutsModalOpen,
     setOnboardingOpen,
     setImageSizeModalOpen,
+    setStockModalOpen,
+    inspectSelectedExif,
+    compressSelectedImage,
+    colorizeSelectedImage,
     setActiveTool,
     showGrid,
     showRulers,
@@ -164,6 +188,23 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     addTextLayer,
     addShapeLayer,
     setLayerOpacity,
+    marqueeSelection,
+    setMarqueeSelection,
+    modifyMarqueeSelection,
+    bakeClassicFilterOnSelected,
+    addAdjustmentLayer,
+    convertSelectedToSmartObject,
+    replaceSmartObjectSource,
+    createBlankDocument,
+    pathToSelection,
+    strokePathAsDrawing,
+    addArtboard,
+    artboards,
+    guides,
+    snapToGuides,
+    setSnapToGuides,
+    addGuide,
+    clearGuides,
   } = useEditorStore();
 
   const beginRename = () => {
@@ -180,6 +221,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImageSelected = selectedLayer?.type === 'image';
+  const isSmartObject = selectedLayer?.type === 'image' && !!selectedLayer.smartObject;
   const selectedIndex = layers.findIndex((l) => l.id === selectedLayerId);
 
   const resolveImageId = () =>
@@ -242,6 +284,51 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     close();
   };
 
+  const handlePsdFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    close();
+    if (!file) return;
+    try {
+      const psd = await importPsdFile(file);
+      createBlankDocument(psd.width, psd.height, '#ffffff');
+      setProjectTitle(psd.title);
+      for (const layer of psd.layers) {
+        addImageLayer(layer.src, layer.name, layer.width, layer.height);
+        const id = useEditorStore.getState().selectedLayerId;
+        if (!id) continue;
+        updateLayer(id, {
+          x: layer.x,
+          y: layer.y,
+          width: layer.width,
+          height: layer.height,
+          opacity: layer.opacity,
+          visible: layer.visible,
+        });
+      }
+      // addImageLayer sizes the canvas to the first layer; restore the PSD canvas.
+      // Importing is a fresh document, so drop the per-layer history entries too.
+      useEditorStore.setState({
+        canvasWidth: psd.width,
+        canvasHeight: psd.height,
+        past: [],
+        future: [],
+      });
+      onFitToScreen();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to open PSD');
+    }
+  };
+
+  const handleSmartObjectReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    e.target.value = '';
+    close();
+    if (!files.length) return;
+    const [loaded] = await loadImageFiles(files.slice(0, 1));
+    if (loaded) replaceSmartObjectSource(loaded.src, loaded.width, loaded.height);
+  };
+
   const handleLoadSample = (sampleId: string) => {
     const sample = SAMPLE_IMAGES.find((s) => s.id === sampleId);
     if (!sample) return;
@@ -262,6 +349,21 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     if (!id) return;
     selectLayer(id);
     cleanPhotoLayer(id, mode, 0.7, bake);
+    close();
+  };
+
+  const runClassicFilter = (
+    kind: Parameters<typeof bakeClassicFilterOnSelected>[0],
+    params: Record<string, number>
+  ) => {
+    if (!isImageSelected) return;
+    void bakeClassicFilterOnSelected(kind, params);
+    close();
+  };
+
+  const runSelectionModify = (op: Parameters<typeof modifyMarqueeSelection>[0], amount?: number) => {
+    if (!marqueeSelection) return;
+    void modifyMarqueeSelection(op, amount);
     close();
   };
 
@@ -323,7 +425,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   return (
     <header
       ref={barRef}
-      className="shell-nav h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 z-50 select-none"
+      className="shell-nav relative z-[80] h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 select-none"
       data-tour="tour-nav"
     >
       <input
@@ -340,6 +442,21 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
         accept={`.json,${PROJECT_FILE_EXTENSION},application/json`}
         className="hidden"
         onChange={handleProjectFileChange}
+      />
+
+      <input
+        ref={psdInputRef}
+        type="file"
+        accept=".psd,image/vnd.adobe.photoshop"
+        className="hidden"
+        onChange={handlePsdFileChange}
+      />
+      <input
+        ref={smartObjectInputRef}
+        type="file"
+        accept={IMAGE_ACCEPT}
+        className="hidden"
+        onChange={handleSmartObjectReplace}
       />
 
       {/* Brand */}
@@ -399,6 +516,17 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Item onClick={() => fileInputRef.current?.click()} hint="⌘O">
                 <FolderOpen size={13} /> Place Image…
+              </Item>
+              <Item onClick={() => psdInputRef.current?.click()}>
+                <FileImage size={13} /> Open PSD…
+              </Item>
+              <Item
+                onClick={() => {
+                  setStockModalOpen(true);
+                  close();
+                }}
+              >
+                <Images size={13} /> Stock & CC Photos…
               </Item>
               <Item onClick={() => { void pasteFromClipboard(); }} hint="⌘V">
                 <ClipboardPaste size={13} /> Paste Image…
@@ -585,8 +713,44 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               >
                 Invert
               </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => {
+                  void colorizeSelectedImage('sepia', 0.85);
+                  close();
+                }}
+              >
+                <Palette size={13} /> Colorize (Sepia)
+              </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => {
+                  void colorizeSelectedImage('teal-orange', 0.8);
+                  close();
+                }}
+              >
+                <Palette size={13} /> Colorize (Teal · Orange)
+              </Item>
               <Sep />
-              <Label>Size</Label>
+              <Label>Size & info</Label>
+              <Item
+                disabled={!isImageSelected}
+                onClick={() => {
+                  void inspectSelectedExif();
+                  close();
+                }}
+              >
+                <Info size={13} /> Image Info / EXIF…
+              </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => {
+                  void compressSelectedImage({ maxEdge: 2048, quality: 0.82, format: 'image/jpeg' });
+                  close();
+                }}
+              >
+                <FileArchive size={13} /> Compress (2K JPEG)
+              </Item>
               <Item
                 onClick={() => {
                   setActiveTool('crop');
@@ -676,6 +840,57 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
                 {selectedLayer?.locked ? <Unlock size={13} /> : <Lock size={13} />}{' '}
                 {selectedLayer?.locked ? 'Unlock' : 'Lock'} Layer
               </Item>
+              <Sep />
+              <Label>Add Adjustment Layer</Label>
+              {(
+                [
+                  ['brightness', 'Brightness'],
+                  ['curves', 'Curves'],
+                  ['hueSaturation', 'Hue / Saturation'],
+                  ['levels', 'Levels'],
+                  ['invert', 'Invert'],
+                  ['grayscale', 'Grayscale'],
+                ] as const
+              ).map(([kind, label]) => (
+                <Item
+                  key={kind}
+                  onClick={() => {
+                    addAdjustmentLayer(kind);
+                    close();
+                  }}
+                >
+                  <Blend size={13} /> {label}
+                </Item>
+              ))}
+              <Sep />
+              <Item
+                disabled={!isImageSelected || isSmartObject}
+                onClick={() => {
+                  convertSelectedToSmartObject();
+                  close();
+                }}
+              >
+                <LayersIcon size={13} /> Convert to Smart Object
+              </Item>
+              <Item
+                disabled={!isSmartObject}
+                onClick={() => smartObjectInputRef.current?.click()}
+              >
+                <Replace size={13} /> Replace Contents…
+              </Item>
+              <Sep />
+              <Label>Artboards</Label>
+              <Item
+                onClick={() => {
+                  addArtboard();
+                  close();
+                }}
+              >
+                <Frame size={13} /> New Artboard
+                {artboards.length > 0 && (
+                  <span className="text-[var(--text-faint)]"> ({artboards.length})</span>
+                )}
+              </Item>
             </MenuPanel>
           )}
         </div>
@@ -685,7 +900,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
             Select
           </MenuBtn>
           {activeMenu === 'select' && (
-            <MenuPanel onClose={close} width="w-48">
+            <MenuPanel onClose={close} width="w-52">
               <Item onClick={() => { setActiveTool('marquee'); close(); }} hint="M">
                 <Square size={13} /> Rectangular Marquee
               </Item>
@@ -694,7 +909,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Sep />
               <Item onClick={() => { selectLayer(null); close(); }} hint="Esc">
-                Deselect
+                Deselect Layer
               </Item>
               <Item
                 disabled={layers.length === 0}
@@ -705,6 +920,50 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
                 }}
               >
                 Select Top Layer
+              </Item>
+              <Sep />
+              <Label>Selection</Label>
+              <Item
+                disabled={!marqueeSelection}
+                onClick={() => {
+                  setMarqueeSelection(null);
+                  close();
+                }}
+              >
+                <SquareDashed size={13} /> Deselect
+              </Item>
+              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('invert')}>
+                Invert Selection
+              </Item>
+              <Label>Modify</Label>
+              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('expand', 10)}>
+                Expand… <span className="text-[var(--text-faint)]">10 px</span>
+              </Item>
+              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('contract', 10)}>
+                Contract… <span className="text-[var(--text-faint)]">10 px</span>
+              </Item>
+              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 8)}>
+                Feather… <span className="text-[var(--text-faint)]">8 px</span>
+              </Item>
+              <Sep />
+              <Label>Path</Label>
+              <Item
+                disabled={selectedLayer?.type !== 'path'}
+                onClick={() => {
+                  pathToSelection();
+                  close();
+                }}
+              >
+                <PenTool size={13} /> Path to Selection
+              </Item>
+              <Item
+                disabled={selectedLayer?.type !== 'path'}
+                onClick={() => {
+                  strokePathAsDrawing();
+                  close();
+                }}
+              >
+                <PenTool size={13} /> Stroke Path
               </Item>
             </MenuPanel>
           )}
@@ -725,6 +984,42 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runRevive('film')}>
                 Film Glow
+              </Item>
+              <Item
+                disabled={!isImageSelected}
+                onClick={() => {
+                  setActiveTool('liquify');
+                  close();
+                }}
+                hint="⇧X"
+              >
+                <Waves size={13} /> Liquify…
+              </Item>
+              <Sep />
+              <Label>Classic</Label>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => runClassicFilter('gaussian', { radius: 2 })}
+              >
+                Gaussian Blur…
+              </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => runClassicFilter('unsharp', { amount: 80, radius: 1.2, threshold: 0 })}
+              >
+                Unsharp Mask…
+              </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => runClassicFilter('noise', { amount: 12 })}
+              >
+                Add Noise…
+              </Item>
+              <Item
+                disabled={!isImageSelected || aiStatus.isProcessing}
+                onClick={() => runClassicFilter('sharpen', { amount: 40 })}
+              >
+                Sharpen
               </Item>
               <Sep />
               <Label>Cleanup</Label>
@@ -772,7 +1067,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
             View
           </MenuBtn>
           {activeMenu === 'view' && (
-            <MenuPanel onClose={close} width="w-48">
+            <MenuPanel onClose={close} width="w-56">
               <Item onClick={() => { onFitToScreen(); close(); }} hint="⌘0">
                 Fit on Screen
               </Item>
@@ -791,6 +1086,20 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Item onClick={() => { toggleGrid(); close(); }} hint="⌘'">
                 Pixel Grid {showGrid ? '✓' : ''}
+              </Item>
+              <Sep />
+              <Label>Guides</Label>
+              <Item onClick={() => { setSnapToGuides(!snapToGuides); close(); }}>
+                <Ruler size={13} /> Snap to Guides {snapToGuides ? '✓' : ''}
+              </Item>
+              <Item onClick={() => { addGuide('horizontal', Math.round(canvasHeight / 2)); close(); }}>
+                <Plus size={13} /> New Horizontal Guide
+              </Item>
+              <Item onClick={() => { addGuide('vertical', Math.round(canvasWidth / 2)); close(); }}>
+                <Plus size={13} /> New Vertical Guide
+              </Item>
+              <Item disabled={guides.length === 0} onClick={() => { clearGuides(); close(); }}>
+                <Trash size={13} /> Clear Guides
               </Item>
               <Sep />
               <Item onClick={() => { setShortcutsModalOpen(true); close(); }} hint="⌘/">
@@ -903,7 +1212,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               onClose={close}
               origin="tr"
               widthClass="w-48"
-              className="top-full right-0 mt-1.5"
+              closeOnLeave={false}
+              className="top-full right-0 mt-1 z-[100]"
             >
               <Label>Revive mode</Label>
               {(
@@ -949,7 +1259,8 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               onClose={close}
               origin="tr"
               widthClass="w-48"
-              className="top-full right-0 mt-1.5"
+              closeOnLeave={false}
+              className="top-full right-0 mt-1 z-[100]"
             >
               <Label>Cleanup mode</Label>
               {(
@@ -981,7 +1292,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               }
             }}
             title="Remove background"
-            className="dock-btn dock-btn-cool"
+            className="dock-btn dock-btn-cutout"
           >
             <Scissors size={13} />
             <span className="hidden lg:inline">Cutout</span>

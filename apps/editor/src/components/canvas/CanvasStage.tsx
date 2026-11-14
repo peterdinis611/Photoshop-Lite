@@ -1,14 +1,23 @@
-import React, { useRef, useEffect, useEffectEvent, useState, useCallback } from 'react';
-import { Stage, Layer, FastLayer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge, Path as KonvaPath } from 'react-konva';
+import React, { useRef, useEffect, useEffectEvent, useState, useCallback, useMemo } from 'react';
+import { Stage, Layer, FastLayer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge, Text as KonvaText, Path as KonvaPath } from 'react-konva';
 import Konva from 'konva';
 import { useAsyncThrottledCallback, useThrottledCallback } from '@tanstack/react-pacer';
 import { registerStage, listeningPolicy } from '@photoshop-lite/editor-konva';
+import {
+  applyToneBrushToImage,
+  applyHealingBrushToImage,
+  applyPatchToImage,
+} from '@photoshop-lite/editor-core';
+import type { ToneBrushMode } from '@photoshop-lite/editor-core';
 import { useEditorStore } from '../../store/editorStore';
 import { ImageLayerItem } from './ImageLayerItem';
 import { TextLayerItem } from './TextLayerItem';
 import { ShapeLayerItem } from './ShapeLayerItem';
 import { DrawingLayerItem } from './DrawingLayerItem';
 import { PathLayerItem } from './PathLayerItem';
+import { GradientLayerItem } from './GradientLayerItem';
+import { AdjustmentLayerItem } from './AdjustmentLayerItem';
+import { applyAdjustmentLayers } from './adjustmentComposite';
 import { CanvasRulers } from './CanvasRulers';
 import { Check, X } from 'lucide-react';
 import {
@@ -21,6 +30,85 @@ import {
 import { paintStrokeOnMask, eraseStrokeOnImage, magicWandBounds } from '../../utils/maskHelpers';
 import type { PathAnchor, ShapeType } from '../../types/editor';
 import { anchorsToSvgPath, dist } from '../../utils/pathHelpers';
+import { applyLiquifyPush } from '../../utils/liquifyHelpers';
+
+/** Snap distance to guides, in screen pixels */
+const GUIDE_SNAP_PX = 6;
+/** Magnetic lasso drops an anchor roughly every N document pixels while dragging */
+const MAGNETIC_STEP = 8;
+
+type Point = { x: number; y: number };
+
+/** Document coordinates → image-layer-local pixels (honours position, rotation and scale). */
+function toImageLocal(
+  layer: { x: number; y: number; rotation: number; scaleX: number; scaleY: number },
+  x: number,
+  y: number
+): Point {
+  const rad = (-layer.rotation * Math.PI) / 180;
+  const dx = x - layer.x;
+  const dy = y - layer.y;
+  const sx = layer.scaleX || 1;
+  const sy = layer.scaleY || 1;
+  return {
+    x: (dx * Math.cos(rad) - dy * Math.sin(rad)) / sx,
+    y: (dx * Math.sin(rad) + dy * Math.cos(rad)) / sy,
+  };
+}
+
+/** Document-space vector → image-local vector (no translation). */
+function toImageLocalVector(
+  layer: { rotation: number; scaleX: number; scaleY: number },
+  dx: number,
+  dy: number
+): Point {
+  return toImageLocal({ x: 0, y: 0, ...layer }, dx, dy);
+}
+
+const averageScale = (layer: { scaleX: number; scaleY: number }) =>
+  Math.max(0.01, (Math.abs(layer.scaleX || 1) + Math.abs(layer.scaleY || 1)) / 2);
+
+function pathBounds(points: number[]) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < points.length; i += 2) {
+    minX = Math.min(minX, points[i]);
+    maxX = Math.max(maxX, points[i]);
+    minY = Math.min(minY, points[i + 1]);
+    maxY = Math.max(maxY, points[i + 1]);
+  }
+  return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+}
+
+/** Selection → closed polygon in document coordinates (flat [x,y,...]). */
+function selectionToPolygon(sel: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  mode?: 'rect' | 'ellipse';
+  path?: number[];
+}): number[] {
+  if (sel.path && sel.path.length >= 6) return sel.path;
+  if (sel.mode === 'ellipse') {
+    const pts: number[] = [];
+    const cx = sel.x + sel.width / 2;
+    const cy = sel.y + sel.height / 2;
+    for (let i = 0; i < 32; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      pts.push(cx + (Math.cos(a) * sel.width) / 2, cy + (Math.sin(a) * sel.height) / 2);
+    }
+    return pts;
+  }
+  return [
+    sel.x, sel.y,
+    sel.x + sel.width, sel.y,
+    sel.x + sel.width, sel.y + sel.height,
+    sel.x, sel.y + sel.height,
+  ];
+}
 
 interface CanvasStageProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -62,6 +150,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     applyCrop,
     cancelCrop,
     updateBrushSettings,
+    artboards,
+    activeArtboardId,
     marqueeSelection,
     setMarqueeSelection,
     marqueeMode,
@@ -69,7 +159,17 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     paintLayerMask,
     toggleLayerMask,
     commitHistory,
+    gradientSettings,
+    toneBrushSettings,
+    guides,
+    snapToGuides,
+    transformMode,
+    placeGradientFill,
+    addGradientLayerFromDrag,
   } = useEditorStore();
+
+  // Image layers with any adjustment layers above them folded into their filter settings
+  const renderLayers = useMemo(() => applyAdjustmentLayers(layers), [layers]);
 
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 700 });
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
@@ -129,6 +229,47 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   // Blur tool state
   const [isBlurring, setIsBlurring] = useState(false);
 
+  // Gradient drag (document space)
+  const gradientDragRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [gradientDrag, setGradientDrag] = useState<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  } | null>(null);
+
+  // Dodge / Burn / Sharpen + Liquify: serialized, latest-point-wins stroke runner
+  const toneStrokeRef = useRef<{ layerId: string; last: Point; latest: Point } | null>(null);
+  const liquifyStrokeRef = useRef<{ layerId: string; last: Point; latest: Point } | null>(null);
+  const strokeRunnerRef = useRef<{ busy: boolean; pending: (() => Promise<void>) | null }>({
+    busy: false,
+    pending: null,
+  });
+
+  // Healing brush: points accumulate, applied once on mouseup
+  const healStrokeRef = useRef<{
+    layerId: string;
+    points: number[];
+    source: Point;
+  } | null>(null);
+  const [healPreview, setHealPreview] = useState<number[] | null>(null);
+
+  // Polygonal / magnetic lasso (document space, flat [x,y,...])
+  const [polyPoints, setPolyPoints] = useState<number[]>([]);
+  const magneticDraggingRef = useRef(false);
+
+  // Quick select: brushed bounding box
+  const quickSelectRef = useRef<{
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  } | null>(null);
+
+  // Patch tool: freehand source outline
+  const patchDrawRef = useRef(false);
+  const [patchPreview, setPatchPreview] = useState<number[] | null>(null);
+
   // Pen tool draft (document-space anchors)
   const [penAnchors, setPenAnchors] = useState<PathAnchor[]>([]);
   const penDraggingRef = useRef(false);
@@ -147,6 +288,26 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     setPenAnchors([]);
     penDraggingRef.current = false;
     setPenCursor(null);
+  });
+
+  /** Close the polygonal / magnetic lasso draft into a path selection */
+  const commitPolygon = () => {
+    magneticDraggingRef.current = false;
+    if (polyPoints.length < 6) {
+      setPolyPoints([]);
+      return;
+    }
+    setMarqueeSelection({
+      ...pathBounds(polyPoints),
+      mode: 'rect',
+      path: [...polyPoints, polyPoints[0], polyPoints[1]],
+    });
+    setPolyPoints([]);
+  };
+  // Keyboard listener lives in a long-lived effect; keep it pointed at the latest closure
+  const commitPolygonRef = useRef(commitPolygon);
+  useEffect(() => {
+    commitPolygonRef.current = commitPolygon;
   });
 
   // Resize observer for container
@@ -176,6 +337,22 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     }
   }, [activeTool]);
 
+  // Drop in-progress polygon / strokes when switching tools
+  useEffect(() => {
+    if (activeTool !== 'polyLasso' && activeTool !== 'magneticLasso') {
+      setPolyPoints([]);
+      magneticDraggingRef.current = false;
+    }
+    if (activeTool !== 'patch') {
+      patchDrawRef.current = false;
+      setPatchPreview(null);
+    }
+    if (activeTool !== 'gradient') {
+      gradientDragRef.current = null;
+      setGradientDrag(null);
+    }
+  }, [activeTool]);
+
   // Space / Shift / Pen Enter·Esc
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -192,6 +369,19 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           setPenAnchors([]);
           penDraggingRef.current = false;
           setPenCursor(null);
+        }
+      }
+      if (activeTool === 'polyLasso' || activeTool === 'magneticLasso') {
+        const tag = (document.activeElement?.tagName ?? '').toUpperCase();
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commitPolygonRef.current();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            magneticDraggingRef.current = false;
+            setPolyPoints([]);
+          }
         }
       }
     };
@@ -217,7 +407,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     const stage = stageRef.current;
     if (!transformer || !stage) return;
 
-    if (activeTool !== 'select' || !selectedLayerId) {
+    if ((activeTool !== 'select' && activeTool !== 'transform') || !selectedLayerId) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
@@ -368,6 +558,181 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     { wait: 50, leading: true, trailing: true }
   );
 
+  /**
+   * Serialized "latest wins" runner for async per-pixel strokes: only one image round-trip is
+   * in flight at a time, and while it runs only the newest queued task is kept.
+   */
+  const runLatest = (task: () => Promise<void>) => {
+    const runner = strokeRunnerRef.current;
+    if (runner.busy) {
+      runner.pending = task;
+      return;
+    }
+    runner.busy = true;
+    void (async () => {
+      let next: (() => Promise<void>) | null = task;
+      while (next) {
+        runner.pending = null;
+        try {
+          await next();
+        } catch (err) {
+          console.error('Canvas stroke failed:', err);
+        }
+        next = runner.pending;
+      }
+      runner.busy = false;
+    })();
+  };
+
+  const TONE_MODE: Record<string, ToneBrushMode> = {
+    dodge: 'dodge',
+    burn: 'burn',
+    sharpenTool: 'sharpen',
+  };
+
+  const queueToneStamp = (
+    stroke: { layerId: string; last: Point; latest: Point },
+    mode: ToneBrushMode
+  ) => {
+    runLatest(async () => {
+      const state = useEditorStore.getState();
+      const layer = state.layers.find((l) => l.id === stroke.layerId);
+      if (!layer || layer.type !== 'image') return;
+
+      const from = stroke.last;
+      const to = stroke.latest;
+      stroke.last = to;
+
+      const radius = Math.max(2, state.toneBrushSettings.size / 2 / averageScale(layer));
+      const stamps: Point[] = [];
+      // Fill the gap when the pointer outran the throttle
+      if (dist(from.x, from.y, to.x, to.y) > radius * 0.8) {
+        stamps.push({ x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 });
+      }
+      stamps.push(to);
+
+      let nextSrc = layer.src;
+      for (const p of stamps) {
+        const local = toImageLocal(layer, p.x, p.y);
+        nextSrc = await applyToneBrushToImage(nextSrc, {
+          cx: local.x,
+          cy: local.y,
+          radius,
+          hardness: state.toneBrushSettings.hardness,
+          opacity: state.brushSettings.opacity,
+          exposure: state.toneBrushSettings.exposure,
+          mode,
+        });
+      }
+      updateLayer(layer.id, { src: nextSrc });
+    });
+  };
+
+  const queueLiquifyPush = (stroke: { layerId: string; last: Point; latest: Point }) => {
+    runLatest(async () => {
+      const state = useEditorStore.getState();
+      const layer = state.layers.find((l) => l.id === stroke.layerId);
+      if (!layer || layer.type !== 'image') return;
+
+      const from = stroke.last;
+      const to = stroke.latest;
+      if (dist(from.x, from.y, to.x, to.y) < 1) return;
+      stroke.last = to;
+
+      const localFrom = toImageLocal(layer, from.x, from.y);
+      const localDelta = toImageLocalVector(layer, to.x - from.x, to.y - from.y);
+      const nextSrc = await applyLiquifyPush(layer.src, {
+        cx: localFrom.x + localDelta.x / 2,
+        cy: localFrom.y + localDelta.y / 2,
+        radius: state.brushSettings.size / 2 / averageScale(layer),
+        dx: localDelta.x,
+        dy: localDelta.y,
+        strength: Math.max(0.25, state.brushSettings.opacity),
+      });
+      updateLayer(layer.id, { src: nextSrc });
+    });
+  };
+
+  const applyHealingStroke = async (stroke: { layerId: string; points: number[]; source: Point }) => {
+    const state = useEditorStore.getState();
+    const layer = state.layers.find((l) => l.id === stroke.layerId);
+    if (!layer || layer.type !== 'image' || stroke.points.length < 2) return;
+
+    const points: number[] = [];
+    for (let i = 0; i < stroke.points.length; i += 2) {
+      const p = toImageLocal(layer, stroke.points[i], stroke.points[i + 1]);
+      points.push(p.x, p.y);
+    }
+    const srcLocal = toImageLocal(layer, stroke.source.x, stroke.source.y);
+
+    commitHistory('Healing Brush');
+    const newSrc = await applyHealingBrushToImage(layer.src, {
+      points,
+      size: state.brushSettings.size / averageScale(layer),
+      hardness: state.brushSettings.hardness,
+      sourceOffsetX: srcLocal.x - points[0],
+      sourceOffsetY: srcLocal.y - points[1],
+    });
+    updateLayer(layer.id, { src: newSrc });
+  };
+
+  /** Patch: copy the selected region (source) so it is centred on the clicked destination. */
+  const applyPatchAt = async (dest: Point) => {
+    const state = useEditorStore.getState();
+    const layer = state.layers.find((l) => l.id === state.selectedLayerId);
+    const selection = state.marqueeSelection;
+    if (!layer || layer.type !== 'image' || !selection) return;
+
+    const polygon = selectionToPolygon(selection);
+    const fromPath: number[] = [];
+    for (let i = 0; i < polygon.length; i += 2) {
+      const p = toImageLocal(layer, polygon[i], polygon[i + 1]);
+      fromPath.push(p.x, p.y);
+    }
+    const to = toImageLocal(layer, dest.x, dest.y);
+
+    commitHistory('Patch');
+    const newSrc = await applyPatchToImage(layer.src, {
+      fromPath,
+      toX: to.x,
+      toY: to.y,
+      feather: 2,
+    });
+    updateLayer(layer.id, { src: newSrc });
+  };
+
+  // Snap dragged layers to guides (Stage receives bubbling dragmove events)
+  const handleDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!snapToGuides || guides.length === 0) return;
+    const node = e.target;
+    const contentLayer = node.getLayer();
+    if (!contentLayer || contentLayer.id() !== 'export-content' || !node.id()) return;
+
+    const rect = node.getClientRect({ relativeTo: contentLayer });
+    const threshold = GUIDE_SNAP_PX / zoom;
+    let snapX: number | null = null;
+    let snapY: number | null = null;
+
+    const xEdges = [rect.x, rect.x + rect.width / 2, rect.x + rect.width];
+    const yEdges = [rect.y, rect.y + rect.height / 2, rect.y + rect.height];
+
+    for (const g of guides) {
+      const edges = g.orientation === 'vertical' ? xEdges : yEdges;
+      for (const edge of edges) {
+        const delta = g.position - edge;
+        if (Math.abs(delta) > threshold) continue;
+        if (g.orientation === 'vertical') {
+          if (snapX === null || Math.abs(delta) < Math.abs(snapX)) snapX = delta;
+        } else if (snapY === null || Math.abs(delta) < Math.abs(snapY)) {
+          snapY = delta;
+        }
+      }
+    }
+
+    if (snapX !== null) node.x(node.x() + snapX);
+    if (snapY !== null) node.y(node.y() + snapY);
+  };
+
   // Perform eyedropper sampling using an off-screen canvas render
   const performEyedropperSample = useCallback(
     async (canvasX: number, canvasY: number) => {
@@ -449,6 +814,109 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           updateLayer(imageLayer.id, { src: filled });
         }
       }
+      return;
+    }
+
+    // Gradient — drag from start to end point
+    if (activeTool === 'gradient') {
+      const drag = { x1: coords.x, y1: coords.y, x2: coords.x, y2: coords.y };
+      gradientDragRef.current = drag;
+      setGradientDrag(drag);
+      return;
+    }
+
+    // Dodge / Burn / Sharpen — paint tone adjustments straight into the image layer
+    if (activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sharpenTool') {
+      const imageLayer = getSelectedImageLayer();
+      if (!imageLayer) return;
+      commitHistory(
+        activeTool === 'dodge' ? 'Dodge' : activeTool === 'burn' ? 'Burn' : 'Sharpen Brush'
+      );
+      const stroke = { layerId: imageLayer.id, last: coords, latest: coords };
+      toneStrokeRef.current = stroke;
+      queueToneStamp(stroke, TONE_MODE[activeTool]);
+      return;
+    }
+
+    // Liquify — forward-warp pixels along the drag
+    if (activeTool === 'liquify') {
+      const imageLayer = getSelectedImageLayer();
+      if (!imageLayer) return;
+      commitHistory('Liquify');
+      liquifyStrokeRef.current = { layerId: imageLayer.id, last: coords, latest: coords };
+      return;
+    }
+
+    // Healing brush — Alt+click sets the source, drag paints, applied once on mouseup
+    if (activeTool === 'healing') {
+      if (e.evt.altKey) {
+        updateBrushSettings({ cloneSource: { x: coords.x, y: coords.y } });
+        return;
+      }
+      const imageLayer = getSelectedImageLayer();
+      const source = brushSettings.cloneSource;
+      if (!imageLayer || !source) return;
+      healStrokeRef.current = {
+        layerId: imageLayer.id,
+        points: [coords.x, coords.y],
+        source: { x: source.x, y: source.y },
+      };
+      setHealPreview([coords.x, coords.y]);
+      return;
+    }
+
+    // Patch — drag outlines the source region, click then drops it at the destination
+    if (activeTool === 'patch') {
+      if (!getSelectedImageLayer()) return;
+      patchDrawRef.current = true;
+      setPatchPreview([coords.x, coords.y]);
+      return;
+    }
+
+    // Polygonal / Magnetic lasso — click adds vertices; double-click, Enter or first-point click closes
+    if (activeTool === 'polyLasso' || activeTool === 'magneticLasso') {
+      if (e.evt.detail >= 2) {
+        if (polyPoints.length >= 6) commitPolygon();
+        return;
+      }
+      if (
+        polyPoints.length >= 6 &&
+        dist(coords.x, coords.y, polyPoints[0], polyPoints[1]) <= 8 / zoom
+      ) {
+        commitPolygon();
+        return;
+      }
+      if (polyPoints.length === 0) setMarqueeSelection(null);
+      const lastX = polyPoints[polyPoints.length - 2];
+      const lastY = polyPoints[polyPoints.length - 1];
+      if (polyPoints.length === 0 || lastX !== coords.x || lastY !== coords.y) {
+        setPolyPoints((prev) => [...prev, coords.x, coords.y]);
+      }
+      magneticDraggingRef.current = activeTool === 'magneticLasso';
+      return;
+    }
+
+    // Quick select — painted area grows a rectangular selection (Shift adds to it)
+    if (activeTool === 'quickSelect') {
+      const r = brushSettings.size / 2;
+      const base =
+        e.evt.shiftKey && marqueeSelection && !marqueeSelection.path ? marqueeSelection : null;
+      quickSelectRef.current = base
+        ? {
+            minX: Math.min(base.x, coords.x - r),
+            minY: Math.min(base.y, coords.y - r),
+            maxX: Math.max(base.x + base.width, coords.x + r),
+            maxY: Math.max(base.y + base.height, coords.y + r),
+          }
+        : { minX: coords.x - r, minY: coords.y - r, maxX: coords.x + r, maxY: coords.y + r };
+      const b = quickSelectRef.current;
+      setMarqueeSelection({
+        x: Math.max(0, b.minX),
+        y: Math.max(0, b.minY),
+        width: Math.max(1, Math.min(canvasWidth, b.maxX) - Math.max(0, b.minX)),
+        height: Math.max(1, Math.min(canvasHeight, b.maxY) - Math.max(0, b.minY)),
+        mode: 'rect',
+      });
       return;
     }
 
@@ -587,6 +1055,76 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       void applyBlurThrottled(coords);
     }
 
+    if (gradientDragRef.current) {
+      let { x: x2, y: y2 } = coords;
+      const { x1, y1 } = gradientDragRef.current;
+      if (e.evt.shiftKey) {
+        // Constrain to 45° steps
+        const len = dist(x1, y1, x2, y2);
+        const angle = Math.round(Math.atan2(y2 - y1, x2 - x1) / (Math.PI / 4)) * (Math.PI / 4);
+        x2 = Math.round(x1 + Math.cos(angle) * len);
+        y2 = Math.round(y1 + Math.sin(angle) * len);
+      }
+      gradientDragRef.current = { x1, y1, x2, y2 };
+      setGradientDrag(gradientDragRef.current);
+    }
+
+    if (toneStrokeRef.current) {
+      toneStrokeRef.current.latest = coords;
+      const mode = TONE_MODE[activeTool];
+      if (mode) queueToneStamp(toneStrokeRef.current, mode);
+    }
+
+    if (liquifyStrokeRef.current) {
+      liquifyStrokeRef.current.latest = coords;
+      queueLiquifyPush(liquifyStrokeRef.current);
+    }
+
+    if (healStrokeRef.current) {
+      const pts = healStrokeRef.current.points;
+      if (dist(coords.x, coords.y, pts[pts.length - 2], pts[pts.length - 1]) >= 2) {
+        pts.push(coords.x, coords.y);
+        setHealPreview([...pts]);
+      }
+    }
+
+    if (patchDrawRef.current) {
+      setPatchPreview((prev) => {
+        if (!prev) return prev;
+        const dx = coords.x - prev[prev.length - 2];
+        const dy = coords.y - prev[prev.length - 1];
+        return dx * dx + dy * dy > 4 ? [...prev, coords.x, coords.y] : prev;
+      });
+    }
+
+    if (magneticDraggingRef.current && activeTool === 'magneticLasso') {
+      setPolyPoints((prev) => {
+        if (prev.length < 2) return prev;
+        return dist(coords.x, coords.y, prev[prev.length - 2], prev[prev.length - 1]) >=
+          MAGNETIC_STEP
+          ? [...prev, coords.x, coords.y]
+          : prev;
+      });
+    }
+
+    if (quickSelectRef.current) {
+      const r = brushSettings.size / 2;
+      const b = quickSelectRef.current;
+      b.minX = Math.min(b.minX, coords.x - r);
+      b.minY = Math.min(b.minY, coords.y - r);
+      b.maxX = Math.max(b.maxX, coords.x + r);
+      b.maxY = Math.max(b.maxY, coords.y + r);
+      const x = Math.max(0, b.minX);
+      const y = Math.max(0, b.minY);
+      setMarqueeSelection({
+        x,
+        y,
+        width: Math.max(1, Math.min(canvasWidth, b.maxX) - x),
+        height: Math.max(1, Math.min(canvasHeight, b.maxY) - y),
+        mode: 'rect',
+      });
+    }
+
     if (activeTool === 'spotHealing' && isHealing) {
       void applyHealThrottled(coords);
     }
@@ -688,7 +1226,44 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     }
   };
 
-  const handleMouseUp = async () => {
+  const handleMouseUp = async (e?: Konva.KonvaEventObject<MouseEvent>) => {
+    if (gradientDragRef.current) {
+      const { x1, y1, x2, y2 } = gradientDragRef.current;
+      gradientDragRef.current = null;
+      setGradientDrag(null);
+      if (dist(x1, y1, x2, y2) >= 2) {
+        // Default: editable gradient layer. Alt-release bakes a raster fill layer instead.
+        if (e?.evt.altKey) placeGradientFill(x1, y1, x2, y2);
+        else addGradientLayerFromDrag(x1, y1, x2, y2);
+      }
+    }
+    toneStrokeRef.current = null;
+    liquifyStrokeRef.current = null;
+    magneticDraggingRef.current = false;
+    quickSelectRef.current = null;
+
+    if (healStrokeRef.current) {
+      const stroke = healStrokeRef.current;
+      healStrokeRef.current = null;
+      setHealPreview(null);
+      void applyHealingStroke(stroke);
+    }
+
+    if (patchDrawRef.current) {
+      patchDrawRef.current = false;
+      const outline = patchPreview;
+      setPatchPreview(null);
+      if (outline && outline.length >= 6) {
+        setMarqueeSelection({
+          ...pathBounds(outline),
+          mode: 'rect',
+          path: [...outline, outline[0], outline[1]],
+        });
+      } else if (outline && useEditorStore.getState().marqueeSelection) {
+        await applyPatchAt({ x: outline[0], y: outline[1] });
+      }
+    }
+
     if (isBlurring) {
       setIsBlurring(false);
     }
@@ -852,9 +1427,40 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   // Cursor style computation
   const pointerPolicy = listeningPolicy(activeTool);
 
+  // Transform tool: modes that Konva can only approximate (no true skew/distort/perspective/warp)
+  const transformToolActive = activeTool === 'transform';
+  const freeTransformMode =
+    transformToolActive && ['skew', 'distort', 'perspective', 'warp'].includes(transformMode);
+  const selectedLayerForTransform = layers.find((l) => l.id === selectedLayerId);
+  const isLineLikeShape =
+    selectedLayerForTransform?.type === 'shape' &&
+    ['line', 'arrow'].includes(selectedLayerForTransform.shapeType);
+  const transformerAnchors: string[] | undefined = isLineLikeShape
+    ? ['middle-left', 'middle-right', 'top-center', 'bottom-center']
+    : transformToolActive && transformMode === 'rotate'
+      ? []
+      : transformToolActive && transformMode === 'scale'
+        ? ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+        : undefined;
+
   const getCursorClass = () => {
     if (isSpacePressed || isPanning || activeTool === 'hand') return 'cursor-grab active:cursor-grabbing';
     if (activeTool === 'clone') return cloneSource ? 'cursor-crosshair' : 'cursor-copy';
+    if (activeTool === 'healing') return brushSettings.cloneSource ? 'cursor-crosshair' : 'cursor-copy';
+    if (activeTool === 'liquify') return 'cursor-move';
+    if (activeTool === 'transform') return 'cursor-default';
+    if (
+      activeTool === 'gradient' ||
+      activeTool === 'dodge' ||
+      activeTool === 'burn' ||
+      activeTool === 'sharpenTool' ||
+      activeTool === 'polyLasso' ||
+      activeTool === 'magneticLasso' ||
+      activeTool === 'quickSelect' ||
+      activeTool === 'patch'
+    ) {
+      return 'cursor-crosshair';
+    }
     if (activeTool === 'text') return 'cursor-text';
     if (activeTool === 'zoom') return 'cursor-zoom-in';
     if (pointerPolicy.cursor === 'crosshair') return 'cursor-crosshair';
@@ -888,6 +1494,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onDragMove={handleDragMove}
       >
         <Layer
           id="export-content"
@@ -913,7 +1520,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           />
 
           {/* Document Layers (rendered in array order: bottom to top) */}
-          {layers.map((layer) => {
+          {renderLayers.map((layer) => {
             const isSelected = layer.id === selectedLayerId;
 
             if (layer.type === 'image') {
@@ -971,12 +1578,51 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
                 />
               );
             }
+            if (layer.type === 'gradient') {
+              return (
+                <GradientLayerItem
+                  key={layer.id}
+                  layer={layer}
+                  isSelected={isSelected}
+                  onSelect={() => selectLayer(layer.id)}
+                  onChange={(updates) => updateLayer(layer.id, updates)}
+                />
+              );
+            }
+            // Adjustment layers are folded into image filters and shown as badges in the UI layer
             return null;
           })}
         </Layer>
 
         {/* FastLayer: guides / previews — no hit-testing, cheaper redraws */}
         <FastLayer id="export-guides" x={pan.x} y={pan.y} scaleX={zoom} scaleY={zoom} listening={false}>
+          {/* Artboard frames */}
+          {artboards.map((ab) => {
+            const active = ab.id === activeArtboardId;
+            return (
+              <React.Fragment key={ab.id}>
+                <Rect
+                  x={ab.x}
+                  y={ab.y}
+                  width={ab.width}
+                  height={ab.height}
+                  stroke={active ? '#e8a54b' : '#8a8378'}
+                  strokeWidth={(active ? 1.75 : 1) / zoom}
+                  dash={active ? undefined : [8 / zoom, 5 / zoom]}
+                  listening={false}
+                />
+                <KonvaText
+                  x={ab.x}
+                  y={ab.y - 16 / zoom}
+                  text={ab.name.toUpperCase()}
+                  fontSize={10 / zoom}
+                  fontFamily="monospace"
+                  fill={active ? '#e8a54b' : '#8a8378'}
+                  listening={false}
+                />
+              </React.Fragment>
+            );
+          })}
           {/* Grid overlay */}
           {showGrid && (
             <>
@@ -1000,6 +1646,181 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
                   listening={false}
                 />
               ))}
+            </>
+          )}
+
+          {/* Guides */}
+          {guides.map((g) =>
+            g.orientation === 'vertical' ? (
+              <Line
+                key={g.id}
+                points={[
+                  g.position,
+                  -pan.y / zoom,
+                  g.position,
+                  (containerSize.height - pan.y) / zoom,
+                ]}
+                stroke="#2fd3c4"
+                strokeWidth={1 / zoom}
+                dash={[6 / zoom, 4 / zoom]}
+                opacity={0.9}
+                listening={false}
+              />
+            ) : (
+              <Line
+                key={g.id}
+                points={[
+                  -pan.x / zoom,
+                  g.position,
+                  (containerSize.width - pan.x) / zoom,
+                  g.position,
+                ]}
+                stroke="#2fd3c4"
+                strokeWidth={1 / zoom}
+                dash={[6 / zoom, 4 / zoom]}
+                opacity={0.9}
+                listening={false}
+              />
+            )
+          )}
+
+          {/* Gradient drag preview */}
+          {gradientDrag && (
+            <>
+              {gradientSettings.gradientType === 'radial' && (
+                <Circle
+                  x={gradientDrag.x1}
+                  y={gradientDrag.y1}
+                  radius={dist(gradientDrag.x1, gradientDrag.y1, gradientDrag.x2, gradientDrag.y2)}
+                  stroke="rgba(236, 232, 225, 0.6)"
+                  strokeWidth={1 / zoom}
+                  dash={[6 / zoom, 4 / zoom]}
+                  listening={false}
+                />
+              )}
+              <Line
+                points={[gradientDrag.x1, gradientDrag.y1, gradientDrag.x2, gradientDrag.y2]}
+                stroke="#1a1208"
+                strokeWidth={3.5 / zoom}
+                lineCap="round"
+                listening={false}
+              />
+              <Line
+                points={[gradientDrag.x1, gradientDrag.y1, gradientDrag.x2, gradientDrag.y2]}
+                stroke="#ece8e1"
+                strokeWidth={1.5 / zoom}
+                lineCap="round"
+                listening={false}
+              />
+              <Circle
+                x={gradientDrag.x1}
+                y={gradientDrag.y1}
+                radius={5 / zoom}
+                fill={gradientSettings.colorStops[0]?.color ?? '#000000'}
+                stroke="#ece8e1"
+                strokeWidth={1.5 / zoom}
+                listening={false}
+              />
+              <Circle
+                x={gradientDrag.x2}
+                y={gradientDrag.y2}
+                radius={5 / zoom}
+                fill={gradientSettings.colorStops[gradientSettings.colorStops.length - 1]?.color ?? '#ffffff'}
+                stroke="#ece8e1"
+                strokeWidth={1.5 / zoom}
+                listening={false}
+              />
+            </>
+          )}
+
+          {/* Polygonal / magnetic lasso draft */}
+          {(activeTool === 'polyLasso' || activeTool === 'magneticLasso') && polyPoints.length > 0 && (
+            <>
+              <Line
+                points={
+                  cursorPos && !magneticDraggingRef.current
+                    ? [...polyPoints, cursorPos.x, cursorPos.y]
+                    : polyPoints
+                }
+                stroke="#ece8e1"
+                strokeWidth={1.25 / zoom}
+                dash={[5 / zoom, 4 / zoom]}
+                listening={false}
+              />
+              {Array.from({ length: polyPoints.length / 2 }).map((_, i) => {
+                const px = polyPoints[i * 2];
+                const py = polyPoints[i * 2 + 1];
+                const isFirst = i === 0;
+                const nearFirst =
+                  isFirst &&
+                  polyPoints.length >= 6 &&
+                  !!cursorPos &&
+                  dist(cursorPos.x, cursorPos.y, px, py) <= 8 / zoom;
+                return (
+                  <Circle
+                    key={`poly-${i}`}
+                    x={px}
+                    y={py}
+                    radius={(isFirst ? (nearFirst ? 7 : 5) : 3) / zoom}
+                    fill={isFirst ? '#d4923a' : '#ece8e1'}
+                    stroke={nearFirst ? '#5ecf9a' : '#1a1208'}
+                    strokeWidth={(nearFirst ? 2 : 1) / zoom}
+                    listening={false}
+                  />
+                );
+              })}
+            </>
+          )}
+
+          {/* Patch source outline */}
+          {patchPreview && patchPreview.length >= 4 && (
+            <Line
+              points={patchPreview}
+              stroke="#5b8def"
+              strokeWidth={1.25 / zoom}
+              dash={[5 / zoom, 4 / zoom]}
+              closed
+              fill="rgba(91, 141, 239, 0.12)"
+              listening={false}
+            />
+          )}
+
+          {/* Healing brush stroke + source crosshair */}
+          {healPreview && (
+            <Line
+              points={healPreview}
+              stroke="#5ecf9a"
+              strokeWidth={brushSettings.size}
+              lineCap="round"
+              lineJoin="round"
+              opacity={0.22}
+              listening={false}
+            />
+          )}
+          {activeTool === 'healing' && brushSettings.cloneSource && (
+            <>
+              <Line
+                points={[
+                  brushSettings.cloneSource.x - 12,
+                  brushSettings.cloneSource.y,
+                  brushSettings.cloneSource.x + 12,
+                  brushSettings.cloneSource.y,
+                ]}
+                stroke="#5ecf9a"
+                strokeWidth={1.5 / zoom}
+                listening={false}
+              />
+              <Line
+                points={[
+                  brushSettings.cloneSource.x,
+                  brushSettings.cloneSource.y - 12,
+                  brushSettings.cloneSource.x,
+                  brushSettings.cloneSource.y + 12,
+                ]}
+                stroke="#5ecf9a"
+                strokeWidth={1.5 / zoom}
+                listening={false}
+              />
             </>
           )}
 
@@ -1095,12 +1916,33 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             activeTool === 'eraser' ||
             activeTool === 'refineBrush' ||
             activeTool === 'blur' ||
-            activeTool === 'fill') &&
+            activeTool === 'fill' ||
+            activeTool === 'dodge' ||
+            activeTool === 'burn' ||
+            activeTool === 'sharpenTool' ||
+            activeTool === 'healing' ||
+            activeTool === 'liquify' ||
+            activeTool === 'quickSelect') &&
             cursorPos && (
             <Line
               points={[cursorPos.x, cursorPos.y]}
-              stroke={activeTool === 'clone' && !cloneSource ? '#e8a84a' : activeTool === 'spotHealing' ? '#e85d5d' : '#d4923a'}
-              strokeWidth={brushSettings.size}
+              stroke={
+                (activeTool === 'clone' && !cloneSource) ||
+                (activeTool === 'healing' && !brushSettings.cloneSource)
+                  ? '#e8a84a'
+                  : activeTool === 'spotHealing'
+                    ? '#e85d5d'
+                    : activeTool === 'healing'
+                      ? '#5ecf9a'
+                      : activeTool === 'quickSelect'
+                        ? '#5b8def'
+                        : '#d4923a'
+              }
+              strokeWidth={
+                activeTool === 'dodge' || activeTool === 'burn' || activeTool === 'sharpenTool'
+                  ? toneBrushSettings.size
+                  : brushSettings.size
+              }
               lineCap="round"
               opacity={0.18}
               shadowBlur={(1 - brushSettings.hardness) * brushSettings.size * 0.5}
@@ -1414,10 +2256,30 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             );
           })()}
 
+          {/* Adjustment layer badges (UI layer so they never end up in exports) */}
+          {(() => {
+            let slot = -1;
+            return layers.map((layer) => {
+              if (layer.type !== 'adjustment' || !layer.visible) return null;
+              slot += 1;
+              return (
+                <AdjustmentLayerItem
+                  key={layer.id}
+                  layer={layer}
+                  slot={slot}
+                  zoom={zoom}
+                  isSelected={layer.id === selectedLayerId}
+                  onSelect={() => selectLayer(layer.id)}
+                />
+              );
+            });
+          })()}
+
           {/* Free-Transform Box */}
           <Transformer
             ref={transformerRef}
-            keepRatio={keepRatio}
+            keepRatio={freeTransformMode ? false : keepRatio}
+            rotateEnabled={!(transformToolActive && transformMode === 'scale')}
             boundBoxFunc={(oldBox, newBox) => {
               if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10) {
                 return oldBox;
@@ -1431,16 +2293,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             anchorSize={8 / zoom}
             anchorCornerRadius={2 / zoom}
             rotateAnchorOffset={24 / zoom}
-            enabledAnchors={
-              selectedLayerId &&
-              layers.find((l) => l.id === selectedLayerId)?.type === 'shape' &&
-              ['line', 'arrow'].includes(
-                (layers.find((l) => l.id === selectedLayerId) as { shapeType?: string })?.shapeType ||
-                  ''
-              )
-                ? ['middle-left', 'middle-right', 'top-center', 'bottom-center']
-                : undefined
-            }
+            enabledAnchors={transformerAnchors}
           />
         </Layer>
       </Stage>
@@ -1481,6 +2334,41 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
               <kbd className="bg-zinc-800 px-1 py-0.5 rounded text-[10px] font-mono">Alt+Click</kbd> on the canvas to set a clone source point.
             </>
           )}
+        </div>
+      )}
+
+      {/* Transform tool hint */}
+      {transformToolActive && selectedLayerId && freeTransformMode && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1e2025]/95 backdrop-blur-md border border-[#2c2f38] px-3 py-1.5 rounded-lg shadow-xl z-40 text-xs text-zinc-300">
+          {transformMode.charAt(0).toUpperCase() + transformMode.slice(1)} is approximated: drag any
+          handle to stretch the layer unevenly, rotate with the top handle.
+        </div>
+      )}
+
+      {/* Polygonal / magnetic lasso hint */}
+      {(activeTool === 'polyLasso' || activeTool === 'magneticLasso') && polyPoints.length > 0 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1e2025]/95 backdrop-blur-md border border-[#2c2f38] px-3 py-1.5 rounded-lg shadow-xl z-40 text-xs text-zinc-300">
+          {polyPoints.length / 2} points —{' '}
+          <kbd className="bg-zinc-800 px-1 py-0.5 rounded text-[10px] font-mono">Enter</kbd> or
+          double-click to close,{' '}
+          <kbd className="bg-zinc-800 px-1 py-0.5 rounded text-[10px] font-mono">Esc</kbd> to cancel
+        </div>
+      )}
+
+      {/* Healing brush source hint */}
+      {activeTool === 'healing' && !brushSettings.cloneSource && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1e2025]/95 backdrop-blur-md border border-[#2c2f38] px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-2 z-40 text-xs text-zinc-300">
+          <span className="w-2 h-2 rounded-full bg-zinc-500 animate-pulse"></span>
+          <kbd className="bg-zinc-800 px-1 py-0.5 rounded text-[10px] font-mono">Alt+Click</kbd> to set a healing source point.
+        </div>
+      )}
+
+      {/* Patch hint */}
+      {activeTool === 'patch' && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#1e2025]/95 backdrop-blur-md border border-[#2c2f38] px-3 py-1.5 rounded-lg shadow-xl z-40 text-xs text-zinc-300">
+          {marqueeSelection
+            ? 'Click to patch the selected region onto that spot — drag to outline a new source.'
+            : 'Drag to outline the source region, then click the destination.'}
         </div>
       )}
 

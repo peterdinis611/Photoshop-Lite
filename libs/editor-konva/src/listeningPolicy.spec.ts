@@ -19,6 +19,19 @@ describe('listeningPolicy', () => {
     expect(listeningPolicy('spotHealing').cursor).toBe('crosshair');
   });
 
+  it('treats new paint/selection tools as crosshair tools', () => {
+    for (const tool of ['gradient', 'dodge', 'burn', 'sharpenTool', 'polyLasso', 'magneticLasso', 'quickSelect', 'healing', 'patch', 'liquify']) {
+      const p = listeningPolicy(tool);
+      expect(p.contentListening).toBe(false);
+      expect(p.cursor).toBe('crosshair');
+    }
+  });
+
+  it('keeps the overlay interactive for the transform tool', () => {
+    expect(listeningPolicy('transform').overlayListening).toBe(true);
+    expect(listeningPolicy('transform').contentListening).toBe(false);
+  });
+
   it('uses grab cursor for hand tool', () => {
     expect(listeningPolicy('hand').cursor).toBe('grab');
   });

@@ -45,6 +45,14 @@ export function listeningPolicy(activeTool: KonvaToolKind): ListeningPolicy {
         overlayListening: false,
         cursor: 'grab',
       };
+    case 'transform':
+      // Transformer lives in the overlay layer and attaches to the selected layer
+      return {
+        stageListening: true,
+        contentListening: false,
+        overlayListening: true,
+        cursor: 'default',
+      };
     case 'crop':
       return {
         stageListening: true,
@@ -64,6 +72,16 @@ export function listeningPolicy(activeTool: KonvaToolKind): ListeningPolicy {
     case 'fill':
     case 'eyedropper':
     case 'refineBrush':
+    case 'gradient':
+    case 'dodge':
+    case 'burn':
+    case 'sharpenTool':
+    case 'polyLasso':
+    case 'magneticLasso':
+    case 'quickSelect':
+    case 'healing':
+    case 'patch':
+    case 'liquify':
       return {
         stageListening: true,
         contentListening: false,

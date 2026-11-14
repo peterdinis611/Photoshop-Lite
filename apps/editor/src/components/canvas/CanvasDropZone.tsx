@@ -7,6 +7,7 @@ import {
   Type,
   Square,
   ClipboardPaste,
+  Images,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
@@ -34,18 +35,21 @@ const FORMAT_CHIPS = ['PNG', 'JPEG', 'WEBP', 'GIF', 'AVIF', 'HEIC'];
 
 export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded }) => {
   const layersCount = useEditorStore((s) => s.layers.length);
+  const isDocumentOpen = useEditorStore((s) => s.isDocumentOpen);
   const addImageLayer = useEditorStore((s) => s.addImageLayer);
   const addTextLayer = useEditorStore((s) => s.addTextLayer);
   const addShapeLayer = useEditorStore((s) => s.addShapeLayer);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const setNewCanvasModalOpen = useEditorStore((s) => s.setNewCanvasModalOpen);
+  const setStockModalOpen = useEditorStore((s) => s.setStockModalOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState<LoadImageProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isEmpty = layersCount === 0;
+  // Blank New Document keeps 0 layers but must hide this overlay
+  const isEmpty = !isDocumentOpen && layersCount === 0;
 
   const importFiles = useEffectEvent(async (files: File[]) => {
     const images = collectImageFiles(files);
@@ -257,6 +261,14 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
               >
                 <ClipboardPaste size={14} />
                 Paste
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-[var(--radius-sm)] border border-[rgba(212,146,58,0.4)] bg-[var(--accent-dim)] px-3 text-[12px] font-medium text-[var(--accent-hot)] hover:brightness-110 cursor-pointer"
+                onClick={() => setStockModalOpen(true)}
+              >
+                <Images size={14} />
+                Stock & CC
               </button>
             </div>
 

@@ -20,6 +20,7 @@
     "react-konva": "^19.0.0"
   },
   "dependencies": {
+    "@photoshop-lite/editor-core": "0.0.1",
     "@photoshop-lite/shared-types": "0.0.1"
   },
   "devDependencies": {

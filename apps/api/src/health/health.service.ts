@@ -11,6 +11,9 @@ export class HealthService {
       timestamp: new Date().toISOString(),
       replicateConfigured: Boolean(process.env.REPLICATE_API_TOKEN?.trim()),
       removeBgConfigured: Boolean(process.env.REMOVE_BG_API_KEY?.trim()),
+      unsplashConfigured: Boolean(process.env.UNSPLASH_ACCESS_KEY?.trim()),
+      pexelsConfigured: Boolean(process.env.PEXELS_API_KEY?.trim()),
+      openverseAvailable: true,
     };
   }
 }

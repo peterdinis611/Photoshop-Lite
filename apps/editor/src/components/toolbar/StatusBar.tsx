@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, MousePointer2, Ruler } from 'lucide-react';
+import { Frame, Layers, MousePointer2, Ruler } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const TOOL_HINT: Record<string, string> = {
@@ -19,6 +19,7 @@ const TOOL_HINT: Record<string, string> = {
   pen: 'Click anchors · drag curves · click first to close · Enter finish · Esc cancel',
   hand: 'Drag to pan the stage',
   zoom: 'Click zoom in · Alt zoom out',
+  liquify: 'Drag on an image layer to push pixels · Size in options bar',
 };
 
 export const StatusBar: React.FC = () => {
@@ -30,6 +31,9 @@ export const StatusBar: React.FC = () => {
   const zoom = useEditorStore((s) => s.zoom);
   const showGrid = useEditorStore((s) => s.showGrid);
   const showRulers = useEditorStore((s) => s.showRulers);
+  const artboards = useEditorStore((s) => s.artboards);
+  const activeArtboardId = useEditorStore((s) => s.activeArtboardId);
+  const activeArtboard = artboards.find((a) => a.id === activeArtboardId);
 
   const selected = layers.find((l) => l.id === selectedLayerId);
   const visibleCount = layers.filter((l) => l.visible).length;
@@ -46,6 +50,12 @@ export const StatusBar: React.FC = () => {
           <Layers size={11} />
           {visibleCount}/{layers.length} layers
         </span>
+        {artboards.length > 0 && (
+          <span className="status-pill" data-testid="status-artboard">
+            <Frame size={11} />
+            {activeArtboard ? activeArtboard.name : `${artboards.length} artboards`}
+          </span>
+        )}
       </div>
 
       <div className="status-bar-center">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FilePlus, Sparkles, Layout } from 'lucide-react';
+import { X, FilePlus } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const PRESETS = [
@@ -12,76 +12,82 @@ const PRESETS = [
 ];
 
 export const NewCanvasModal: React.FC = () => {
-  const {
-    isNewCanvasModalOpen,
-    setNewCanvasModalOpen,
-    setCanvasDimensions,
-    setBackgroundColor,
-    backgroundColor,
-  } = useEditorStore();
+  const isOpen = useEditorStore((s) => s.isNewCanvasModalOpen);
+  const setOpen = useEditorStore((s) => s.setNewCanvasModalOpen);
+  const createBlankDocument = useEditorStore((s) => s.createBlankDocument);
+  const fitToScreen = useEditorStore((s) => s.fitToScreen);
 
   const [width, setWidth] = useState(1200);
   const [height, setHeight] = useState(800);
-  const [bgChoice, setBgChoice] = useState<'transparent' | 'white' | 'black' | 'custom'>('transparent');
+  const [bgChoice, setBgChoice] = useState<'transparent' | 'white' | 'black' | 'custom'>(
+    'white'
+  );
   const [customColor, setCustomColor] = useState('#1e2025');
 
-  if (!isNewCanvasModalOpen) return null;
+  if (!isOpen) return null;
 
   const handleCreate = () => {
     const finalBg =
       bgChoice === 'transparent'
         ? 'transparent'
         : bgChoice === 'white'
-        ? '#ffffff'
-        : bgChoice === 'black'
-        ? '#000000'
-        : customColor;
+          ? '#ffffff'
+          : bgChoice === 'black'
+            ? '#000000'
+            : customColor;
 
-    setCanvasDimensions(width, height);
-    setBackgroundColor(finalBg);
-    setNewCanvasModalOpen(false);
+    createBlankDocument(width, height, finalBg);
+
+    // Fit after layout paints the new document size
+    requestAnimationFrame(() => {
+      const canvas = document.querySelector('[data-tour="tour-canvas"]');
+      if (canvas instanceof HTMLElement) {
+        fitToScreen(canvas.clientWidth, canvas.clientHeight);
+      }
+    });
   };
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+    <div className="modal-backdrop fixed inset-0 z-[120] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 select-none">
       <div className="modal-card bg-[var(--bg-panel)] border border-[var(--border-subtle)] rounded-[var(--radius-lg)] w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-[#2c2f38] flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FilePlus size={18} className="text-blue-400" />
-            <span className="font-semibold text-sm text-white">Create New Document</span>
+            <FilePlus size={18} className="text-[var(--accent-hot)]" />
+            <span className="font-display font-semibold text-sm text-[var(--text-primary)]">
+              Create New Document
+            </span>
           </div>
           <button
-            onClick={() => setNewCanvasModalOpen(false)}
-            className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
+            type="button"
+            onClick={() => setOpen(false)}
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-elevated)] transition-colors cursor-pointer"
           >
             <X size={16} />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-5 flex flex-col gap-4 text-xs text-zinc-300">
-          {/* Preset Buttons */}
+        <div className="p-5 flex flex-col gap-4 text-xs text-[var(--text-muted)]">
           <div className="flex flex-col gap-1.5">
-            <label className="text-zinc-400 font-medium">Standard Canvas Presets:</label>
+            <label className="text-[var(--text-faint)] font-medium">Standard canvas presets</label>
             <div className="grid grid-cols-2 gap-2">
               {PRESETS.map((p) => {
                 const isSelected = width === p.width && height === p.height;
                 return (
                   <button
                     key={p.name}
+                    type="button"
                     onClick={() => {
                       setWidth(p.width);
                       setHeight(p.height);
                     }}
-                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
+                    className={`p-2.5 rounded-[var(--radius-md)] border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
                       isSelected
-                        ? 'bg-blue-600/20 border-blue-500 text-white shadow-sm'
-                        : 'bg-[#1e2025] border-[#2c2f38] text-zinc-300 hover:bg-zinc-800'
+                        ? 'bg-[var(--accent-dim)] border-[var(--accent)] text-[var(--text-primary)] shadow-sm'
+                        : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-elevated)]'
                     }`}
                   >
-                    <span className="font-semibold text-xs text-white">{p.name}</span>
-                    <span className="text-[10px] text-zinc-500 font-mono">
+                    <span className="font-semibold text-xs text-[var(--text-primary)]">{p.name}</span>
+                    <span className="text-[10px] text-[var(--text-faint)] font-mono-ui">
                       {p.width} × {p.height} px ({p.desc})
                     </span>
                   </button>
@@ -90,64 +96,72 @@ export const NewCanvasModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Custom Width & Height */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#2c2f38]">
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--border-subtle)]">
             <div className="flex flex-col gap-1">
-              <label className="text-zinc-400 font-medium">Width (px):</label>
+              <label className="text-[var(--text-faint)] font-medium">Width (px)</label>
               <input
                 type="number"
-                min="50"
-                max="8000"
+                min={50}
+                max={8000}
                 value={width}
                 onChange={(e) => setWidth(Number(e.target.value))}
-                className="bg-[#1e2025] border border-[#2c2f38] rounded-lg px-3 py-2 text-white font-mono outline-none focus:border-blue-500"
+                className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-3 py-2 text-[var(--text-primary)] font-mono-ui outline-none focus:border-[var(--accent)]"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-zinc-400 font-medium">Height (px):</label>
+              <label className="text-[var(--text-faint)] font-medium">Height (px)</label>
               <input
                 type="number"
-                min="50"
-                max="8000"
+                min={50}
+                max={8000}
                 value={height}
                 onChange={(e) => setHeight(Number(e.target.value))}
-                className="bg-[#1e2025] border border-[#2c2f38] rounded-lg px-3 py-2 text-white font-mono outline-none focus:border-blue-500"
+                className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-3 py-2 text-[var(--text-primary)] font-mono-ui outline-none focus:border-[var(--accent)]"
               />
             </div>
           </div>
 
-          {/* Background Color */}
-          <div className="flex flex-col gap-1.5 pt-2 border-t border-[#2c2f38]">
-            <label className="text-zinc-400 font-medium">Background Color:</label>
+          <div className="flex flex-col gap-1.5 pt-2 border-t border-[var(--border-subtle)]">
+            <label className="text-[var(--text-faint)] font-medium">Background</label>
             <div className="grid grid-cols-4 gap-2">
               {(['transparent', 'white', 'black', 'custom'] as const).map((bg) => (
                 <button
                   key={bg}
+                  type="button"
                   onClick={() => setBgChoice(bg)}
-                  className={`py-2 rounded-lg border text-center font-medium capitalize transition-all cursor-pointer ${
+                  className={`py-2 rounded-[var(--radius-sm)] border text-center font-medium capitalize transition-all cursor-pointer ${
                     bgChoice === bg
-                      ? 'bg-blue-600 text-white border-blue-500'
-                      : 'bg-[#1e2025] border-[#2c2f38] text-zinc-400 hover:text-white'
+                      ? 'bg-[var(--accent)] text-[#1a1208] border-[var(--accent)]'
+                      : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                   }`}
                 >
                   {bg}
                 </button>
               ))}
             </div>
+            {bgChoice === 'custom' && (
+              <input
+                type="color"
+                value={customColor}
+                onChange={(e) => setCustomColor(e.target.value)}
+                className="mt-1 h-9 w-full cursor-pointer rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)]"
+              />
+            )}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-[#2c2f38] bg-[#15161a] flex items-center justify-end gap-2.5">
+        <div className="px-5 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-toolbar)] flex items-center justify-end gap-2.5">
           <button
-            onClick={() => setNewCanvasModalOpen(false)}
-            className="px-4 py-2 rounded-lg text-zinc-400 hover:text-white text-xs font-medium cursor-pointer transition-colors"
+            type="button"
+            onClick={() => setOpen(false)}
+            className="px-4 py-2 rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs font-medium cursor-pointer transition-colors"
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleCreate}
-            className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-lg shadow-blue-600/30 transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 px-5 py-2 rounded-[var(--radius-sm)] bg-[var(--accent)] hover:bg-[var(--accent-hot)] text-[#1a1208] font-display font-semibold text-xs shadow-lg transition-all cursor-pointer active:scale-95"
           >
             <FilePlus size={14} />
             <span>Create Canvas</span>

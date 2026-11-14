@@ -4,6 +4,7 @@ import { AiModule } from './ai/ai.module';
 import { ProjectsModule } from './projects/projects.module';
 import { AssetsModule } from './assets/assets.module';
 import { FontsModule } from './fonts/fonts.module';
+import { StockModule } from './stock/stock.module';
 import { CacheModule } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 
@@ -16,6 +17,7 @@ import { WorkspaceModule } from './workspace/workspace.module';
     ProjectsModule,
     AssetsModule,
     FontsModule,
+    StockModule,
   ],
   controllers: [],
   providers: [],

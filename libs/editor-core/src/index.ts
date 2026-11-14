@@ -66,3 +66,51 @@ export {
 
 export { floodFillImage } from './floodFill';
 export { applyBlurSpotToImage } from './blurSpot';
+
+export {
+  DEFAULT_CURVES,
+  DEFAULT_LEVELS,
+  buildCurveLut,
+  applyCurvesToImageData,
+  applyLevelsToImageData,
+  bakeCurvesLevels,
+} from './curvesLevels';
+export type { LevelsParams } from './curvesLevels';
+
+export {
+  applyGaussianBlurImageData,
+  applyUnsharpMaskImageData,
+  applyNoiseImageData,
+  applySharpenImageData,
+  bakeClassicFilter,
+} from './classicFilters';
+export type { ClassicFilterKind } from './classicFilters';
+
+export {
+  invertSelection,
+  expandSelection,
+  contractSelection,
+  featherSelectionMask,
+} from './selectionModify';
+
+export { applyToneBrushToImage } from './toneBrush';
+export type { ToneBrushMode, ToneBrushOptions } from './toneBrush';
+
+export { createLinearGradientDataUrl, createRadialGradientDataUrl } from './gradientFill';
+export type {
+  GradientColorStop,
+  LinearGradientOptions,
+  RadialGradientOptions,
+} from './gradientFill';
+
+export { applyHealingBrushToImage, applyPatchToImage } from './healingBrush';
+export type { HealingBrushOptions, PatchOptions } from './healingBrush';
+
+export { extractImageExif } from './imageExif';
+export type { ImageExifSummary } from './imageExif';
+
+export { compressImageSource } from './imageCompress';
+export type { CompressFormat, CompressOptions, CompressResult } from './imageCompress';
+
+export { COLORIZE_PRESETS, colorizeImageSource } from './imageColorize';
+export type { ColorizePreset, ColorizePresetMeta } from './imageColorize';

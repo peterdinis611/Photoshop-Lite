@@ -16,7 +16,18 @@ export type ToolType =
   | 'lasso'
   | 'wand'
   | 'hand'
-  | 'zoom';
+  | 'zoom'
+  | 'gradient'
+  | 'dodge'
+  | 'burn'
+  | 'sharpenTool'
+  | 'polyLasso'
+  | 'magneticLasso'
+  | 'quickSelect'
+  | 'healing'
+  | 'patch'
+  | 'liquify'
+  | 'transform';
 
 export type ShapeType =
   | 'rectangle'
@@ -69,6 +80,14 @@ export interface CurvesAdjustment {
   blue: CurvePoint[];
 }
 
+export interface LevelsAdjustment {
+  inBlack: number; // 0-255
+  inWhite: number; // 0-255
+  inGamma: number; // 0.1-9.99, default 1
+  outBlack: number; // 0-255
+  outWhite: number; // 0-255
+}
+
 export interface ImageAdjustments {
   brightness: number; // -100 to 100
   contrast: number; // -100 to 100
@@ -84,6 +103,7 @@ export interface ImageAdjustments {
   grayscale: boolean;
   sepia: boolean;
   curves?: CurvesAdjustment;
+  levels?: LevelsAdjustment;
 }
 
 export interface LayerStyles {
@@ -125,6 +145,8 @@ export interface ImageLayer extends BaseLayer {
   adjustments: ImageAdjustments;
   preset?: string;
   maskDataUrl?: string; // transparent mask after bg removal or refine
+  smartObject?: boolean;
+  smartObjectSrc?: string; // linked original
 }
 
 export interface TextLayer extends BaseLayer {
@@ -138,6 +160,8 @@ export interface TextLayer extends BaseLayer {
   align: 'left' | 'center' | 'right' | 'justify';
   letterSpacing: number;
   lineHeight: number;
+  stroke?: string;
+  strokeWidth?: number;
 }
 
 export interface ShapeLayer extends BaseLayer {
@@ -189,7 +213,39 @@ export interface PathLayer extends BaseLayer {
   strokeWidth: number;
 }
 
-export type EditorLayer = ImageLayer | TextLayer | ShapeLayer | DrawingLayer | PathLayer;
+export type AdjustmentLayerKind =
+  | 'brightness'
+  | 'contrast'
+  | 'levels'
+  | 'curves'
+  | 'hueSaturation'
+  | 'invert'
+  | 'grayscale';
+
+export interface AdjustmentLayer extends BaseLayer {
+  type: 'adjustment';
+  kind: AdjustmentLayerKind;
+  adjustments: ImageAdjustments; // reused; curves/levels live here
+  affectedChannel?: 'rgb' | 'red' | 'green' | 'blue';
+}
+
+export interface GradientLayer extends BaseLayer {
+  type: 'gradient';
+  gradientType: 'linear' | 'radial';
+  colorStops: { offset: number; color: string }[];
+  angle: number; // for linear
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
+export type EditorLayer =
+  | ImageLayer
+  | TextLayer
+  | ShapeLayer
+  | DrawingLayer
+  | PathLayer
+  | AdjustmentLayer
+  | GradientLayer;
 
 export interface PenSettings {
   stroke: string;
@@ -199,20 +255,128 @@ export interface PenSettings {
   closeThreshold: number;
 }
 
+export interface ShapeSettings {
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+  cornerRadius: number;
+  opacity: number;
+}
+
+export interface TextSettings {
+  fill: string;
+  fontFamily: string;
+  fontSize: number;
+  fontStyle: 'normal' | 'bold' | 'italic' | 'bold italic';
+  align: 'left' | 'center' | 'right' | 'justify';
+  letterSpacing: number;
+  lineHeight: number;
+  stroke: string;
+  strokeWidth: number;
+}
+
 export interface BrushSettings {
   size: number;
   color: string;
   opacity: number;
   hardness: number;
+  flow: number; // 0-1
   refineMode: 'erase' | 'restore'; // for background edge refinement
   cloneSource?: { x: number; y: number } | null; // for clone stamp
 }
+
+export interface GradientSettings {
+  gradientType: 'linear' | 'radial';
+  colorStops: { offset: number; color: string }[];
+  opacity: number;
+}
+
+export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
+  gradientType: 'linear',
+  colorStops: [
+    { offset: 0, color: '#000000' },
+    { offset: 1, color: '#ffffff' },
+  ],
+  opacity: 1,
+};
+
+export interface ToneBrushSettings {
+  size: number;
+  hardness: number;
+  exposure: number; // 0-100
+  range: 'shadows' | 'midtones' | 'highlights';
+}
+
+export const DEFAULT_TONE_BRUSH: ToneBrushSettings = {
+  size: 64,
+  hardness: 0.4,
+  exposure: 35,
+  range: 'midtones',
+};
+
+export interface Guide {
+  id: string;
+  orientation: 'horizontal' | 'vertical';
+  position: number;
+}
+
+export interface Artboard {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  backgroundColor: string;
+}
+
+export interface EditorActionStep {
+  id: string;
+  label: string;
+  type: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface EditorAction {
+  id: string;
+  name: string;
+  steps: EditorActionStep[];
+}
+
+export type TransformMode =
+  | 'free'
+  | 'scale'
+  | 'rotate'
+  | 'skew'
+  | 'distort'
+  | 'perspective'
+  | 'warp';
 
 export const DEFAULT_PEN_SETTINGS: PenSettings = {
   stroke: '#d4923a',
   strokeWidth: 2,
   fill: 'transparent',
   closeThreshold: 12,
+};
+
+export const DEFAULT_SHAPE_SETTINGS: ShapeSettings = {
+  fill: '#d4923a',
+  stroke: '#ece8e1',
+  strokeWidth: 2,
+  cornerRadius: 12,
+  opacity: 1,
+};
+
+export const DEFAULT_TEXT_SETTINGS: TextSettings = {
+  fill: '#ece8e1',
+  fontFamily: 'Source Sans 3',
+  fontSize: 36,
+  fontStyle: 'bold',
+  align: 'center',
+  letterSpacing: 0,
+  lineHeight: 1.2,
+  stroke: 'transparent',
+  strokeWidth: 0,
 };
 
 export interface CropSettings {
@@ -283,4 +447,8 @@ export interface ProjectFileData {
   backgroundColor: string;
   layers: EditorLayer[];
   savedAt: string;
+  guides?: Guide[];
+  artboards?: Artboard[];
+  activeArtboardId?: string | null;
+  actions?: EditorAction[];
 }

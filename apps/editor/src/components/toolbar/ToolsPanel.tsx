@@ -30,6 +30,15 @@ import {
   PaintBucket,
   Droplets,
   PenTool,
+  Blend,
+  SunMedium,
+  Moon,
+  Aperture,
+  Magnet,
+  Sparkle,
+  BoxSelect,
+  Waves,
+  Move3d,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ToolType, ShapeType } from '../../types/editor';
@@ -40,7 +49,7 @@ import { AnimatedMenu, MenuLabel } from '../ui/AnimatedMenu';
 interface ToolItem {
   id: ToolType | 'beforeAfter' | 'marqueeMenu' | 'brushMenu';
   label: string;
-  shortcut: string;
+  shortcut?: string;
   icon: React.ReactNode;
   separator?: boolean;
 }
@@ -69,6 +78,13 @@ export const ToolsPanel: React.FC = () => {
   const [showShapeMenu, setShowShapeMenu] = useState(false);
   const [showMarqueeMenu, setShowMarqueeMenu] = useState(false);
   const [showBrushMenu, setShowBrushMenu] = useState(false);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [hoverTip, setHoverTip] = useState<{
+    label: string;
+    shortcut?: string;
+    top: number;
+    left: number;
+  } | null>(null);
 
   const tools: ToolItem[] = [
     {
@@ -93,6 +109,23 @@ export const ToolsPanel: React.FC = () => {
       label: 'Lasso Selection',
       shortcut: 'L',
       icon: <Lasso size={18} className="text-sky-300" />,
+    },
+    {
+      id: 'polyLasso',
+      label: 'Polygonal Lasso — click points, double-click to close',
+      shortcut: 'Shift+L',
+      icon: <Hexagon size={18} className="text-sky-300" />,
+    },
+    {
+      id: 'magneticLasso',
+      label: 'Magnetic Lasso — snaps to edges',
+      icon: <Magnet size={18} className="text-sky-300" />,
+    },
+    {
+      id: 'quickSelect',
+      label: 'Quick Selection — paint to select',
+      shortcut: 'Shift+W',
+      icon: <Sparkle size={18} className="text-violet-300" />,
     },
     {
       id: 'wand',
@@ -131,10 +164,34 @@ export const ToolsPanel: React.FC = () => {
       icon: <PaintBucket size={18} className="text-sky-300" />,
     },
     {
+      id: 'gradient',
+      label: 'Gradient Tool — drag to fill',
+      shortcut: 'Shift+G',
+      icon: <Blend size={18} className="text-sky-300" />,
+    },
+    {
       id: 'blur',
       label: 'Blur Tool',
       shortcut: 'R',
       icon: <Droplets size={18} className="text-cyan-300" />,
+    },
+    {
+      id: 'sharpenTool',
+      label: 'Sharpen Tool — paint to add detail',
+      shortcut: 'Shift+S',
+      icon: <Aperture size={18} className="text-cyan-300" />,
+    },
+    {
+      id: 'dodge',
+      label: 'Dodge Tool — lighten areas',
+      shortcut: 'O',
+      icon: <SunMedium size={18} className="text-amber-300" />,
+    },
+    {
+      id: 'burn',
+      label: 'Burn Tool — darken areas',
+      shortcut: 'Shift+O',
+      icon: <Moon size={18} className="text-amber-500" />,
     },
     {
       id: 'refineBrush',
@@ -147,6 +204,17 @@ export const ToolsPanel: React.FC = () => {
       label: 'Spot Healing Brush (Remove Blemishes)',
       shortcut: 'J',
       icon: <Bandage size={18} className="text-orange-400" />,
+    },
+    {
+      id: 'healing',
+      label: 'Healing Brush — Alt+Click to set source',
+      shortcut: 'Shift+J',
+      icon: <Bandage size={18} className="text-orange-300" />,
+    },
+    {
+      id: 'patch',
+      label: 'Patch Tool — select area, drag to source',
+      icon: <BoxSelect size={18} className="text-orange-300" />,
     },
     {
       id: 'clone',
@@ -196,6 +264,19 @@ export const ToolsPanel: React.FC = () => {
       separator: true,
     },
     {
+      id: 'liquify',
+      label: 'Liquify — push pixels',
+      shortcut: 'Shift+X',
+      icon: <Waves size={18} className="text-teal-300" />,
+      separator: true,
+    },
+    {
+      id: 'transform',
+      label: 'Transform — free, skew, distort, perspective, warp',
+      shortcut: 'Shift+T',
+      icon: <Move3d size={18} className="text-teal-300" />,
+    },
+    {
       id: 'hand',
       label: 'Hand Tool (Pan)',
       shortcut: 'H',
@@ -215,6 +296,17 @@ export const ToolsPanel: React.FC = () => {
       separator: true,
     },
   ];
+
+  // Flyouts anchor to their tool button: 36px button + 2px gap per row, 9px per separator.
+  const flyoutTop = (id: ToolItem['id']) => {
+    let top = 0;
+    for (const t of tools) {
+      if (t.separator) top += 9;
+      if (t.id === id) return top;
+      top += 38;
+    }
+    return top - scrollTop;
+  };
 
   const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
     { type: 'rectangle', label: 'Rectangle', icon: <Square size={14} /> },
@@ -276,7 +368,14 @@ export const ToolsPanel: React.FC = () => {
         className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between"
         data-tour="tour-tools"
       >
-        <div className="flex flex-col items-center gap-0.5 w-full px-1.5 relative">
+        <div className="relative flex-1 min-h-0 w-full">
+        <div
+          onScroll={(e) => {
+            setScrollTop(e.currentTarget.scrollTop);
+            setHoverTip(null);
+          }}
+          className="tools-scroll h-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-0.5 w-full px-1.5 pb-2"
+        >
           {tools.map((tool) => {
             const isActive =
               tool.id === 'marqueeMenu'
@@ -288,10 +387,22 @@ export const ToolsPanel: React.FC = () => {
             return (
               <React.Fragment key={tool.id}>
                 {tool.separator && <div className="w-6 h-[1px] bg-[var(--border-subtle)] my-1" />}
-                <div className="relative group w-full flex justify-center">
+                <div
+                  className="relative group w-full flex justify-center"
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setHoverTip({
+                      label: tool.label,
+                      shortcut: tool.shortcut,
+                      top: r.top + r.height / 2,
+                      left: r.right + 8,
+                    });
+                  }}
+                  onMouseLeave={() => setHoverTip(null)}
+                >
                   <button
                     onClick={() => handleToolClick(tool.id)}
-                    title={`${tool.label} (${tool.shortcut})`}
+                    aria-label={tool.label}
                     className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
                       isActive
                         ? 'tool-btn-active bg-[var(--accent)] text-[#1a1208]'
@@ -301,23 +412,19 @@ export const ToolsPanel: React.FC = () => {
                     {tool.icon}
                   </button>
 
-                  <div className="absolute left-full ml-2 px-2.5 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-[var(--radius-sm)] shadow-xl whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 flex items-center gap-2">
-                    <span>{tool.label}</span>
-                    <span className="text-[10px] font-mono-ui text-[var(--text-faint)] bg-[var(--bg-app)] px-1 rounded">
-                      {tool.shortcut}
-                    </span>
-                  </div>
                 </div>
               </React.Fragment>
             );
           })}
+        </div>
 
           <AnimatedMenu
             open={showBrushMenu}
             onClose={() => setShowBrushMenu(false)}
             origin="left"
             widthClass="w-56"
-            className="left-full top-36 ml-2 !py-2 px-2 flex flex-col gap-2"
+            className="left-full ml-2 !py-2 px-2 flex flex-col gap-2"
+            style={{ top: flyoutTop('brushMenu') }}
             closeOnLeave={false}
           >
             <MenuLabel>Brush color</MenuLabel>
@@ -363,7 +470,8 @@ export const ToolsPanel: React.FC = () => {
             onClose={() => setShowMarqueeMenu(false)}
             origin="left"
             widthClass="w-44"
-            className="left-full top-12 ml-2"
+            className="left-full ml-2"
+            style={{ top: flyoutTop('marqueeMenu') }}
             closeOnLeave={false}
           >
             <MenuLabel>Marquee</MenuLabel>
@@ -400,7 +508,8 @@ export const ToolsPanel: React.FC = () => {
             onClose={() => setShowShapeMenu(false)}
             origin="left"
             widthClass="w-44 max-h-[70vh] overflow-y-auto"
-            className="left-full top-64 ml-2"
+            className="left-full ml-2"
+            style={{ top: flyoutTop('shape') }}
             closeOnLeave={false}
           >
             <MenuLabel>Shape</MenuLabel>
@@ -425,7 +534,10 @@ export const ToolsPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-col items-center gap-2 pb-2">
-          {(activeTool === 'eyedropper' || activeTool === 'brush' || activeTool === 'fill') && (
+          {(activeTool === 'eyedropper' ||
+            activeTool === 'brush' ||
+            activeTool === 'fill' ||
+            activeTool === 'gradient') && (
             <div
               className="w-7 h-7 rounded-md border-2 border-[var(--accent)] shadow-lg"
               style={{ backgroundColor: brushSettings.color }}
@@ -476,6 +588,20 @@ export const ToolsPanel: React.FC = () => {
           </div>
         </div>
       </aside>
+
+      {hoverTip && (
+        <div
+          className="fixed z-[300] -translate-y-1/2 px-2.5 py-1 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] text-[var(--text-primary)] text-xs rounded-[var(--radius-sm)] shadow-xl whitespace-nowrap pointer-events-none flex items-center gap-2"
+          style={{ top: hoverTip.top, left: hoverTip.left }}
+        >
+          <span>{hoverTip.label}</span>
+          {hoverTip.shortcut && (
+            <span className="text-[10px] font-mono-ui text-[var(--text-faint)] bg-[var(--bg-app)] px-1 rounded">
+              {hoverTip.shortcut}
+            </span>
+          )}
+        </div>
+      )}
 
       {isBeforeAfterOpen && <BeforeAfterSlider onClose={() => setBeforeAfterOpen(false)} />}
     </>

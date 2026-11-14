@@ -14,6 +14,8 @@ import { SettingsModal } from '../components/modals/SettingsModal';
 import { NewCanvasModal } from '../components/modals/NewCanvasModal';
 import { ShortcutsModal } from '../components/modals/ShortcutsModal';
 import { ImageSizeModal } from '../components/modals/ImageSizeModal';
+import { StockPickerModal } from '../components/modals/StockPickerModal';
+import { ExifModal } from '../components/modals/ExifModal';
 import {
   OnboardingTour,
   useAutoStartOnboarding,
@@ -65,6 +67,8 @@ function EditorShell() {
       <SettingsModal />
       <NewCanvasModal />
       <ImageSizeModal />
+      <StockPickerModal />
+      <ExifModal />
       <ShortcutsModal />
       <OnboardingTour />
       <FloatingAIStatusToast />

@@ -20,7 +20,17 @@ export type {
   AssetResponseDto,
   GoogleFontItem,
   GoogleFontsResponseDto,
+  StockProvider,
+  StockPhotoItem,
+  StockSearchResponseDto,
+  StockFetchResponseDto,
 } from './api.types';
 export type * from './editor.types';
-export { DEFAULT_PEN_SETTINGS } from './editor.types';
+export {
+  DEFAULT_PEN_SETTINGS,
+  DEFAULT_SHAPE_SETTINGS,
+  DEFAULT_TEXT_SETTINGS,
+  DEFAULT_GRADIENT_SETTINGS,
+  DEFAULT_TONE_BRUSH,
+} from './editor.types';
 
