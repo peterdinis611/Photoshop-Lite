@@ -11,6 +11,8 @@ import {
   X,
   Sparkles,
   Move,
+  RotateCw,
+  RotateCcw,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ColorField } from '../ui/ColorField';
@@ -25,6 +27,8 @@ export const OptionsBar: React.FC = () => {
     setActiveShapeType,
     brushSettings,
     updateBrushSettings,
+    penSettings,
+    updatePenSettings,
     cropSettings,
     setCropSettings,
     applyCrop,
@@ -78,6 +82,7 @@ export const OptionsBar: React.FC = () => {
     blur: 'Blur',
     text: 'Type',
     shape: 'Shape',
+    pen: 'Pen',
     hand: 'Hand',
     zoom: 'Zoom',
   };
@@ -276,6 +281,11 @@ export const OptionsBar: React.FC = () => {
               </span>
             </>
           )}
+          {activeTool === 'eraser' && (
+            <span className="text-[var(--text-faint)]">
+              Image layer → erase pixels · drawing layer → erase strokes
+            </span>
+          )}
         </div>
       )}
 
@@ -361,6 +371,9 @@ export const OptionsBar: React.FC = () => {
             />
             <span className="font-mono-ui text-[var(--text-primary)]">{brushSettings.size}px</span>
           </label>
+          <span className="text-[var(--text-faint)]">
+            Select image · mask is created automatically if missing
+          </span>
         </div>
       )}
 
@@ -393,6 +406,67 @@ export const OptionsBar: React.FC = () => {
             </button>
           ))}
           <div className="h-3.5 w-px bg-[var(--border-subtle)] mx-1" />
+          <span className="text-[var(--text-faint)]">Rotate</span>
+          <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
+            <button
+              type="button"
+              title="Rotate 90° CCW"
+              disabled={!selectedLayer}
+              onClick={() => {
+                if (!selectedLayer) return;
+                const next = ((selectedLayer.rotation - 90) % 360 + 360) % 360;
+                updateLayer(selectedLayer.id, { rotation: next });
+                setCropSettings({ rotation: next });
+              }}
+              className="p-1 rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-40"
+            >
+              <RotateCcw size={13} />
+            </button>
+            <button
+              type="button"
+              title="Rotate 90° CW"
+              disabled={!selectedLayer}
+              onClick={() => {
+                if (!selectedLayer) return;
+                const next = ((selectedLayer.rotation + 90) % 360 + 360) % 360;
+                updateLayer(selectedLayer.id, { rotation: next });
+                setCropSettings({ rotation: next });
+              }}
+              className="p-1 rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)] disabled:opacity-40"
+            >
+              <RotateCw size={13} />
+            </button>
+          </div>
+          <label className="flex items-center gap-1.5">
+            <span className="text-[var(--text-faint)]">Straighten</span>
+            <input
+              type="range"
+              min={-45}
+              max={45}
+              step={1}
+              value={(() => {
+                if (!selectedLayer) return 0;
+                const base90 = Math.round(selectedLayer.rotation / 90) * 90;
+                return Math.max(-45, Math.min(45, selectedLayer.rotation - base90));
+              })()}
+              disabled={!selectedLayer}
+              onChange={(e) => {
+                if (!selectedLayer) return;
+                const base90 = Math.round(selectedLayer.rotation / 90) * 90;
+                const next = base90 + Number(e.target.value);
+                updateLayer(selectedLayer.id, { rotation: next });
+                setCropSettings({ rotation: next });
+              }}
+              className="w-24 cursor-pointer disabled:opacity-40"
+            />
+            <span className="font-mono-ui w-8 text-[var(--text-primary)]">
+              {selectedLayer
+                ? Math.round(selectedLayer.rotation - Math.round(selectedLayer.rotation / 90) * 90)
+                : 0}
+              °
+            </span>
+          </label>
+          <div className="h-3.5 w-px bg-[var(--border-subtle)] mx-1" />
           <button
             onClick={() => void applyCrop()}
             className="flex items-center gap-1 px-2 py-0.5 bg-[var(--success)] text-[#0b0c0f] rounded-[var(--radius-sm)] font-semibold cursor-pointer"
@@ -410,6 +484,9 @@ export const OptionsBar: React.FC = () => {
 
       {(activeTool === 'text' || selectedLayer?.type === 'text') && (
         <div className="flex items-center gap-2.5">
+          {activeTool === 'text' && selectedLayer?.type !== 'text' && (
+            <span className="text-[var(--text-faint)] italic">Click canvas to place text</span>
+          )}
           <FontPicker
             value={selectedLayer?.type === 'text' ? selectedLayer.fontFamily : 'Source Sans 3'}
             onChange={async (family) => {
@@ -520,6 +597,54 @@ export const OptionsBar: React.FC = () => {
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {activeTool === 'pen' && (
+        <div className="flex items-center gap-3">
+          <span className="text-[var(--text-faint)]">Stroke</span>
+          <ColorField
+            size="sm"
+            showPresets={false}
+            value={penSettings.stroke}
+            onChange={(hex) => updatePenSettings({ stroke: hex })}
+          />
+          <label className="flex items-center gap-1.5">
+            <span className="text-[var(--text-faint)]">Weight</span>
+            <DebouncedRange
+              min={1}
+              max={24}
+              step={1}
+              value={penSettings.strokeWidth}
+              onCommit={(strokeWidth) => updatePenSettings({ strokeWidth })}
+              className="w-20 cursor-pointer"
+            />
+            <span className="font-mono-ui w-5 text-[var(--text-primary)]">{penSettings.strokeWidth}</span>
+          </label>
+          <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
+          <span className="text-[var(--text-faint)]">Fill</span>
+          <ColorField
+            size="sm"
+            showPresets={false}
+            value={penSettings.fill === 'transparent' ? '#00000000' : penSettings.fill}
+            onChange={(hex) => updatePenSettings({ fill: hex })}
+          />
+          <button
+            type="button"
+            onClick={() => updatePenSettings({ fill: 'transparent' })}
+            className={`px-2 py-0.5 rounded-[var(--radius-sm)] text-[10px] border cursor-pointer ${
+              penSettings.fill === 'transparent'
+                ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
+                : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)]'
+            }`}
+          >
+            None
+          </button>
+          <div className="h-3.5 w-px bg-[var(--border-subtle)]" />
+          <span className="text-[var(--text-faint)] italic">
+            Click · drag curves · first point closes · <kbd className="text-[var(--accent-hot)]">Enter</kbd> finish ·{' '}
+            <kbd className="text-[var(--accent-hot)]">Esc</kbd> cancel
+          </span>
         </div>
       )}
 
@@ -657,7 +782,12 @@ export const OptionsBar: React.FC = () => {
             </span>
           </label>
           {activeTool === 'clone' && (
-            <span className="text-[var(--text-faint)]">Alt+click to set source</span>
+            <span className="text-[var(--text-faint)]">Alt+click source · drag to paint</span>
+          )}
+          {activeTool === 'spotHealing' && (
+            <span className="text-[var(--text-faint)]">
+              Select image layer · drag over blemishes
+            </span>
           )}
         </div>
       )}

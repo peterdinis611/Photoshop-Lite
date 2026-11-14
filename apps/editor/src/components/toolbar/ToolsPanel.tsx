@@ -29,11 +29,13 @@ import {
   ChevronRight,
   PaintBucket,
   Droplets,
+  PenTool,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ToolType, ShapeType } from '../../types/editor';
 import { BeforeAfterSlider } from '../canvas/BeforeAfterSlider';
 import { ColorField } from '../ui/ColorField';
+import { AnimatedMenu, MenuLabel } from '../ui/AnimatedMenu';
 
 interface ToolItem {
   id: ToolType | 'beforeAfter' | 'marqueeMenu' | 'brushMenu';
@@ -54,8 +56,6 @@ export const ToolsPanel: React.FC = () => {
     setActiveShapeType,
     brushSettings,
     updateBrushSettings,
-    addTextLayer,
-    addShapeLayer,
     marqueeMode,
     setMarqueeMode,
     secondaryColor,
@@ -168,6 +168,12 @@ export const ToolsPanel: React.FC = () => {
       icon: <Type size={18} />,
     },
     {
+      id: 'pen',
+      label: 'Pen Tool — click for corners, drag for curves',
+      shortcut: 'P',
+      icon: <PenTool size={18} className="text-[var(--accent-hot)]" />,
+    },
+    {
       id: 'shape',
       label: 'Shape Tool',
       shortcut: 'U',
@@ -251,7 +257,6 @@ export const ToolsPanel: React.FC = () => {
       return;
     }
     if (toolId === 'text') {
-      addTextLayer();
       closeMenus();
       setActiveTool('text');
     } else if (toolId === 'shape') {
@@ -307,110 +312,116 @@ export const ToolsPanel: React.FC = () => {
             );
           })}
 
-          {showBrushMenu && (
-            <div className="menu-flyout absolute left-full top-36 ml-2 w-56 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-2 z-50 flex flex-col gap-2">
-              <div className="px-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
-                Brush color
-              </div>
+          <AnimatedMenu
+            open={showBrushMenu}
+            onClose={() => setShowBrushMenu(false)}
+            origin="left"
+            widthClass="w-56"
+            className="left-full top-36 ml-2 !py-2 px-2 flex flex-col gap-2"
+            closeOnLeave={false}
+          >
+            <MenuLabel>Brush color</MenuLabel>
+            <div className="px-1 relative z-[1]">
               <ColorField
                 value={brushSettings.color}
                 onChange={(hex) => updateBrushSettings({ color: hex })}
               />
-              <div className="flex gap-1 flex-wrap px-0.5">
-                {QUICK_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    title={c}
-                    onClick={() => updateBrushSettings({ color: c })}
-                    className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer"
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-              <div className="px-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
-                Size
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                {BRUSH_SIZES.map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => updateBrushSettings({ size })}
-                    className={`px-2 py-1 rounded-[var(--radius-sm)] text-[10px] font-mono-ui cursor-pointer border ${
-                      brushSettings.size === size
-                        ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
-                        : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-muted)]'
-                    }`}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
             </div>
-          )}
-
-          {showMarqueeMenu && (
-            <div className="menu-flyout absolute left-full top-12 ml-2 w-44 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
-              <div className="px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
-                Marquee
-              </div>
-              <button
-                onClick={() => {
-                  setMarqueeMode('rect');
-                  setActiveTool('marquee');
-                  setShowMarqueeMenu(false);
-                }}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-xs text-left cursor-pointer ${
-                  marqueeMode === 'rect'
-                    ? 'bg-[var(--accent)] text-[#1a1208] font-semibold'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]'
-                }`}
-              >
-                <Square size={14} /> Rectangular
-              </button>
-              <button
-                onClick={() => {
-                  setMarqueeMode('ellipse');
-                  setActiveTool('marquee');
-                  setShowMarqueeMenu(false);
-                }}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-xs text-left cursor-pointer ${
-                  marqueeMode === 'ellipse'
-                    ? 'bg-[var(--accent)] text-[#1a1208] font-semibold'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]'
-                }`}
-              >
-                <Ellipse size={14} /> Elliptical
-              </button>
-            </div>
-          )}
-
-          {showShapeMenu && (
-            <div className="menu-flyout absolute left-full top-64 ml-2 w-44 max-h-[70vh] overflow-y-auto bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl p-1 z-50 flex flex-col gap-0.5">
-              <div className="px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] uppercase tracking-wider font-mono-ui">
-                Shape
-              </div>
-              {shapes.map((s) => (
+            <div className="flex gap-1 flex-wrap px-1 relative z-[1]">
+              {QUICK_COLORS.map((c) => (
                 <button
-                  key={s.type}
-                  onClick={() => {
-                    setActiveShapeType(s.type);
-                    addShapeLayer(s.type);
-                    setShowShapeMenu(false);
-                  }}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-[var(--radius-sm)] text-xs text-left cursor-pointer ${
-                    activeShapeType === s.type
-                      ? 'bg-[var(--accent)] text-[#1a1208] font-semibold'
-                      : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+                  key={c}
+                  type="button"
+                  title={c}
+                  onClick={() => updateBrushSettings({ color: c })}
+                  className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer"
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+            <MenuLabel>Size</MenuLabel>
+            <div className="flex gap-1 flex-wrap px-1 relative z-[1]">
+              {BRUSH_SIZES.map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => updateBrushSettings({ size })}
+                  className={`px-2 py-1 rounded-[var(--radius-sm)] text-[10px] font-mono-ui cursor-pointer border ${
+                    brushSettings.size === size
+                      ? 'bg-[var(--accent)] text-[#1a1208] border-transparent'
+                      : 'bg-[var(--bg-app)] border-[var(--border-subtle)] text-[var(--text-muted)]'
                   }`}
                 >
-                  {s.icon}
-                  <span>{s.label}</span>
+                  {size}
                 </button>
               ))}
             </div>
-          )}
+          </AnimatedMenu>
+
+          <AnimatedMenu
+            open={showMarqueeMenu}
+            onClose={() => setShowMarqueeMenu(false)}
+            origin="left"
+            widthClass="w-44"
+            className="left-full top-12 ml-2"
+            closeOnLeave={false}
+          >
+            <MenuLabel>Marquee</MenuLabel>
+            <button
+              type="button"
+              onClick={() => {
+                setMarqueeMode('rect');
+                setActiveTool('marquee');
+                setShowMarqueeMenu(false);
+              }}
+              className={`menu-item ${marqueeMode === 'rect' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <Square size={14} /> Rectangular
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMarqueeMode('ellipse');
+                setActiveTool('marquee');
+                setShowMarqueeMenu(false);
+              }}
+              className={`menu-item ${marqueeMode === 'ellipse' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <Ellipse size={14} /> Elliptical
+              </span>
+            </button>
+          </AnimatedMenu>
+
+          <AnimatedMenu
+            open={showShapeMenu}
+            onClose={() => setShowShapeMenu(false)}
+            origin="left"
+            widthClass="w-44 max-h-[70vh] overflow-y-auto"
+            className="left-full top-64 ml-2"
+            closeOnLeave={false}
+          >
+            <MenuLabel>Shape</MenuLabel>
+            {shapes.map((s) => (
+              <button
+                key={s.type}
+                type="button"
+                onClick={() => {
+                  setActiveShapeType(s.type);
+                  setActiveTool('shape');
+                  setShowShapeMenu(false);
+                }}
+                className={`menu-item ${activeShapeType === s.type ? 'menu-item--active' : ''}`}
+              >
+                <span className="menu-item-label">
+                  {s.icon}
+                  <span>{s.label}</span>
+                </span>
+              </button>
+            ))}
+          </AnimatedMenu>
         </div>
 
         <div className="flex flex-col items-center gap-2 pb-2">

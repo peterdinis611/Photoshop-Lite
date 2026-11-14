@@ -321,6 +321,7 @@ export function useEditorHotkeys(options: {
       tool('S', 'clone', 'Clone Stamp'),
       tool('I', 'eyedropper', 'Eyedropper'),
       tool('T', 'text', 'Type'),
+      tool('P', 'pen', 'Pen'),
       tool('U', 'shape', 'Shape'),
       tool('H', 'hand', 'Hand'),
       tool('Z', 'zoom', 'Zoom'),

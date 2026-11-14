@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useEffectEvent, useState, useCallback } from 'react';
-import { Stage, Layer, FastLayer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge } from 'react-konva';
+import { Stage, Layer, FastLayer, Transformer, Rect, Line, Ellipse, Arrow, Circle, Star, RegularPolygon, Arc, Ring, Wedge, Path as KonvaPath } from 'react-konva';
 import Konva from 'konva';
 import { useAsyncThrottledCallback, useThrottledCallback } from '@tanstack/react-pacer';
 import { registerStage, listeningPolicy } from '@photoshop-lite/editor-konva';
@@ -8,6 +8,7 @@ import { ImageLayerItem } from './ImageLayerItem';
 import { TextLayerItem } from './TextLayerItem';
 import { ShapeLayerItem } from './ShapeLayerItem';
 import { DrawingLayerItem } from './DrawingLayerItem';
+import { PathLayerItem } from './PathLayerItem';
 import { CanvasRulers } from './CanvasRulers';
 import { Check, X } from 'lucide-react';
 import {
@@ -17,8 +18,9 @@ import {
   floodFillImage,
   applyBlurSpotToImage,
 } from '../../utils/retouchHelpers';
-import { paintStrokeOnMask, magicWandBounds } from '../../utils/maskHelpers';
-import type { ShapeType } from '../../types/editor';
+import { paintStrokeOnMask, eraseStrokeOnImage, magicWandBounds } from '../../utils/maskHelpers';
+import type { PathAnchor, ShapeType } from '../../types/editor';
+import { anchorsToSvgPath, dist } from '../../utils/pathHelpers';
 
 interface CanvasStageProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -44,6 +46,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     activeTool,
     activeShapeType,
     brushSettings,
+    penSettings,
     cropSettings,
     layers,
     selectedLayerId,
@@ -53,6 +56,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     updateLayer,
     addDrawingStroke,
     addShapeLayer,
+    addPathLayer,
+    addTextLayer,
     setCropSettings,
     applyCrop,
     cancelCrop,
@@ -62,6 +67,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     marqueeMode,
     wandTolerance,
     paintLayerMask,
+    toggleLayerMask,
     commitHistory,
   } = useEditorStore();
 
@@ -114,6 +120,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
   // Clone Stamp state
   const [cloneSource, setCloneSource] = useState<{ x: number; y: number } | null>(null);
+  const [isCloning, setIsCloning] = useState(false);
+  const cloneOffsetRef = useRef<{ x: number; y: number } | null>(null);
 
   // Spot Healing state
   const [isHealing, setIsHealing] = useState(false);
@@ -121,8 +129,25 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
   // Blur tool state
   const [isBlurring, setIsBlurring] = useState(false);
 
+  // Pen tool draft (document-space anchors)
+  const [penAnchors, setPenAnchors] = useState<PathAnchor[]>([]);
+  const penDraggingRef = useRef(false);
+  const [penCursor, setPenCursor] = useState<{ x: number; y: number } | null>(null);
+
   // Eyedropper cursor color preview
   const [eyedropperPreview, setEyedropperPreview] = useState<string | null>(null);
+
+  const commitPenPath = useEffectEvent((closed: boolean) => {
+    if (penAnchors.length < 2) {
+      setPenAnchors([]);
+      penDraggingRef.current = false;
+      return;
+    }
+    addPathLayer(penAnchors, closed);
+    setPenAnchors([]);
+    penDraggingRef.current = false;
+    setPenCursor(null);
+  });
 
   // Resize observer for container
   useEffect(() => {
@@ -142,13 +167,32 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     return () => observer.disconnect();
   }, [containerRef]);
 
-  // Space key listener for hand/pan
-  // Space / Shift key listener for hand/pan and transform ratio
+  // Clear in-progress pen when leaving the tool
+  useEffect(() => {
+    if (activeTool !== 'pen') {
+      setPenAnchors([]);
+      penDraggingRef.current = false;
+      setPenCursor(null);
+    }
+  }, [activeTool]);
+
+  // Space / Shift / Pen Enter·Esc
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setKeepRatio(true);
       if (e.code === 'Space' && !e.repeat && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
         setIsSpacePressed(true);
+      }
+      if (activeTool === 'pen') {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitPenPath(false);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setPenAnchors([]);
+          penDraggingRef.current = false;
+          setPenCursor(null);
+        }
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -165,7 +209,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [activeTool]);
+  }, [activeTool, commitPenPath]);
 
   // Update Transformer selection (Effect Event keeps latest ids without rebinding)
   const syncTransformer = useEffectEvent(() => {
@@ -277,6 +321,53 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     { wait: 50, leading: true, trailing: true }
   );
 
+  const applyHealThrottled = useAsyncThrottledCallback(
+    async (coords: { x: number; y: number }) => {
+      const imageLayer = getSelectedImageLayer();
+      if (!imageLayer) return;
+      const { brushSettings: brush } = useEditorStore.getState();
+      const fresh = useEditorStore.getState().layers.find((l) => l.id === imageLayer.id);
+      if (!fresh || fresh.type !== 'image') return;
+      const newSrc = await applySpotHealingToImage(
+        fresh.src,
+        fresh.x,
+        fresh.y,
+        coords.x,
+        coords.y,
+        brush.size / 2
+      );
+      updateLayer(fresh.id, { src: newSrc });
+    },
+    { wait: 60, leading: true, trailing: true }
+  );
+
+  const applyCloneThrottled = useAsyncThrottledCallback(
+    async (coords: { x: number; y: number }) => {
+      const imageLayer = getSelectedImageLayer();
+      const offset = cloneOffsetRef.current;
+      if (!imageLayer || !offset) return;
+      const { brushSettings: brush } = useEditorStore.getState();
+      const fresh = useEditorStore.getState().layers.find((l) => l.id === imageLayer.id);
+      if (!fresh || fresh.type !== 'image') return;
+      const srcX = coords.x - offset.x;
+      const srcY = coords.y - offset.y;
+      const newSrc = await applyCloneStampToImage(
+        fresh.src,
+        fresh.x,
+        fresh.y,
+        srcX,
+        srcY,
+        coords.x,
+        coords.y,
+        brush.size / 2,
+        brush.opacity
+      );
+      updateLayer(fresh.id, { src: newSrc });
+      setCloneSource({ x: srcX, y: srcY });
+    },
+    { wait: 50, leading: true, trailing: true }
+  );
+
   // Perform eyedropper sampling using an off-screen canvas render
   const performEyedropperSample = useCallback(
     async (canvasX: number, canvasY: number) => {
@@ -352,7 +443,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           clickX: coords.x,
           clickY: coords.y,
           fillColor: brushSettings.color,
-          tolerance: 32,
+          tolerance: wandTolerance,
         });
         if (filled) {
           updateLayer(imageLayer.id, { src: filled });
@@ -368,50 +459,35 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       return;
     }
 
-    // Spot Healing Brush
+    // Spot Healing Brush — click/drag
     if (activeTool === 'spotHealing') {
-      const imageLayer = getSelectedImageLayer();
-      if (imageLayer && !isHealing) {
-        setIsHealing(true);
-        const newSrc = await applySpotHealingToImage(
-          imageLayer.src,
-          imageLayer.x,
-          imageLayer.y,
-          coords.x,
-          coords.y,
-          brushSettings.size / 2
-        );
-        updateLayer(imageLayer.id, { src: newSrc });
-        setIsHealing(false);
-      }
+      if (!getSelectedImageLayer()) return;
+      setIsHealing(true);
+      void applyHealThrottled(coords);
       return;
     }
 
-    // Clone Stamp
+    // Clone Stamp — Alt+click source, then drag to paint
     if (activeTool === 'clone') {
       if (e.evt.altKey) {
-        // Alt+Click: set clone source
         setCloneSource({ x: coords.x, y: coords.y });
         updateBrushSettings({ cloneSource: { x: coords.x, y: coords.y } });
         return;
       }
-      if (cloneSource) {
-        const imageLayer = getSelectedImageLayer();
-        if (imageLayer) {
-          const newSrc = await applyCloneStampToImage(
-            imageLayer.src,
-            imageLayer.x,
-            imageLayer.y,
-            cloneSource.x,
-            cloneSource.y,
-            coords.x,
-            coords.y,
-            brushSettings.size / 2,
-            brushSettings.opacity
-          );
-          updateLayer(imageLayer.id, { src: newSrc });
-        }
+      if (cloneSource && getSelectedImageLayer()) {
+        cloneOffsetRef.current = {
+          x: coords.x - cloneSource.x,
+          y: coords.y - cloneSource.y,
+        };
+        setIsCloning(true);
+        void applyCloneThrottled(coords);
       }
+      return;
+    }
+
+    // Type tool — click to place text
+    if (activeTool === 'text') {
+      addTextLayer({ x: coords.x, y: coords.y });
       return;
     }
 
@@ -436,6 +512,22 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       setIsCreatingShape(true);
       shapeStartRef.current = { x: coords.x, y: coords.y };
       setShapePreviewBox({ x: coords.x, y: coords.y, width: 0, height: 0, x2: coords.x, y2: coords.y });
+      return;
+    }
+
+    // Pen tool — click to place anchors, drag for smooth handles, click first to close
+    if (activeTool === 'pen') {
+      if (
+        penAnchors.length >= 2 &&
+        dist(coords.x, coords.y, penAnchors[0].x, penAnchors[0].y) <= penSettings.closeThreshold
+      ) {
+        commitPenPath(true);
+        return;
+      }
+
+      const next: PathAnchor = { x: coords.x, y: coords.y };
+      setPenAnchors((prev) => [...prev, next]);
+      penDraggingRef.current = true;
       return;
     }
 
@@ -493,6 +585,14 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
     if (activeTool === 'blur' && isBlurring) {
       void applyBlurThrottled(coords);
+    }
+
+    if (activeTool === 'spotHealing' && isHealing) {
+      void applyHealThrottled(coords);
+    }
+
+    if (activeTool === 'clone' && isCloning) {
+      void applyCloneThrottled(coords);
     }
 
     // Eyedropper: show color preview while hovering
@@ -562,11 +662,42 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
         setLassoPreview([...lassoPreview, coords.x, coords.y]);
       }
     }
+
+    // Pen rubber-band + handle drag
+    if (activeTool === 'pen') {
+      setPenCursor(coords);
+      if (penDraggingRef.current && penAnchors.length > 0) {
+        const idx = penAnchors.length - 1;
+        const anchor = penAnchors[idx];
+        const outX = coords.x - anchor.x;
+        const outY = coords.y - anchor.y;
+        setPenAnchors((prev) =>
+          prev.map((a, i) =>
+            i === idx
+              ? {
+                  ...a,
+                  handleOutX: outX,
+                  handleOutY: outY,
+                  handleInX: -outX,
+                  handleInY: -outY,
+                }
+              : a
+          )
+        );
+      }
+    }
   };
 
   const handleMouseUp = async () => {
     if (isBlurring) {
       setIsBlurring(false);
+    }
+    if (isHealing) {
+      setIsHealing(false);
+    }
+    if (isCloning) {
+      setIsCloning(false);
+      cloneOffsetRef.current = null;
     }
     if (isPanning) {
       setIsPanning(false);
@@ -579,41 +710,80 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       currentStrokeRef.current = null;
       setPreviewStroke(null);
 
-      // Refine brush on a masked image → paint the layer mask
       const imageLayer = getSelectedImageLayer();
-      if (
-        activeTool === 'refineBrush' &&
-        imageLayer?.hasLayerMask &&
-        imageLayer.layerMaskSrc
-      ) {
-        commitHistory('Paint Layer Mask');
-        const newMask = await paintStrokeOnMask({
-          maskSrc: imageLayer.layerMaskSrc,
+
+      // Refine brush → paint (or auto-create) layer mask
+      if (activeTool === 'refineBrush' && imageLayer) {
+        if (!imageLayer.hasLayerMask || !imageLayer.layerMaskSrc) {
+          toggleLayerMask(imageLayer.id);
+        }
+        const masked = useEditorStore.getState().layers.find((l) => l.id === imageLayer.id);
+        const maskSrc =
+          masked?.type === 'image' && masked.hasLayerMask ? masked.layerMaskSrc : undefined;
+        if (maskSrc) {
+          commitHistory('Paint Layer Mask');
+          const newMask = await paintStrokeOnMask({
+            maskSrc,
+            layerX: imageLayer.x,
+            layerY: imageLayer.y,
+            layerWidth: imageLayer.width,
+            layerHeight: imageLayer.height,
+            points: stroke.points,
+            size: stroke.size,
+            erase: stroke.isEraser,
+          });
+          paintLayerMask(imageLayer.id, newMask);
+          return;
+        }
+      }
+
+      // Eraser on selected image → punch transparent pixels
+      if (activeTool === 'eraser' && imageLayer) {
+        commitHistory('Erase');
+        const newSrc = await eraseStrokeOnImage({
+          src: imageLayer.src,
           layerX: imageLayer.x,
           layerY: imageLayer.y,
           layerWidth: imageLayer.width,
           layerHeight: imageLayer.height,
           points: stroke.points,
           size: stroke.size,
-          erase: stroke.isEraser,
+          hardness: stroke.hardness,
         });
-        paintLayerMask(imageLayer.id, newMask);
-      } else {
-        const drawingLayer = layers.find((l) => l.type === 'drawing');
-        addDrawingStroke(drawingLayer?.id || 'new', stroke);
+        updateLayer(imageLayer.id, { src: newSrc });
+        return;
       }
+
+      const drawingLayer = layers.find((l) => l.type === 'drawing');
+      addDrawingStroke(drawingLayer?.id || 'new', stroke);
     }
 
     if (isCreatingShape && shapePreviewBox && shapeStartRef.current) {
       setIsCreatingShape(false);
       const { x, y, width, height, x2, y2 } = shapePreviewBox;
       const start = shapeStartRef.current;
-      if (width > 5 || height > 5 || (x2 !== undefined && y2 !== undefined)) {
+      const isClick = width <= 5 && height <= 5;
+      const isLineLike = activeShapeType === 'line' || activeShapeType === 'arrow';
+
+      if (isClick && !isLineLike) {
+        // Click to drop a default-sized shape centered on the pointer
         addShapeLayer(activeShapeType);
         setTimeout(() => {
           const currentSelected = useEditorStore.getState().selectedLayerId;
           if (!currentSelected) return;
-          const isLineLike = activeShapeType === 'line' || activeShapeType === 'arrow';
+          const size = 180;
+          updateLayer(currentSelected, {
+            x: Math.round(start.x - size / 2),
+            y: Math.round(start.y - size / 2),
+            width: size,
+            height: size,
+          });
+        }, 10);
+      } else if (width > 5 || height > 5 || (x2 !== undefined && y2 !== undefined)) {
+        addShapeLayer(activeShapeType);
+        setTimeout(() => {
+          const currentSelected = useEditorStore.getState().selectedLayerId;
+          if (!currentSelected) return;
           if (isLineLike && x2 !== undefined && y2 !== undefined) {
             const minX = Math.min(start.x, x2);
             const minY = Math.min(start.y, y2);
@@ -672,6 +842,10 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
         });
       }
       setLassoPreview(null);
+    }
+
+    if (penDraggingRef.current) {
+      penDraggingRef.current = false;
     }
   };
 
@@ -786,6 +960,17 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
                 />
               );
             }
+            if (layer.type === 'path') {
+              return (
+                <PathLayerItem
+                  key={layer.id}
+                  layer={layer}
+                  isSelected={isSelected}
+                  onSelect={() => selectLayer(layer.id)}
+                  onChange={(updates) => updateLayer(layer.id, updates)}
+                />
+              );
+            }
             return null;
           })}
         </Layer>
@@ -836,11 +1021,79 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             />
           )}
 
+          {/* Pen tool draft preview */}
+          {activeTool === 'pen' && penAnchors.length > 0 && (
+            <>
+              <KonvaPath
+                data={anchorsToSvgPath(penAnchors, false)}
+                stroke={penSettings.stroke}
+                strokeWidth={penSettings.strokeWidth}
+                fill={
+                  penSettings.fill !== 'transparent' ? penSettings.fill : undefined
+                }
+                opacity={0.9}
+                lineCap="round"
+                lineJoin="round"
+                listening={false}
+              />
+              {penCursor && penAnchors.length > 0 && !penDraggingRef.current && (
+                <Line
+                  points={[
+                    penAnchors[penAnchors.length - 1].x,
+                    penAnchors[penAnchors.length - 1].y,
+                    penCursor.x,
+                    penCursor.y,
+                  ]}
+                  stroke={penSettings.stroke}
+                  strokeWidth={Math.max(1, penSettings.strokeWidth * 0.75)}
+                  dash={[6 / zoom, 4 / zoom]}
+                  opacity={0.55}
+                  listening={false}
+                />
+              )}
+              {penAnchors.map((a, i) => (
+                <React.Fragment key={`pen-a-${i}`}>
+                  {(a.handleOutX || a.handleOutY) && (
+                    <Line
+                      points={[a.x, a.y, a.x + (a.handleOutX ?? 0), a.y + (a.handleOutY ?? 0)]}
+                      stroke="#5b8def"
+                      strokeWidth={1 / zoom}
+                      listening={false}
+                    />
+                  )}
+                  <Circle
+                    x={a.x}
+                    y={a.y}
+                    radius={i === 0 ? 6 / zoom : 4 / zoom}
+                    fill={i === 0 ? '#d4923a' : '#ece8e1'}
+                    stroke="#1a1208"
+                    strokeWidth={1 / zoom}
+                    listening={false}
+                  />
+                </React.Fragment>
+              ))}
+              {penCursor &&
+                penAnchors.length >= 2 &&
+                dist(penCursor.x, penCursor.y, penAnchors[0].x, penAnchors[0].y) <=
+                  penSettings.closeThreshold && (
+                  <Circle
+                    x={penAnchors[0].x}
+                    y={penAnchors[0].y}
+                    radius={10 / zoom}
+                    stroke="#5ecf9a"
+                    strokeWidth={2 / zoom}
+                    listening={false}
+                  />
+                )}
+            </>
+          )}
+
           {/* Spot Healing / Clone cursor ring preview */}
           {(activeTool === 'spotHealing' ||
             activeTool === 'clone' ||
             activeTool === 'brush' ||
             activeTool === 'eraser' ||
+            activeTool === 'refineBrush' ||
             activeTool === 'blur' ||
             activeTool === 'fill') &&
             cursorPos && (

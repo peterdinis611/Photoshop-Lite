@@ -15,6 +15,7 @@ import type {
   AssetUploadDto,
   AssetResponseDto,
   GoogleFontsResponseDto,
+  HealthCheckResponse,
 } from '@photoshop-lite/shared-types';
 import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
@@ -78,6 +79,10 @@ export class AiApiClient {
     }
 
     return payload as T;
+  }
+
+  getHealth(): Promise<HealthCheckResponse> {
+    return this.request<HealthCheckResponse>('/health', undefined, 'GET');
   }
 
   removeBackground(dto: RemoveBgRequestDto): Promise<RemoveBgResponseDto> {

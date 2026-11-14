@@ -22,4 +22,5 @@ export type {
   GoogleFontsResponseDto,
 } from './api.types';
 export type * from './editor.types';
+export { DEFAULT_PEN_SETTINGS } from './editor.types';
 

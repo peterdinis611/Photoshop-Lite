@@ -3,6 +3,10 @@ export interface HealthCheckResponse {
   service: string;
   version: string;
   timestamp: string;
+  /** Server has REPLICATE_API_TOKEN — cloud Lab jobs can run without a client key */
+  replicateConfigured?: boolean;
+  /** Server has REMOVE_BG_API_KEY */
+  removeBgConfigured?: boolean;
 }
 
 export interface RemoveBgRequestDto {

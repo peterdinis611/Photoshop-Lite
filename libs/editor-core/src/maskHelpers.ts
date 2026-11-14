@@ -69,6 +69,71 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
+ * Erase image pixels along a brush stroke (document-space points).
+ * Soft edge respects hardness (0 = soft, 1 = hard).
+ */
+export async function eraseStrokeOnImage(params: {
+  src: string;
+  layerX: number;
+  layerY: number;
+  layerWidth: number;
+  layerHeight: number;
+  points: number[];
+  size: number;
+  hardness?: number;
+}): Promise<string> {
+  const {
+    src,
+    layerX,
+    layerY,
+    layerWidth,
+    layerHeight,
+    points,
+    size,
+    hardness = 0.8,
+  } = params;
+
+  if (points.length < 2) return src;
+
+  const img = await loadImage(src);
+  const canvas = document.createElement('canvas');
+  canvas.width = layerWidth;
+  canvas.height = layerHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return src;
+
+  ctx.drawImage(img, 0, 0, layerWidth, layerHeight);
+
+  const r = Math.max(1, size / 2);
+  const soft = Math.max(0, Math.min(1, 1 - hardness));
+
+  // Stamp soft circles along the stroke for consistent feathering
+  for (let i = 0; i < points.length; i += 2) {
+    const lx = points[i] - layerX;
+    const ly = points[i + 1] - layerY;
+    const prevX = i >= 2 ? points[i - 2] - layerX : lx;
+    const prevY = i >= 2 ? points[i - 1] - layerY : ly;
+    const dist = Math.hypot(lx - prevX, ly - prevY);
+    const steps = Math.max(1, Math.ceil(dist / Math.max(1, r * 0.35)));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const x = prevX + (lx - prevX) * t;
+      const y = prevY + (ly - prevY) * t;
+      const grad = ctx.createRadialGradient(x, y, r * (1 - soft) * 0.55, x, y, r);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
  * Clear (make transparent) a rectangular region of an image layer.
  * Rect is in document coordinates.
  */

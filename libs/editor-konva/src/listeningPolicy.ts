@@ -58,6 +58,7 @@ export function listeningPolicy(activeTool: KonvaToolKind): ListeningPolicy {
     case 'brush':
     case 'eraser':
     case 'heal':
+    case 'spotHealing':
     case 'clone':
     case 'blur':
     case 'fill':
@@ -71,6 +72,7 @@ export function listeningPolicy(activeTool: KonvaToolKind): ListeningPolicy {
       };
     case 'text':
     case 'shape':
+    case 'pen':
       return {
         stageListening: true,
         contentListening: false,

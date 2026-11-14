@@ -12,6 +12,7 @@ import {
   Type,
   Square,
   Paintbrush,
+  PenTool,
   Plus,
   Scissors,
   Layers,
@@ -55,6 +56,13 @@ const LayerThumb: React.FC<{ layer: EditorLayer }> = ({ layer }) => {
     return (
       <div className="w-8 h-8 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)] flex items-center justify-center shrink-0">
         <Type size={12} className="text-[var(--accent-hot)]" />
+      </div>
+    );
+  }
+  if (layer.type === 'path') {
+    return (
+      <div className="w-8 h-8 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)] flex items-center justify-center shrink-0">
+        <PenTool size={12} className="text-[var(--accent-hot)]" />
       </div>
     );
   }
@@ -116,6 +124,8 @@ export const LayersPanel: React.FC = () => {
         return <Square size={11} className="text-[var(--success)]" />;
       case 'drawing':
         return <Paintbrush size={11} className="text-[var(--text-muted)]" />;
+      case 'path':
+        return <PenTool size={11} className="text-[var(--accent-hot)]" />;
       default:
         return <ImageIcon size={11} />;
     }

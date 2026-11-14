@@ -50,7 +50,13 @@ export {
   readProjectFile,
 } from './projectFile';
 
-export { paintStrokeOnMask, clearImageRect, clearImageSelection, magicWandBounds } from './maskHelpers';
+export {
+  paintStrokeOnMask,
+  eraseStrokeOnImage,
+  clearImageRect,
+  clearImageSelection,
+  magicWandBounds,
+} from './maskHelpers';
 export { selectionToMaskDataUrl } from './selectionMask';
 export {
   sampleCanvasColor,

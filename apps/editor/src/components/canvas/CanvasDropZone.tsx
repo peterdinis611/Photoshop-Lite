@@ -1,6 +1,15 @@
 import React, { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react';
-import { ImagePlus, Upload, Layers, Aperture } from 'lucide-react';
+import {
+  ImagePlus,
+  Upload,
+  Layers,
+  Aperture,
+  Type,
+  Square,
+  ClipboardPaste,
+} from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
+import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import {
   collectImageFiles,
   dragEventHasFiles,
@@ -21,9 +30,15 @@ const PHASE_LABEL: Record<LoadImageProgress['phase'], string> = {
   error: 'Skipped frame',
 };
 
+const FORMAT_CHIPS = ['PNG', 'JPEG', 'WEBP', 'GIF', 'AVIF', 'HEIC'];
+
 export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded }) => {
   const layersCount = useEditorStore((s) => s.layers.length);
   const addImageLayer = useEditorStore((s) => s.addImageLayer);
+  const addTextLayer = useEditorStore((s) => s.addTextLayer);
+  const addShapeLayer = useEditorStore((s) => s.addShapeLayer);
+  const setActiveTool = useEditorStore((s) => s.setActiveTool);
+  const setNewCanvasModalOpen = useEditorStore((s) => s.setNewCanvasModalOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -35,7 +50,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   const importFiles = useEffectEvent(async (files: File[]) => {
     const images = collectImageFiles(files);
     if (images.length === 0) {
-      setError('Drop PNG, JPEG, WEBP, or GIF files');
+      setError('Drop PNG, JPEG, WEBP, GIF, or AVIF files');
       window.setTimeout(() => setError(null), 2800);
       return;
     }
@@ -77,6 +92,25 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
     }
   });
 
+  const pasteFromClipboard = useEffectEvent(async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        const file = new File([blob], `pasted.${type.split('/')[1] || 'png'}`, { type });
+        await importFiles([file]);
+        return;
+      }
+      setError('Clipboard has no image — copy a screenshot first');
+      window.setTimeout(() => setError(null), 2800);
+    } catch {
+      setError('Clipboard paste needs permission — use Browse instead');
+      window.setTimeout(() => setError(null), 3200);
+    }
+  });
+
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {
       if (!dragEventHasFiles(e)) return;
@@ -106,15 +140,25 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       if (files?.length) void importFiles(Array.from(files));
     };
 
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.files ?? []);
+      if (files.length) {
+        e.preventDefault();
+        void importFiles(files);
+      }
+    };
+
     window.addEventListener('dragenter', onDragEnter);
     window.addEventListener('dragleave', onDragLeave);
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('drop', onDrop);
+    window.addEventListener('paste', onPaste);
     return () => {
       window.removeEventListener('dragenter', onDragEnter);
       window.removeEventListener('dragleave', onDragLeave);
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
+      window.removeEventListener('paste', onPaste);
     };
   }, []);
 
@@ -122,6 +166,13 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
     const files = e.target.files;
     if (files?.length) void importFiles(Array.from(files));
     e.target.value = '';
+  };
+
+  const loadSample = (id: string) => {
+    const sample = SAMPLE_IMAGES.find((s) => s.id === id);
+    if (!sample) return;
+    addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
+    window.setTimeout(() => onImagesAdded?.(), 140);
   };
 
   const showEmpty = isEmpty && !isDragging && !isImporting;
@@ -148,7 +199,8 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       />
 
       {showEmpty && (
-        <div className="drop-empty relative w-[min(420px,88%)] select-none">
+        <div className="drop-empty drop-empty--wide relative select-none">
+          <div className="drop-empty-orbit" aria-hidden />
           <div className="drop-empty-frame" aria-hidden />
           <div className="drop-empty-marks" aria-hidden>
             <span />
@@ -157,7 +209,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
             <span />
           </div>
 
-          <div className="relative px-8 py-10 text-center">
+          <div className="relative px-8 py-9 text-center">
             <div className="drop-empty-icon mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-[var(--accent)] shadow-[0_0_28px_var(--accent-glow)]">
               <ImagePlus size={26} strokeWidth={1.8} />
             </div>
@@ -168,9 +220,18 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
             <h2 className="mt-2 font-display text-[1.55rem] font-extrabold tracking-tight text-[var(--text-primary)]">
               Drop images here
             </h2>
-            <p className="mx-auto mt-2 max-w-[30ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
-              Large photos welcome — the document sizes to your image. PNG, JPEG, WEBP, GIF.
+            <p className="mx-auto mt-2 max-w-[34ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
+              Large photos welcome — the document sizes to your image. Or start blank and build
+              layers.
             </p>
+
+            <div className="drop-format-row">
+              {FORMAT_CHIPS.map((f) => (
+                <span key={f} className="drop-format-chip">
+                  {f}
+                </span>
+              ))}
+            </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
               <button
@@ -184,15 +245,61 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
               <button
                 type="button"
                 className="inline-flex min-h-[36px] items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-toolbar)] px-3 text-[12px] font-medium text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
-                onClick={() => useEditorStore.getState().setNewCanvasModalOpen(true)}
+                onClick={() => setNewCanvasModalOpen(true)}
               >
                 <Layers size={14} />
                 New canvas
               </button>
+              <button
+                type="button"
+                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-toolbar)] px-3 text-[12px] font-medium text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] cursor-pointer"
+                onClick={() => void pasteFromClipboard()}
+              >
+                <ClipboardPaste size={14} />
+                Paste
+              </button>
+            </div>
+
+            <div className="drop-quick-row">
+              <button
+                type="button"
+                className="drop-quick-btn"
+                onClick={() => {
+                  addTextLayer();
+                  setActiveTool('text');
+                }}
+              >
+                <Type size={13} /> Add text
+              </button>
+              <button
+                type="button"
+                className="drop-quick-btn"
+                onClick={() => {
+                  addShapeLayer('rectangle');
+                  setActiveTool('shape');
+                }}
+              >
+                <Square size={13} /> Add shape
+              </button>
+            </div>
+
+            <div className="drop-samples">
+              {SAMPLE_IMAGES.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="drop-sample-card"
+                  onClick={() => loadSample(s.id)}
+                  title={s.description}
+                >
+                  <img src={s.dataUrl} alt="" draggable={false} />
+                  <span>{s.name}</span>
+                </button>
+              ))}
             </div>
 
             <p className="mt-5 font-mono-ui text-[10px] text-[var(--text-faint)]">
-              Tip · File → Open Image · up to ~8K edge
+              Tip · File → Open Image · paste screenshot · up to ~8K edge
             </p>
           </div>
         </div>

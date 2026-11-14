@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useDebouncedCallback, useDebouncedValue } from '@tanstack/react-pacer';
 import type { GoogleFontItem } from '@photoshop-lite/shared-types';
 import { fetchGoogleFonts, loadGoogleFont } from '../../utils/googleFonts';
+import { AnimatedMenu } from './AnimatedMenu';
 
 interface FontPickerProps {
   value: string;
@@ -75,9 +76,15 @@ export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
         {value || 'Font'}
       </button>
 
-      {open && (
-        <div className="menu-flyout absolute top-full left-0 mt-1 w-64 max-h-72 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl z-50 flex flex-col overflow-hidden">
-          <div className="p-2 border-b border-[var(--border-subtle)]">
+      <AnimatedMenu
+        open={open}
+        onClose={() => setOpen(false)}
+        origin="tl"
+        widthClass="w-64 max-h-72"
+        className="top-full left-0 mt-1 !p-0 flex flex-col overflow-hidden"
+        closeOnLeave={false}
+      >
+          <div className="p-2 border-b border-[var(--border-subtle)] relative z-[1]">
             <input
               autoFocus
               value={query}
@@ -91,7 +98,7 @@ export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
                 : `${filtered.length} fonts · ${source === 'google-api' ? 'Google API' : 'fallback'} · Pacer`}
             </div>
           </div>
-          <div className="overflow-y-auto flex-1 py-1">
+          <div className="overflow-y-auto flex-1 py-1 relative z-[1]">
             {filtered.map((f) => (
               <button
                 key={f.family}
@@ -113,8 +120,7 @@ export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
               <div className="px-3 py-4 text-[11px] text-[var(--text-faint)]">No fonts match</div>
             )}
           </div>
-        </div>
-      )}
+      </AnimatedMenu>
     </div>
   );
 };

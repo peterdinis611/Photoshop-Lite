@@ -9,6 +9,8 @@ export class HealthService {
       service: 'Photoshop-Lite AI Engine (NestJS)',
       version: '2.0.0',
       timestamp: new Date().toISOString(),
+      replicateConfigured: Boolean(process.env.REPLICATE_API_TOKEN?.trim()),
+      removeBgConfigured: Boolean(process.env.REMOVE_BG_API_KEY?.trim()),
     };
   }
 }

@@ -5,10 +5,13 @@ import {
   TextLayer,
   ShapeLayer,
   DrawingLayer,
+  PathLayer,
+  PathAnchor,
   ToolType,
   ShapeType,
   BlendMode,
   BrushSettings,
+  PenSettings,
   CropSettings,
   HistorySnapshot,
   AIStatus,
@@ -16,7 +19,9 @@ import {
   ProjectFileData,
   MarqueeMode,
   SelectionShape,
+  DEFAULT_PEN_SETTINGS,
 } from '../types/editor';
+import { normalizeAnchors, pathBounds } from '../utils/pathHelpers';
 import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, bakeRelightPixels, bakePortraitPixels, bakeClarityPixels, bakeColorMatchPixels, computeOutpaintLayout, expandImageWithEdgeFill, buildOutpaintBorderMask, rasterizeImageToSize, buildProjectFile, downloadProjectFile, selectionToMaskDataUrl, type ReviveMode, type CleanupMode, type RelightMode, type PortraitMode, type ClarityMode, type OutpaintPreset } from '@photoshop-lite/editor-core';
 import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { AiJobKind, AiStylePreset, AiRelightPreset, ProjectSummaryDto } from '@photoshop-lite/shared-types';
@@ -54,6 +59,7 @@ interface EditorState {
   activeTool: ToolType;
   activeShapeType: ShapeType;
   brushSettings: BrushSettings;
+  penSettings: PenSettings;
   cropSettings: CropSettings;
   marqueeMode: MarqueeMode;
   wandTolerance: number;
@@ -100,6 +106,7 @@ interface EditorState {
   setMarqueeMode: (mode: MarqueeMode) => void;
   setWandTolerance: (tolerance: number) => void;
   updateBrushSettings: (settings: Partial<BrushSettings>) => void;
+  updatePenSettings: (settings: Partial<PenSettings>) => void;
   setCropSettings: (settings: Partial<CropSettings>) => void;
   applyCrop: () => Promise<void>;
   cancelCrop: () => void;
@@ -196,8 +203,9 @@ interface EditorState {
 
   // Actions - Layer Generators
   addImageLayer: (src: string, name?: string, naturalWidth?: number, naturalHeight?: number) => void;
-  addTextLayer: () => void;
+  addTextLayer: (position?: { x: number; y: number }) => void;
   addShapeLayer: (type?: ShapeType) => void;
+  addPathLayer: (anchors: PathAnchor[], closed?: boolean) => void;
   addDrawingStroke: (layerId: string, stroke: { points: number[]; color: string; size: number; opacity: number; isEraser: boolean }) => void;
 
   // Actions - History
@@ -263,6 +271,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     hardness: 0.8,
     refineMode: 'erase',
   },
+  penSettings: { ...DEFAULT_PEN_SETTINGS },
   cropSettings: {
     active: false,
     aspect: 'free',
@@ -403,6 +412,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   updateBrushSettings: (settings) =>
     set((state) => ({ brushSettings: { ...state.brushSettings, ...settings } })),
+
+  updatePenSettings: (settings) =>
+    set((state) => ({ penSettings: { ...state.penSettings, ...settings } })),
 
   setCropSettings: (settings) =>
     set((state) => ({ cropSettings: { ...state.cropSettings, ...settings } })),
@@ -1732,7 +1744,47 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       const started = await starters[kind]();
       if (started.fallbackToClient) {
-        throw new Error(started.message || 'Server AI unavailable — set REPLICATE_API_TOKEN');
+        // Prefer local pipelines so Lab still works without Replicate
+        if (kind === 'revive') {
+          await get().revivePhotoLayer(id, 'natural', options.intensity ?? 0.75, true);
+          set({
+            aiStatus: {
+              isProcessing: false,
+              action: null,
+              progress: 100,
+              statusText: 'Local revive (no Replicate token)',
+            },
+          });
+          return;
+        }
+        if (kind === 'cleanup') {
+          await get().cleanPhotoLayer(id, 'standard', options.intensity ?? 0.7, true);
+          set({
+            aiStatus: {
+              isProcessing: false,
+              action: null,
+              progress: 100,
+              statusText: 'Local cleanup (no Replicate token)',
+            },
+          });
+          return;
+        }
+        if (kind === 'relight') {
+          const mode = (options.relight ?? 'softbox') as RelightMode;
+          await get().relightPhotoLayer(id, mode, options.intensity ?? 0.7, true);
+          set({
+            aiStatus: {
+              isProcessing: false,
+              action: null,
+              progress: 100,
+              statusText: 'Local relight (no Replicate token)',
+            },
+          });
+          return;
+        }
+        throw new Error(
+          `${actionLabel[kind]} needs Replicate. Set REPLICATE_API_TOKEN in .env or paste an r8_ key in Lab → Keys. Local Revive / Clean / Relight / Cutout / Upscale still work offline.`
+        );
       }
 
       let resultSrc = started.imageBase64 || '';
@@ -1876,8 +1928,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }));
   },
 
-  addTextLayer: () => {
+  addTextLayer: (position) => {
     const { canvasWidth, canvasHeight } = get();
+    const width = 240;
+    const height = 60;
+    const x = position
+      ? Math.round(position.x - width / 2)
+      : Math.round(canvasWidth / 2 - width / 2);
+    const y = position
+      ? Math.round(position.y - height / 2)
+      : Math.round(canvasHeight / 2 - height / 2);
     const newLayer: TextLayer = {
       id: `${Date.now()}_txt_${Math.random().toString(36).substring(2, 6)}`,
       name: 'Text Layer',
@@ -1886,10 +1946,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       locked: false,
       opacity: 1,
       blendMode: 'source-over',
-      x: Math.round(canvasWidth / 2 - 120),
-      y: Math.round(canvasHeight / 2 - 30),
-      width: 240,
-      height: 60,
+      x,
+      y,
+      width,
+      height,
       scaleX: 1,
       scaleY: 1,
       rotation: 0,
@@ -1972,6 +2032,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       layers: [...state.layers, newLayer],
       selectedLayerId: newLayer.id,
       activeTool: 'select',
+    }));
+  },
+
+  addPathLayer: (anchors, closed = false) => {
+    if (anchors.length < 2) return;
+    const { penSettings } = get();
+    const bounds = pathBounds(anchors, Math.max(8, penSettings.strokeWidth * 2));
+    const localAnchors = normalizeAnchors(anchors, bounds.x, bounds.y);
+
+    const newLayer: PathLayer = {
+      id: `${Date.now()}_path_${Math.random().toString(36).substring(2, 6)}`,
+      name: uniqueLayerName(closed ? 'Closed Path' : 'Path', get().layers),
+      type: 'path',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchors: localAnchors,
+      closed,
+      fill: penSettings.fill,
+      stroke: penSettings.stroke,
+      strokeWidth: penSettings.strokeWidth,
+      styles: {
+        shadowColor: '#000000',
+        shadowBlur: 6,
+        shadowOffsetX: 1,
+        shadowOffsetY: 2,
+        shadowOpacity: 0.25,
+      },
+    };
+
+    get().commitHistory(closed ? 'Add Closed Path' : 'Add Path');
+    set((state) => ({
+      layers: [...state.layers, newLayer],
+      selectedLayerId: newLayer.id,
     }));
   },
 

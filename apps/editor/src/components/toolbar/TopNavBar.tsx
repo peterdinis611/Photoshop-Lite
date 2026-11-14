@@ -36,6 +36,10 @@ import {
   Scaling,
   Pencil,
   Crop,
+  RotateCw,
+  RotateCcw,
+  ClipboardPaste,
+  Type,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
@@ -44,6 +48,12 @@ import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import type { ReviveMode } from '../../utils/photoRevive';
 import type { CleanupMode } from '../../utils/photoCleanup';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
+import {
+  AnimatedMenu,
+  MenuItem as Item,
+  MenuLabel as Label,
+  MenuSep as Sep,
+} from '../ui/AnimatedMenu';
 
 interface TopNavBarProps {
   onFitToScreen: () => void;
@@ -84,43 +94,18 @@ const MenuBtn: React.FC<{
 const MenuPanel: React.FC<{
   width?: string;
   onClose: () => void;
+  origin?: 'tl' | 'tr';
   children: React.ReactNode;
-}> = ({ width = 'w-56', onClose, children }) => (
-  <div
-    className={`menu-flyout absolute top-full left-0 mt-1 ${width} bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]`}
-    onMouseLeave={onClose}
+}> = ({ width = 'w-56', onClose, origin = 'tl', children }) => (
+  <AnimatedMenu
+    open
+    onClose={onClose}
+    origin={origin}
+    widthClass={width}
+    className="top-full left-0 mt-1.5"
   >
     {children}
-  </div>
-);
-
-const Item: React.FC<{
-  onClick?: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-  hint?: string;
-  children: React.ReactNode;
-}> = ({ onClick, disabled, danger, hint, children }) => (
-  <button
-    disabled={disabled}
-    onClick={onClick}
-    className={`w-full text-left px-3 py-1.5 flex items-center justify-between gap-3 disabled:opacity-35 cursor-pointer transition-colors ${
-      danger
-        ? 'text-[var(--danger)] hover:bg-[var(--danger)]/15'
-        : 'text-[var(--text-muted)] hover:bg-[var(--accent)] hover:text-[#1a1208]'
-    }`}
-  >
-    <span className="flex items-center gap-2 min-w-0">{children}</span>
-    {hint && <span className="text-[10px] font-mono-ui text-[var(--text-faint)] shrink-0">{hint}</span>}
-  </button>
-);
-
-const Sep = () => <div className="my-1.5 border-t border-[var(--border-subtle)]" />;
-
-const Label = ({ children }: { children: React.ReactNode }) => (
-  <div className="px-3 py-1 text-[10px] text-[var(--text-faint)] uppercase tracking-[0.08em] font-semibold font-mono-ui">
-    {children}
-  </div>
+  </AnimatedMenu>
 );
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
@@ -176,6 +161,9 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     toggleLayerLock,
     canvasWidth,
     canvasHeight,
+    addTextLayer,
+    addShapeLayer,
+    setLayerOpacity,
   } = useEditorStore();
 
   const beginRename = () => {
@@ -293,6 +281,37 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     close();
   };
 
+  const rotateLayer = (delta: number) => {
+    if (!selectedLayer) return;
+    updateLayer(selectedLayer.id, {
+      rotation: ((selectedLayer.rotation ?? 0) + delta + 360) % 360,
+    });
+    close();
+  };
+
+  const pasteFromClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error('decode failed'));
+          img.src = url;
+        });
+        addImageLayer(url, 'Pasted image', img.naturalWidth, img.naturalHeight);
+        close();
+        return;
+      }
+    } catch {
+      /* permission denied or empty */
+    }
+  };
+
   const moveLayer = (dir: 'up' | 'down') => {
     if (selectedIndex < 0) return;
     const to = dir === 'up' ? selectedIndex + 1 : selectedIndex - 1;
@@ -380,6 +399,9 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               </Item>
               <Item onClick={() => fileInputRef.current?.click()} hint="⌘O">
                 <FolderOpen size={13} /> Place Image…
+              </Item>
+              <Item onClick={() => { void pasteFromClipboard(); }} hint="⌘V">
+                <ClipboardPaste size={13} /> Paste Image…
               </Item>
               <Item onClick={() => projectInputRef.current?.click()}>
                 <FolderOpen size={13} /> Open Project…
@@ -471,8 +493,43 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               <Item disabled={!selectedLayer} onClick={() => flip('v')}>
                 <FlipVertical size={13} /> Flip Vertical
               </Item>
+              <Item disabled={!selectedLayer} onClick={() => rotateLayer(90)}>
+                <RotateCw size={13} /> Rotate 90° CW
+              </Item>
+              <Item disabled={!selectedLayer} onClick={() => rotateLayer(-90)}>
+                <RotateCcw size={13} /> Rotate 90° CCW
+              </Item>
               <Item disabled={!selectedLayer} onClick={centerLayer}>
                 <Maximize2 size={13} /> Center on Canvas
+              </Item>
+              <Sep />
+              <Label>Opacity</Label>
+              <Item
+                disabled={!selectedLayerId}
+                onClick={() => {
+                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 1);
+                  close();
+                }}
+              >
+                100%
+              </Item>
+              <Item
+                disabled={!selectedLayerId}
+                onClick={() => {
+                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 0.5);
+                  close();
+                }}
+              >
+                50%
+              </Item>
+              <Item
+                disabled={!selectedLayerId}
+                onClick={() => {
+                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 0.25);
+                  close();
+                }}
+              >
+                25%
               </Item>
               <Item onClick={() => { setSettingsModalOpen(true); close(); }} hint="⌘,">
                 <Settings size={13} /> Preferences…
@@ -579,6 +636,25 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
           </MenuBtn>
           {activeMenu === 'layer' && (
             <MenuPanel onClose={close} width="w-52">
+              <Item
+                onClick={() => {
+                  addTextLayer();
+                  setActiveTool('text');
+                  close();
+                }}
+              >
+                <Type size={13} /> New Text Layer
+              </Item>
+              <Item
+                onClick={() => {
+                  addShapeLayer('rectangle');
+                  setActiveTool('shape');
+                  close();
+                }}
+              >
+                <Square size={13} /> New Shape Layer
+              </Item>
+              <Sep />
               <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) duplicateLayer(selectedLayerId); close(); }}>
                 <Copy size={13} /> Duplicate Layer
               </Item>
@@ -822,28 +898,32 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
             >
               <ChevronDown size={12} />
             </button>
-            {activeMenu === 'revive' && (
-              <div className="menu-flyout absolute top-full right-0 mt-1.5 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
-                <Label>Revive mode</Label>
-                {(
-                  [
-                    ['natural', 'Natural'],
-                    ['vivid', 'Vivid'],
-                    ['shadows', 'Shadow Lift'],
-                    ['clarity', 'Clarity'],
-                    ['film', 'Film Glow'],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <Item key={mode} onClick={() => runRevive(mode)}>
-                    <Sparkles size={12} /> {label}
-                  </Item>
-                ))}
-                <Sep />
-                <Item onClick={() => runRevive('vivid', true)}>
-                  <Copy size={12} /> Bake as New Layer
+            <AnimatedMenu
+              open={activeMenu === 'revive'}
+              onClose={close}
+              origin="tr"
+              widthClass="w-48"
+              className="top-full right-0 mt-1.5"
+            >
+              <Label>Revive mode</Label>
+              {(
+                [
+                  ['natural', 'Natural'],
+                  ['vivid', 'Vivid'],
+                  ['shadows', 'Shadow Lift'],
+                  ['clarity', 'Clarity'],
+                  ['film', 'Film Glow'],
+                ] as const
+              ).map(([mode, label]) => (
+                <Item key={mode} onClick={() => runRevive(mode)}>
+                  <Sparkles size={12} /> {label}
                 </Item>
-              </div>
-            )}
+              ))}
+              <Sep />
+              <Item onClick={() => runRevive('vivid', true)}>
+                <Copy size={12} /> Bake as New Layer
+              </Item>
+            </AnimatedMenu>
           </div>
 
           <div className="relative flex items-center">
@@ -864,27 +944,31 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
             >
               <ChevronDown size={12} />
             </button>
-            {activeMenu === 'cleanup' && (
-              <div className="menu-flyout absolute top-full right-0 mt-1.5 w-48 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] shadow-2xl py-1.5 z-50 text-[12px]">
-                <Label>Cleanup mode</Label>
-                {(
-                  [
-                    ['gentle', 'Gentle'],
-                    ['standard', 'Standard'],
-                    ['strong', 'Strong'],
-                    ['dust', 'Dust & Spots'],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <Item key={mode} onClick={() => runCleanup(mode)}>
-                    <Eraser size={12} /> {label}
-                  </Item>
-                ))}
-                <Sep />
-                <Item onClick={() => runCleanup('standard', false)}>
-                  Replace current layer
+            <AnimatedMenu
+              open={activeMenu === 'cleanup'}
+              onClose={close}
+              origin="tr"
+              widthClass="w-48"
+              className="top-full right-0 mt-1.5"
+            >
+              <Label>Cleanup mode</Label>
+              {(
+                [
+                  ['gentle', 'Gentle'],
+                  ['standard', 'Standard'],
+                  ['strong', 'Strong'],
+                  ['dust', 'Dust & Spots'],
+                ] as const
+              ).map(([mode, label]) => (
+                <Item key={mode} onClick={() => runCleanup(mode)}>
+                  <Eraser size={12} /> {label}
                 </Item>
-              </div>
-            )}
+              ))}
+              <Sep />
+              <Item onClick={() => runCleanup('standard', false)}>
+                Replace current layer
+              </Item>
+            </AnimatedMenu>
           </div>
 
           <button

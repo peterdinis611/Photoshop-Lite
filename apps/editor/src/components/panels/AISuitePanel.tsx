@@ -1,4 +1,4 @@
-import React, { startTransition, useState, ViewTransition } from 'react';
+import React, { startTransition, useEffect, useState, ViewTransition } from 'react';
 import {
   Scissors,
   Sparkles,
@@ -36,6 +36,7 @@ import { CLARITY_MODES, type ClarityMode } from '../../utils/photoClarity';
 import { OUTPAINT_PRESETS, type OutpaintPreset } from '../../utils/photoOutpaint';
 import { loadImageFiles } from '../../utils/loadImageFiles';
 import type { AiStylePreset } from '@photoshop-lite/shared-types';
+import { aiApiClient } from '@photoshop-lite/editor-ai-client';
 
 const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
   { id: 'film', label: 'Film' },
@@ -107,6 +108,8 @@ export const AISuitePanel: React.FC = () => {
   const [batchCutout, setBatchCutout] = useState(false);
   const [cloudStyle, setCloudStyle] = useState<AiStylePreset>('film');
   const [inpaintPrompt, setInpaintPrompt] = useState('');
+  const [serverReplicate, setServerReplicate] = useState(false);
+  const [serverReachable, setServerReachable] = useState(false);
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImage = selectedLayer?.type === 'image';
@@ -118,7 +121,27 @@ export const AISuitePanel: React.FC = () => {
   const activePortrait = PORTRAIT_MODES.find((m) => m.id === portraitMode);
   const activeClarity = CLARITY_MODES.find((m) => m.id === clarityMode);
   const busy = aiStatus.isProcessing;
-  const keysReady = Boolean(removeBgApiKey || replicateApiKey);
+  const cloudReady = Boolean(replicateApiKey) || serverReplicate;
+  const keysReady = Boolean(removeBgApiKey || replicateApiKey || serverReplicate);
+
+  useEffect(() => {
+    let cancelled = false;
+    void aiApiClient
+      .getHealth()
+      .then((h) => {
+        if (cancelled) return;
+        setServerReachable(true);
+        setServerReplicate(Boolean(h.replicateConfigured));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setServerReachable(false);
+        setServerReplicate(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resolveImageId = () =>
     isImage
@@ -733,6 +756,19 @@ export const AISuitePanel: React.FC = () => {
 
           {zone === 'cloud' && (
             <div key="cloud" className="lab-zone-body flex flex-col gap-3">
+              <div
+                className={`lab-hint rounded-[var(--radius-sm)] border px-2.5 py-2 ${
+                  cloudReady
+                    ? 'border-[rgba(94,207,154,0.35)] text-[var(--success)]'
+                    : 'border-[rgba(212,146,58,0.35)] text-[var(--accent-hot)]'
+                }`}
+              >
+                {!serverReachable
+                  ? 'API offline — start bun run dev (port 3001). Local Lab still works.'
+                  : cloudReady
+                    ? 'Cloud ready — Replicate token found.'
+                    : 'No Replicate token — Object Remove / Face / Style / Caption need Keys or REPLICATE_API_TOKEN. Revive / Clean / Relight fall back to local.'}
+              </div>
               <section className="lab-card lab-card--hero">
                 <div className="lab-card-head">
                   <div>

@@ -19,6 +19,7 @@ import {
   useAutoStartOnboarding,
 } from '../components/onboarding/OnboardingTour';
 import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
+import { StatusBar } from '../components/toolbar/StatusBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { KonvaStageProvider } from '@photoshop-lite/editor-konva';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
@@ -57,6 +58,8 @@ function EditorShell() {
         </main>
         <RightSidebar />
       </div>
+
+      <StatusBar />
 
       <ExportModal />
       <SettingsModal />

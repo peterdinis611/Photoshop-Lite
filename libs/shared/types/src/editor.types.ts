@@ -11,6 +11,7 @@ export type ToolType =
   | 'blur'
   | 'text'
   | 'shape'
+  | 'pen'
   | 'marquee'
   | 'lasso'
   | 'wand'
@@ -169,7 +170,34 @@ export interface DrawingLayer extends BaseLayer {
   strokes: BrushStroke[];
 }
 
-export type EditorLayer = ImageLayer | TextLayer | ShapeLayer | DrawingLayer;
+/** Bezier path anchor — handles are offsets from the anchor point. */
+export interface PathAnchor {
+  x: number;
+  y: number;
+  handleInX?: number;
+  handleInY?: number;
+  handleOutX?: number;
+  handleOutY?: number;
+}
+
+export interface PathLayer extends BaseLayer {
+  type: 'path';
+  anchors: PathAnchor[];
+  closed: boolean;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}
+
+export type EditorLayer = ImageLayer | TextLayer | ShapeLayer | DrawingLayer | PathLayer;
+
+export interface PenSettings {
+  stroke: string;
+  strokeWidth: number;
+  fill: string;
+  /** Auto-close when clicking near the first point */
+  closeThreshold: number;
+}
 
 export interface BrushSettings {
   size: number;
@@ -179,6 +207,13 @@ export interface BrushSettings {
   refineMode: 'erase' | 'restore'; // for background edge refinement
   cloneSource?: { x: number; y: number } | null; // for clone stamp
 }
+
+export const DEFAULT_PEN_SETTINGS: PenSettings = {
+  stroke: '#d4923a',
+  strokeWidth: 2,
+  fill: 'transparent',
+  closeThreshold: 12,
+};
 
 export interface CropSettings {
   active: boolean;

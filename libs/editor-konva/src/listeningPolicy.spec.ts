@@ -14,6 +14,11 @@ describe('listeningPolicy', () => {
     expect(listeningPolicy('crop').cursor).toBe('crosshair');
   });
 
+  it('treats spotHealing like other retouch tools', () => {
+    expect(listeningPolicy('spotHealing').contentListening).toBe(false);
+    expect(listeningPolicy('spotHealing').cursor).toBe('crosshair');
+  });
+
   it('uses grab cursor for hand tool', () => {
     expect(listeningPolicy('hand').cursor).toBe('grab');
   });
