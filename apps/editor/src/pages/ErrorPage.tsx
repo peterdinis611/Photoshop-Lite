@@ -28,12 +28,12 @@ export const ErrorPage: React.FC<ErrorPageProps> = ({ error, resetError }) => {
       message="The darkroom hit an unexpected fault. Your work may still be recoverable via undo or a reload."
       detail={detail}
       primaryLabel="Back to editor"
-      primaryTo="/"
+      primaryTo="/editor"
       onPrimary={
         resetError
           ? () => {
               resetError();
-              window.location.assign('/');
+              window.location.assign('/editor');
             }
           : undefined
       }

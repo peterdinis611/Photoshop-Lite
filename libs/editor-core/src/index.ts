@@ -106,6 +106,30 @@ export type {
 export { applyHealingBrushToImage, applyPatchToImage } from './healingBrush';
 export type { HealingBrushOptions, PatchOptions } from './healingBrush';
 
+export { buildLuminanceGradient, snapToEdge } from './magneticEdge';
+export type { PixelBuffer } from './magneticEdge';
+
+export {
+  LIQUIFY_MODES,
+  liquifyPixels,
+  applyLiquifyBrush,
+  clearLiquifySnapshotCache,
+} from './liquify';
+export type { LiquifyMode, LiquifyBrushOptions } from './liquify';
+
+export {
+  quadBounds,
+  squareToQuadMatrix,
+  mapUnitToQuad,
+  createProjectiveInverse,
+  createBilinearInverse,
+  resolveQuad,
+  warpPixelsToQuad,
+  warpImagePerspective,
+  warpImagePerspectiveDetailed,
+} from './perspectiveWarp';
+export type { Quad, WarpMethod, WarpOptions, WarpResult, WarpedImage } from './perspectiveWarp';
+
 export { extractImageExif } from './imageExif';
 export type { ImageExifSummary } from './imageExif';
 

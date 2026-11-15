@@ -23,7 +23,7 @@ export const StatusPageShell: React.FC<StatusPageShellProps> = ({
   detail,
   primaryLabel = 'Back to editor',
   onPrimary,
-  primaryTo = '/',
+  primaryTo = '/editor',
   secondaryLabel,
   onSecondary,
   children,

@@ -17,7 +17,7 @@ export const NotFoundPage: React.FC = () => {
       title="Frame not found"
       message="This contact sheet doesn’t have that exposure. The path you opened isn’t on the reel."
       primaryLabel="Open the darkroom"
-      primaryTo="/"
+      primaryTo="/editor"
     >
       <div className="status-page__art status-page__art--404" aria-hidden>
         <div className="status-film">

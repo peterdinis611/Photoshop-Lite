@@ -16,7 +16,7 @@ describe('NotFoundPage', () => {
     );
     expect(screen.getByText(/Frame not found/i)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Open the darkroom/i }).getAttribute('href')).toBe(
-      '/'
+      '/editor'
     );
   });
 });

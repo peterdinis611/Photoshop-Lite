@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDebouncedCallback } from '@tanstack/react-pacer';
 import {
   Undo2,
@@ -11,65 +12,35 @@ import {
   Scissors,
   Image as ImageIcon,
   FolderOpen,
-  Settings,
-  FilePlus,
   Copy,
-  Trash2,
   FlipHorizontal,
-  FlipVertical,
-  EyeOff,
-  Lock,
-  Unlock,
-  ArrowUp,
-  ArrowDown,
-  Maximize,
-  Contrast,
-  Aperture,
-  Square,
-  Save,
   ChevronDown,
   SunMedium,
   Eraser,
-  Cloud,
-  Keyboard,
-  Compass,
-  Scaling,
   Pencil,
-  Crop,
-  RotateCw,
-  RotateCcw,
-  ClipboardPaste,
-  Type,
-  Images,
-  Info,
-  Palette,
-  FileArchive,
-  Layers as LayersIcon,
-  SquareDashed,
-  Blend,
-  Ruler,
-  Trash,
-  Plus,
-  FileImage,
-  Waves,
-  PenTool,
-  Frame,
-  Replace,
 } from 'lucide-react';
+import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
 import { SAMPLE_IMAGES } from '../../assets/sampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import { importPsdFile } from '../../utils/psdImport';
-import type { ReviveMode } from '../../utils/photoRevive';
-import type { CleanupMode } from '../../utils/photoCleanup';
-import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import {
   AnimatedMenu,
   MenuItem as Item,
   MenuLabel as Label,
   MenuSep as Sep,
 } from '../ui/AnimatedMenu';
+import {
+  FileMenu,
+  EditMenu,
+  ImageMenu,
+  LayerMenu,
+  SelectMenu,
+  FilterMenu,
+  ViewMenu,
+  useMenuActions,
+} from './menus';
 
 interface TopNavBarProps {
   onFitToScreen: () => void;
@@ -107,24 +78,16 @@ const MenuBtn: React.FC<{
   </button>
 );
 
-const MenuPanel: React.FC<{
-  width?: string;
-  onClose: () => void;
-  origin?: 'tl' | 'tr';
-  children: React.ReactNode;
-}> = ({ width = 'w-56', onClose, origin = 'tl', children }) => (
-  <AnimatedMenu
-    open
-    onClose={onClose}
-    origin={origin}
-    widthClass={width}
-    // Keep open while moving across the gap into the panel; click-outside closes.
-    closeOnLeave={false}
-    className="top-full left-0 mt-1 z-[100]"
-  >
-    {children}
-  </AnimatedMenu>
-);
+/** Menu bar entries, in display order. */
+const MENU_BUTTONS: { id: Exclude<MenuId, 'revive' | 'cleanup' | null>; label: string; accent?: boolean }[] = [
+  { id: 'file', label: 'File' },
+  { id: 'edit', label: 'Edit' },
+  { id: 'image', label: 'Image' },
+  { id: 'layer', label: 'Layer' },
+  { id: 'select', label: 'Select' },
+  { id: 'filter', label: 'Filter', accent: true },
+  { id: 'view', label: 'View' },
+];
 
 export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,67 +108,25 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     redo,
     past,
     future,
-    layers,
-    selectedLayerId,
     setExportModalOpen,
-    setSettingsModalOpen,
-    setNewCanvasModalOpen,
-    setShortcutsModalOpen,
-    setOnboardingOpen,
-    setImageSizeModalOpen,
-    setStockModalOpen,
-    inspectSelectedExif,
-    compressSelectedImage,
-    colorizeSelectedImage,
-    setActiveTool,
-    showGrid,
-    showRulers,
-    toggleGrid,
-    toggleRulers,
     addImageLayer,
     removeBackground,
-    revivePhotoLayer,
-    cleanPhotoLayer,
-    upscaleLayer,
+    selectLayer,
     aiStatus,
     duplicateLayer,
-    removeLayer,
-    selectLayer,
-    saveProject,
-    loadProject,
-    saveProjectToCloud,
     listCloudProjects,
-    loadProjectFromCloud,
+    loadProject,
     projectTitle,
     setProjectTitle,
     updateLayer,
-    updateAdjustments,
-    reorderLayers,
-    toggleLayerVisibility,
-    toggleLayerLock,
-    canvasWidth,
-    canvasHeight,
-    addTextLayer,
-    addShapeLayer,
-    setLayerOpacity,
-    marqueeSelection,
-    setMarqueeSelection,
-    modifyMarqueeSelection,
-    bakeClassicFilterOnSelected,
-    addAdjustmentLayer,
-    convertSelectedToSmartObject,
-    replaceSmartObjectSource,
     createBlankDocument,
-    pathToSelection,
-    strokePathAsDrawing,
-    addArtboard,
-    artboards,
-    guides,
-    snapToGuides,
-    setSnapToGuides,
-    addGuide,
-    clearGuides,
+    replaceSmartObjectSource,
   } = useEditorStore();
+
+  const close = () => setActiveMenu(null);
+
+  const { layers, selectedLayerId, selectedLayer, resolveImageId, runRevive, runCleanup, flip } =
+    useMenuActions(close);
 
   const beginRename = () => {
     setTitleDraft(projectTitle || 'Untitled');
@@ -219,16 +140,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     setEditingTitle(false);
   };
 
-  const selectedLayer = layers.find((l) => l.id === selectedLayerId);
-  const isImageSelected = selectedLayer?.type === 'image';
-  const isSmartObject = selectedLayer?.type === 'image' && !!selectedLayer.smartObject;
-  const selectedIndex = layers.findIndex((l) => l.id === selectedLayerId);
-
-  const resolveImageId = () =>
-    isImageSelected
-      ? selectedLayerId
-      : layers.slice().reverse().find((l) => l.type === 'image')?.id ?? null;
-
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (barRef.current && !barRef.current.contains(e.target as Node)) {
@@ -238,8 +149,6 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
-
-  const close = () => setActiveMenu(null);
 
   const refreshCloudProjects = useDebouncedCallback(
     () => {
@@ -335,91 +244,38 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
     close();
   };
-
-  const runRevive = (mode: ReviveMode, bake = false) => {
-    const id = resolveImageId();
-    if (!id) return;
-    selectLayer(id);
-    revivePhotoLayer(id, mode, 0.8, bake);
-    close();
-  };
-
-  const runCleanup = (mode: CleanupMode = 'standard', bake = true) => {
-    const id = resolveImageId();
-    if (!id) return;
-    selectLayer(id);
-    cleanPhotoLayer(id, mode, 0.7, bake);
-    close();
-  };
-
-  const runClassicFilter = (
-    kind: Parameters<typeof bakeClassicFilterOnSelected>[0],
-    params: Record<string, number>
-  ) => {
-    if (!isImageSelected) return;
-    void bakeClassicFilterOnSelected(kind, params);
-    close();
-  };
-
-  const runSelectionModify = (op: Parameters<typeof modifyMarqueeSelection>[0], amount?: number) => {
-    if (!marqueeSelection) return;
-    void modifyMarqueeSelection(op, amount);
-    close();
-  };
-
-  const flip = (axis: 'h' | 'v') => {
-    if (!selectedLayer) return;
-    if (axis === 'h') updateLayer(selectedLayer.id, { scaleX: -selectedLayer.scaleX });
-    else updateLayer(selectedLayer.id, { scaleY: -selectedLayer.scaleY });
-    close();
-  };
-
-  const centerLayer = () => {
-    if (!selectedLayer) return;
-    updateLayer(selectedLayer.id, {
-      x: Math.round((canvasWidth - selectedLayer.width * Math.abs(selectedLayer.scaleX)) / 2),
-      y: Math.round((canvasHeight - selectedLayer.height * Math.abs(selectedLayer.scaleY)) / 2),
-    });
-    close();
-  };
-
-  const rotateLayer = (delta: number) => {
-    if (!selectedLayer) return;
-    updateLayer(selectedLayer.id, {
-      rotation: ((selectedLayer.rotation ?? 0) + delta + 360) % 360,
-    });
-    close();
-  };
-
-  const pasteFromClipboard = async () => {
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find((t) => t.startsWith('image/'));
-        if (!type) continue;
-        const blob = await item.getType(type);
-        const url = URL.createObjectURL(blob);
-        const img = new Image();
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject(new Error('decode failed'));
-          img.src = url;
-        });
-        addImageLayer(url, 'Pasted image', img.naturalWidth, img.naturalHeight);
-        close();
-        return;
-      }
-    } catch {
-      /* permission denied or empty */
+  const renderMenu = (id: (typeof MENU_BUTTONS)[number]['id']) => {
+    switch (id) {
+      case 'file':
+        return (
+          <FileMenu
+            onClose={close}
+            cloudProjects={cloudProjects}
+            onPlaceImage={() => fileInputRef.current?.click()}
+            onOpenPsd={() => psdInputRef.current?.click()}
+            onOpenProject={() => projectInputRef.current?.click()}
+            onRename={beginRename}
+            onLoadSample={handleLoadSample}
+          />
+        );
+      case 'edit':
+        return <EditMenu onClose={close} />;
+      case 'image':
+        return <ImageMenu onClose={close} />;
+      case 'layer':
+        return (
+          <LayerMenu
+            onClose={close}
+            onReplaceSmartObject={() => smartObjectInputRef.current?.click()}
+          />
+        );
+      case 'select':
+        return <SelectMenu onClose={close} />;
+      case 'filter':
+        return <FilterMenu onClose={close} />;
+      case 'view':
+        return <ViewMenu onClose={close} onFitToScreen={onFitToScreen} />;
     }
-  };
-
-  const moveLayer = (dir: 'up' | 'down') => {
-    if (selectedIndex < 0) return;
-    const to = dir === 'up' ? selectedIndex + 1 : selectedIndex - 1;
-    if (to < 0 || to >= layers.length) return;
-    reorderLayers(selectedIndex, to);
-    close();
   };
 
   return (
@@ -461,9 +317,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
 
       {/* Brand */}
       <div className="flex items-center gap-2 pr-2.5 border-r border-[var(--border-subtle)] shrink-0">
-        <div className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent)] flex items-center justify-center font-display font-extrabold text-[#1a1208] text-[11px]">
+        <Link
+          to="/"
+          title="Home"
+          aria-label="PhotoshopLite home"
+          className="w-7 h-7 rounded-[var(--radius-sm)] bg-[var(--accent)] hover:bg-[var(--accent-hot)] flex items-center justify-center font-display font-extrabold text-[#1a1208] text-[11px] no-underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--text-primary)]"
+        >
           Ps
-        </div>
+        </Link>
         <div className="hidden md:flex flex-col leading-none min-w-0">
           <span className="font-display font-bold text-[13px] text-[var(--text-primary)] tracking-tight">
             Photoshop<span className="text-[var(--accent-hot)]">Lite</span>
@@ -505,612 +366,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
 
       {/* Photoshop-style menus */}
       <nav className="flex items-center gap-0.5 shrink-0">
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'file'} onClick={() => toggle('file')}>
-            File
-          </MenuBtn>
-          {activeMenu === 'file' && (
-            <MenuPanel onClose={close}>
-              <Item onClick={() => { setNewCanvasModalOpen(true); close(); }} hint="⌘N">
-                <FilePlus size={13} /> New…
-              </Item>
-              <Item onClick={() => fileInputRef.current?.click()} hint="⌘O">
-                <FolderOpen size={13} /> Place Image…
-              </Item>
-              <Item onClick={() => psdInputRef.current?.click()}>
-                <FileImage size={13} /> Open PSD…
-              </Item>
-              <Item
-                onClick={() => {
-                  setStockModalOpen(true);
-                  close();
-                }}
-              >
-                <Images size={13} /> Stock & CC Photos…
-              </Item>
-              <Item onClick={() => { void pasteFromClipboard(); }} hint="⌘V">
-                <ClipboardPaste size={13} /> Paste Image…
-              </Item>
-              <Item onClick={() => projectInputRef.current?.click()}>
-                <FolderOpen size={13} /> Open Project…
-              </Item>
-              <Item
-                onClick={() => {
-                  beginRename();
-                  close();
-                }}
-              >
-                <Pencil size={13} /> Rename Project…
-              </Item>
-              <Item onClick={() => { saveProject(); close(); }} hint="⌘S">
-                <Save size={13} /> Save Project
-              </Item>
-              <Item
-                onClick={async () => {
-                  try {
-                    await saveProjectToCloud();
-                  } catch {
-                    /* toast via aiStatus */
-                  }
-                  close();
-                }}
-              >
-                <Cloud size={13} /> Save to Cloud
-              </Item>
-              <Sep />
-              <Label>Cloud projects</Label>
-              {cloudProjects.length === 0 ? (
-                <div className="px-3 py-1.5 text-[11px] text-[var(--text-faint)]">
-                  No cloud projects (start API)
-                </div>
-              ) : (
-                cloudProjects.slice(0, 8).map((p) => (
-                  <Item
-                    key={p.id}
-                    onClick={async () => {
-                      try {
-                        await loadProjectFromCloud(p.id);
-                      } catch {
-                        /* toast */
-                      }
-                      close();
-                    }}
-                  >
-                    <Cloud size={13} /> {p.title}
-                  </Item>
-                ))
-              )}
-              <Sep />
-              <Label>Samples</Label>
-              {SAMPLE_IMAGES.map((s) => (
-                <Item key={s.id} onClick={() => handleLoadSample(s.id)}>
-                  <ImageIcon size={13} /> {s.name}
-                </Item>
-              ))}
-              <Sep />
-              <Item onClick={() => { setExportModalOpen(true); close(); }} hint="⌘E">
-                <Download size={13} /> Export As…
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'edit'} onClick={() => toggle('edit')}>
-            Edit
-          </MenuBtn>
-          {activeMenu === 'edit' && (
-            <MenuPanel onClose={close} width="w-52">
-              <Item disabled={past.length === 0} onClick={() => { undo(); close(); }} hint="⌘Z">
-                <Undo2 size={13} /> Undo
-              </Item>
-              <Item disabled={future.length === 0} onClick={() => { redo(); close(); }} hint="⌘Y">
-                <Redo2 size={13} /> Redo
-              </Item>
-              <Sep />
-              <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) duplicateLayer(selectedLayerId); close(); }} hint="⌘D">
-                <Copy size={13} /> Duplicate
-              </Item>
-              <Item disabled={!selectedLayerId} danger onClick={() => { if (selectedLayerId) removeLayer(selectedLayerId); close(); }} hint="Del">
-                <Trash2 size={13} /> Delete
-              </Item>
-              <Sep />
-              <Item disabled={!selectedLayer} onClick={() => flip('h')}>
-                <FlipHorizontal size={13} /> Flip Horizontal
-              </Item>
-              <Item disabled={!selectedLayer} onClick={() => flip('v')}>
-                <FlipVertical size={13} /> Flip Vertical
-              </Item>
-              <Item disabled={!selectedLayer} onClick={() => rotateLayer(90)}>
-                <RotateCw size={13} /> Rotate 90° CW
-              </Item>
-              <Item disabled={!selectedLayer} onClick={() => rotateLayer(-90)}>
-                <RotateCcw size={13} /> Rotate 90° CCW
-              </Item>
-              <Item disabled={!selectedLayer} onClick={centerLayer}>
-                <Maximize2 size={13} /> Center on Canvas
-              </Item>
-              <Sep />
-              <Label>Opacity</Label>
-              <Item
-                disabled={!selectedLayerId}
-                onClick={() => {
-                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 1);
-                  close();
-                }}
-              >
-                100%
-              </Item>
-              <Item
-                disabled={!selectedLayerId}
-                onClick={() => {
-                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 0.5);
-                  close();
-                }}
-              >
-                50%
-              </Item>
-              <Item
-                disabled={!selectedLayerId}
-                onClick={() => {
-                  if (selectedLayerId) setLayerOpacity(selectedLayerId, 0.25);
-                  close();
-                }}
-              >
-                25%
-              </Item>
-              <Item onClick={() => { setSettingsModalOpen(true); close(); }} hint="⌘,">
-                <Settings size={13} /> Preferences…
-              </Item>
-              <Item onClick={() => { setShortcutsModalOpen(true); close(); }} hint="⌘/">
-                <Keyboard size={13} /> Keyboard Shortcuts…
-              </Item>
-              <Item onClick={() => { setOnboardingOpen(true); close(); }} hint="⌘⇧/">
-                <Compass size={13} /> Product Tour…
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'image'} onClick={() => toggle('image')}>
-            Image
-          </MenuBtn>
-          {activeMenu === 'image' && (
-            <MenuPanel onClose={close} width="w-60">
-              <Label>Adjustments</Label>
-              <Item disabled={!resolveImageId()} onClick={() => runRevive('natural')}>
-                <SunMedium size={13} /> Auto Tone (Revive)
-              </Item>
-              <Item disabled={!resolveImageId()} onClick={() => runRevive('vivid')}>
-                <Sparkles size={13} /> Auto Contrast (Vivid)
-              </Item>
-              <Item disabled={!resolveImageId()} onClick={() => runRevive('shadows')}>
-                <Aperture size={13} /> Shadow Lift
-              </Item>
-              <Item disabled={!resolveImageId()} onClick={() => runCleanup('standard')}>
-                <Eraser size={13} /> Photo Cleanup
-              </Item>
-              <Item
-                disabled={!isImageSelected}
-                onClick={() => {
-                  if (selectedLayerId && isImageSelected) {
-                    updateAdjustments(selectedLayerId, { saturation: -100, grayscale: true });
-                  }
-                  close();
-                }}
-              >
-                <Contrast size={13} /> Desaturate
-              </Item>
-              <Item
-                disabled={!isImageSelected}
-                onClick={() => {
-                  if (selectedLayerId && isImageSelected) {
-                    updateAdjustments(selectedLayerId, { invert: true });
-                  }
-                  close();
-                }}
-              >
-                Invert
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  void colorizeSelectedImage('sepia', 0.85);
-                  close();
-                }}
-              >
-                <Palette size={13} /> Colorize (Sepia)
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  void colorizeSelectedImage('teal-orange', 0.8);
-                  close();
-                }}
-              >
-                <Palette size={13} /> Colorize (Teal · Orange)
-              </Item>
-              <Sep />
-              <Label>Size & info</Label>
-              <Item
-                disabled={!isImageSelected}
-                onClick={() => {
-                  void inspectSelectedExif();
-                  close();
-                }}
-              >
-                <Info size={13} /> Image Info / EXIF…
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  void compressSelectedImage({ maxEdge: 2048, quality: 0.82, format: 'image/jpeg' });
-                  close();
-                }}
-              >
-                <FileArchive size={13} /> Compress (2K JPEG)
-              </Item>
-              <Item
-                onClick={() => {
-                  setActiveTool('crop');
-                  close();
-                }}
-                hint="C"
-              >
-                <Crop size={13} /> Crop…
-              </Item>
-              <Item
-                disabled={!isImageSelected}
-                onClick={() => {
-                  setImageSizeModalOpen(true);
-                  close();
-                }}
-              >
-                <Scaling size={13} /> Image Size… / Optimize
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  if (selectedLayerId) upscaleLayer(selectedLayerId, 2);
-                  close();
-                }}
-              >
-                <Maximize size={13} /> Upscale 2×
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  if (selectedLayerId) upscaleLayer(selectedLayerId, 4);
-                  close();
-                }}
-              >
-                <Maximize size={13} /> Upscale 4×
-              </Item>
-              <Item onClick={() => { setNewCanvasModalOpen(true); close(); }}>
-                Canvas Size…
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'layer'} onClick={() => toggle('layer')}>
-            Layer
-          </MenuBtn>
-          {activeMenu === 'layer' && (
-            <MenuPanel onClose={close} width="w-52">
-              <Item
-                onClick={() => {
-                  addTextLayer();
-                  setActiveTool('text');
-                  close();
-                }}
-              >
-                <Type size={13} /> New Text Layer
-              </Item>
-              <Item
-                onClick={() => {
-                  addShapeLayer('rectangle');
-                  setActiveTool('shape');
-                  close();
-                }}
-              >
-                <Square size={13} /> New Shape Layer
-              </Item>
-              <Sep />
-              <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) duplicateLayer(selectedLayerId); close(); }}>
-                <Copy size={13} /> Duplicate Layer
-              </Item>
-              <Item disabled={!selectedLayerId} danger onClick={() => { if (selectedLayerId) removeLayer(selectedLayerId); close(); }}>
-                <Trash2 size={13} /> Delete Layer
-              </Item>
-              <Sep />
-              <Item disabled={selectedIndex < 0 || selectedIndex >= layers.length - 1} onClick={() => moveLayer('up')}>
-                <ArrowUp size={13} /> Bring Forward
-              </Item>
-              <Item disabled={selectedIndex <= 0} onClick={() => moveLayer('down')}>
-                <ArrowDown size={13} /> Send Backward
-              </Item>
-              <Sep />
-              <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) toggleLayerVisibility(selectedLayerId); close(); }}>
-                <EyeOff size={13} /> Toggle Visibility
-              </Item>
-              <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) toggleLayerLock(selectedLayerId); close(); }}>
-                {selectedLayer?.locked ? <Unlock size={13} /> : <Lock size={13} />}{' '}
-                {selectedLayer?.locked ? 'Unlock' : 'Lock'} Layer
-              </Item>
-              <Sep />
-              <Label>Add Adjustment Layer</Label>
-              {(
-                [
-                  ['brightness', 'Brightness'],
-                  ['curves', 'Curves'],
-                  ['hueSaturation', 'Hue / Saturation'],
-                  ['levels', 'Levels'],
-                  ['invert', 'Invert'],
-                  ['grayscale', 'Grayscale'],
-                ] as const
-              ).map(([kind, label]) => (
-                <Item
-                  key={kind}
-                  onClick={() => {
-                    addAdjustmentLayer(kind);
-                    close();
-                  }}
-                >
-                  <Blend size={13} /> {label}
-                </Item>
-              ))}
-              <Sep />
-              <Item
-                disabled={!isImageSelected || isSmartObject}
-                onClick={() => {
-                  convertSelectedToSmartObject();
-                  close();
-                }}
-              >
-                <LayersIcon size={13} /> Convert to Smart Object
-              </Item>
-              <Item
-                disabled={!isSmartObject}
-                onClick={() => smartObjectInputRef.current?.click()}
-              >
-                <Replace size={13} /> Replace Contents…
-              </Item>
-              <Sep />
-              <Label>Artboards</Label>
-              <Item
-                onClick={() => {
-                  addArtboard();
-                  close();
-                }}
-              >
-                <Frame size={13} /> New Artboard
-                {artboards.length > 0 && (
-                  <span className="text-[var(--text-faint)]"> ({artboards.length})</span>
-                )}
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'select'} onClick={() => toggle('select')}>
-            Select
-          </MenuBtn>
-          {activeMenu === 'select' && (
-            <MenuPanel onClose={close} width="w-52">
-              <Item onClick={() => { setActiveTool('marquee'); close(); }} hint="M">
-                <Square size={13} /> Rectangular Marquee
-              </Item>
-              <Item onClick={() => { setActiveTool('select'); close(); }} hint="V">
-                Move Tool
-              </Item>
-              <Sep />
-              <Item onClick={() => { selectLayer(null); close(); }} hint="Esc">
-                Deselect Layer
-              </Item>
-              <Item
-                disabled={layers.length === 0}
-                onClick={() => {
-                  const top = layers[layers.length - 1];
-                  if (top) selectLayer(top.id);
-                  close();
-                }}
-              >
-                Select Top Layer
-              </Item>
-              <Sep />
-              <Label>Selection</Label>
-              <Item
-                disabled={!marqueeSelection}
-                onClick={() => {
-                  setMarqueeSelection(null);
-                  close();
-                }}
-              >
-                <SquareDashed size={13} /> Deselect
-              </Item>
-              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('invert')}>
-                Invert Selection
-              </Item>
-              <Label>Modify</Label>
-              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('expand', 10)}>
-                Expand… <span className="text-[var(--text-faint)]">10 px</span>
-              </Item>
-              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('contract', 10)}>
-                Contract… <span className="text-[var(--text-faint)]">10 px</span>
-              </Item>
-              <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 8)}>
-                Feather… <span className="text-[var(--text-faint)]">8 px</span>
-              </Item>
-              <Sep />
-              <Label>Path</Label>
-              <Item
-                disabled={selectedLayer?.type !== 'path'}
-                onClick={() => {
-                  pathToSelection();
-                  close();
-                }}
-              >
-                <PenTool size={13} /> Path to Selection
-              </Item>
-              <Item
-                disabled={selectedLayer?.type !== 'path'}
-                onClick={() => {
-                  strokePathAsDrawing();
-                  close();
-                }}
-              >
-                <PenTool size={13} /> Stroke Path
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'filter'} onClick={() => toggle('filter')} accent>
-            Filter
-          </MenuBtn>
-          {activeMenu === 'filter' && (
-            <MenuPanel onClose={close} width="w-56">
-              <Label>Neural</Label>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runRevive('natural')}>
-                <SunMedium size={13} /> Photo Revive…
-              </Item>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runRevive('clarity')}>
-                Sharpen · Clarity
-              </Item>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runRevive('film')}>
-                Film Glow
-              </Item>
-              <Item
-                disabled={!isImageSelected}
-                onClick={() => {
-                  setActiveTool('liquify');
-                  close();
-                }}
-                hint="⇧X"
-              >
-                <Waves size={13} /> Liquify…
-              </Item>
-              <Sep />
-              <Label>Classic</Label>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => runClassicFilter('gaussian', { radius: 2 })}
-              >
-                Gaussian Blur…
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => runClassicFilter('unsharp', { amount: 80, radius: 1.2, threshold: 0 })}
-              >
-                Unsharp Mask…
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => runClassicFilter('noise', { amount: 12 })}
-              >
-                Add Noise…
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => runClassicFilter('sharpen', { amount: 40 })}
-              >
-                Sharpen
-              </Item>
-              <Sep />
-              <Label>Cleanup</Label>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runCleanup('standard')}>
-                <Eraser size={13} /> Photo Cleanup…
-              </Item>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runCleanup('gentle')}>
-                Gentle Denoise
-              </Item>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runCleanup('dust')}>
-                Dust & Spots
-              </Item>
-              <Item disabled={!resolveImageId() || aiStatus.isProcessing} onClick={() => runCleanup('strong')}>
-                Strong Denoise
-              </Item>
-              <Sep />
-              <Item
-                disabled={!resolveImageId() || aiStatus.isProcessing}
-                onClick={() => {
-                  const id = resolveImageId();
-                  if (id) {
-                    selectLayer(id);
-                    removeBackground(id);
-                  }
-                  close();
-                }}
-              >
-                <Scissors size={13} /> Remove Background
-              </Item>
-              <Item
-                disabled={!isImageSelected || aiStatus.isProcessing}
-                onClick={() => {
-                  if (selectedLayerId) upscaleLayer(selectedLayerId, 2);
-                  close();
-                }}
-              >
-                <Maximize size={13} /> Super Resolution…
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
-
-        <div className="relative">
-          <MenuBtn active={activeMenu === 'view'} onClick={() => toggle('view')}>
-            View
-          </MenuBtn>
-          {activeMenu === 'view' && (
-            <MenuPanel onClose={close} width="w-56">
-              <Item onClick={() => { onFitToScreen(); close(); }} hint="⌘0">
-                Fit on Screen
-              </Item>
-              <Item onClick={() => { setZoom(1); close(); }} hint="⌘1">
-                100%
-              </Item>
-              <Item onClick={() => { setZoom((z) => Math.min(8, z * 1.25)); close(); }} hint="⌘=">
-                Zoom In
-              </Item>
-              <Item onClick={() => { setZoom((z) => Math.max(0.1, z / 1.25)); close(); }} hint="⌘-">
-                Zoom Out
-              </Item>
-              <Sep />
-              <Item onClick={() => { toggleRulers(); close(); }} hint="⌘;">
-                Rulers {showRulers ? '✓' : ''}
-              </Item>
-              <Item onClick={() => { toggleGrid(); close(); }} hint="⌘'">
-                Pixel Grid {showGrid ? '✓' : ''}
-              </Item>
-              <Sep />
-              <Label>Guides</Label>
-              <Item onClick={() => { setSnapToGuides(!snapToGuides); close(); }}>
-                <Ruler size={13} /> Snap to Guides {snapToGuides ? '✓' : ''}
-              </Item>
-              <Item onClick={() => { addGuide('horizontal', Math.round(canvasHeight / 2)); close(); }}>
-                <Plus size={13} /> New Horizontal Guide
-              </Item>
-              <Item onClick={() => { addGuide('vertical', Math.round(canvasWidth / 2)); close(); }}>
-                <Plus size={13} /> New Vertical Guide
-              </Item>
-              <Item disabled={guides.length === 0} onClick={() => { clearGuides(); close(); }}>
-                <Trash size={13} /> Clear Guides
-              </Item>
-              <Sep />
-              <Item onClick={() => { setShortcutsModalOpen(true); close(); }} hint="⌘/">
-                <Keyboard size={13} /> Shortcuts
-              </Item>
-              <Item onClick={() => { setOnboardingOpen(true); close(); }} hint="⌘⇧/">
-                <Compass size={13} /> Product Tour
-              </Item>
-            </MenuPanel>
-          )}
-        </div>
+        {MENU_BUTTONS.map(({ id, label, accent }) => (
+          <div key={id} className="relative">
+            <MenuBtn active={activeMenu === id} onClick={() => toggle(id)} accent={accent}>
+              {label}
+            </MenuBtn>
+            {activeMenu === id && renderMenu(id)}
+          </div>
+        ))}
       </nav>
 
       <div className="flex-1 min-w-2" />

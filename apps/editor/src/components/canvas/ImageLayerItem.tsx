@@ -12,7 +12,7 @@ interface ImageLayerItemProps {
   onChange: (updates: Partial<ImageLayer>) => void;
 }
 
-export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
+export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
   layer,
   onSelect,
   onChange,
@@ -144,4 +144,4 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = ({
       />
     </Group>
   );
-};
+});

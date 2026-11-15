@@ -26,6 +26,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { KonvaStageProvider } from '@photoshop-lite/editor-konva';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
 import { NotFoundPage } from '../pages/NotFoundPage';
+import { LandingPage } from '../pages/LandingPage';
 
 function EditorShell() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +98,8 @@ export function App() {
             }}
           >
             <Routes>
-              <Route path="/" element={<EditorShell />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/editor" element={<EditorShell />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </HotkeysProvider>

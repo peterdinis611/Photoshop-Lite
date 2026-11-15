@@ -1,6 +1,6 @@
 describe('Photoshop Lite editor', () => {
   beforeEach(() => {
-    cy.visit('/');
+    cy.visit('/editor');
   });
 
   it('loads the darkroom shell with brand and menus', () => {
