@@ -367,6 +367,7 @@ export const ToolsPanel: React.FC = () => {
       <aside
         className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between"
         data-tour="tour-tools"
+        aria-label="Tools"
       >
         <div className="relative flex-1 min-h-0 w-full">
         <div
@@ -401,8 +402,10 @@ export const ToolsPanel: React.FC = () => {
                   onMouseLeave={() => setHoverTip(null)}
                 >
                   <button
+                    type="button"
                     onClick={() => handleToolClick(tool.id)}
-                    aria-label={tool.label}
+                    aria-label={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
+                    aria-pressed={isActive}
                     className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
                       isActive
                         ? 'tool-btn-active bg-[var(--accent)] text-[#1a1208]'

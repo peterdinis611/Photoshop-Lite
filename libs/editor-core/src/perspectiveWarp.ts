@@ -280,7 +280,7 @@ export async function warpImagePerspectiveDetailed(
 
   const { canvas: outCanvas, ctx: outCtx } = createCanvas(result.width, result.height);
   if (!outCtx) return null;
-  outCtx.putImageData(new ImageData(result.data, result.width, result.height), 0, 0);
+  outCtx.putImageData(new ImageData(result.data as Uint8ClampedArray<ArrayBuffer>, result.width, result.height), 0, 0);
   return {
     src: outCanvas.toDataURL('image/png'),
     width: result.width,

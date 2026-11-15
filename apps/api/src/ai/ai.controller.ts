@@ -1,4 +1,5 @@
 import { Controller, Post, Body } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 import type {
   RemoveBgRequestDto,
@@ -10,8 +11,11 @@ import type {
   AiJobRequestDto,
   AiJobResponseDto,
 } from '@photoshop-lite/shared-types';
+import { CacheControl } from '../common/cache-control';
 
 @Controller('ai')
+@Throttle({ ai: { limit: 20, ttl: 60_000 } })
+@CacheControl('no-store')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 

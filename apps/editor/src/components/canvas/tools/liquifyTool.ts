@@ -1,4 +1,8 @@
-import { applyLiquifyBrush, clearLiquifySnapshotCache } from '@photoshop-lite/editor-core';
+import {
+  applyLiquifyBrush,
+  clearLiquifySnapshotCache,
+  type LiquifyMode,
+} from '@photoshop-lite/editor-core';
 import { dist } from '../../../utils/pathHelpers';
 import { runLatest } from './async';
 import { renderCursorRing } from './cursorRing';
@@ -39,7 +43,11 @@ function queueLiquifyStamp(ctx: ToolContext, stroke: LiquifyStroke) {
   });
 }
 
-const MODE_LABEL = { push: 'Push', twirl: 'Twirl', reconstruct: 'Reconstruct' } as const;
+const MODE_LABEL: Record<LiquifyMode, string> = {
+  push: 'Push',
+  twirl: 'Twirl',
+  reconstruct: 'Reconstruct',
+};
 
 /** Liquify — push / twirl / reconstruct brush on the selected image layer. */
 export const liquifyTool: ToolHandler = {

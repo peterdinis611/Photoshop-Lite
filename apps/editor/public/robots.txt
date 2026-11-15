@@ -4,6 +4,18 @@ Allow: /
 Disallow: /api/
 Disallow: /assets/ort-
 Disallow: /*.wasm$
+# App shell — thin SPA route; keep crawl budget on the landing page
+Disallow: /editor
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /editor
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+Disallow: /editor
 
 Sitemap: https://photoshoplite.app/sitemap.xml
 Host: https://photoshoplite.app

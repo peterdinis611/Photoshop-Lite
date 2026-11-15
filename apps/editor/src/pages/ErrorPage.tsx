@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StatusPageShell } from './StatusPageShell';
+import { usePageMeta } from '../seo/usePageMeta';
 
 export interface ErrorPageProps {
   error?: Error | null;
@@ -8,13 +9,11 @@ export interface ErrorPageProps {
 
 /** Runtime error — fogged / scratched negative. */
 export const ErrorPage: React.FC<ErrorPageProps> = ({ error, resetError }) => {
-  useEffect(() => {
-    document.title = 'Error — Plate fogged · PhotoshopLite';
-    return () => {
-      document.title =
-        'PhotoshopLite — Free Browser Photo Editor | Layers, AI Cutout & Revive';
-    };
-  }, []);
+  usePageMeta({
+    title: 'Error — Plate fogged · PhotoshopLite',
+    description: 'The darkroom hit an unexpected fault. Reload or return to the editor.',
+    robots: 'noindex, nofollow',
+  });
 
   const detail =
     error?.message && error.message.length < 180

@@ -85,9 +85,20 @@ export const FloatingAIStatusToast: React.FC = () => {
     }
   };
 
+  const liveMessage = isError
+    ? `AI failed: ${aiStatus.error}`
+    : isComplete
+      ? `AI done: ${aiStatus.statusText}`
+      : `${(aiStatus.action && ACTION_LABELS[aiStatus.action]) || 'Processing'}: ${aiStatus.statusText || 'Working'} ${aiStatus.isProcessing ? `${aiStatus.progress} percent` : ''}`;
+
   return (
     <ViewTransition name="ai-status-toast" enter="auto" exit="auto" update="auto">
-      <div className="toast-motion fixed top-16 left-1/2 z-50 pointer-events-auto">
+      <div
+        className="toast-motion fixed top-16 left-1/2 z-50 pointer-events-auto"
+        role="status"
+        aria-live={isError ? 'assertive' : 'polite'}
+        aria-atomic="true"
+      >
         <div
           className={`px-4 py-2.5 rounded-[var(--radius-md)] border backdrop-blur-md flex items-center gap-3 min-w-[280px] max-w-md ${
             isError
@@ -97,6 +108,7 @@ export const FloatingAIStatusToast: React.FC = () => {
                 : 'bg-[var(--bg-panel)]/95 border-[var(--accent)]/50 text-[var(--text-primary)]'
           }`}
         >
+          <span className="sr-only">{liveMessage}</span>
           <div className="shrink-0">
             {isError ? (
               <AlertCircle size={18} className="text-[var(--danger)]" />
@@ -137,10 +149,12 @@ export const FloatingAIStatusToast: React.FC = () => {
           </div>
 
           <button
+            type="button"
+            aria-label="Dismiss AI status"
             onClick={() => setAIStatus({ isProcessing: false, statusText: '', error: undefined })}
             className="shrink-0 p-1 hover:bg-white/10 rounded-[var(--radius-sm)] cursor-pointer text-[var(--text-faint)] hover:text-[var(--text-primary)]"
           >
-            <X size={14} />
+            <X size={14} aria-hidden />
           </button>
         </div>
       </div>

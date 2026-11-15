@@ -101,9 +101,13 @@ export const OptionsBar: React.FC = () => {
   const activeTool = useEditorStore((s) => s.activeTool);
 
   return (
-    <div className="shell-options h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto">
+    <div
+      className="shell-options h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto"
+      role="region"
+      aria-label={`${TOOL_LABEL[activeTool] || activeTool} options`}
+    >
       <div className="flex items-center gap-1.5 shrink-0 pr-2.5 border-r border-[var(--border-subtle)]">
-        <Move size={12} className="text-[var(--accent)]" />
+        <Move size={12} className="text-[var(--accent)]" aria-hidden />
         <span className="font-display font-bold text-[var(--text-primary)] text-[11px]">
           {TOOL_LABEL[activeTool] || activeTool}
         </span>

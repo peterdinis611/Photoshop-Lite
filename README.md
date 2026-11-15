@@ -58,11 +58,19 @@ Client API keys in Settings remain an optional override; server env keys are pre
 Production editor ships with:
 
 - Rich meta / Open Graph / Twitter cards in `apps/editor/index.html`
-- JSON-LD (`WebApplication` + `WebSite`)
+- JSON-LD (`WebApplication`, `WebSite`, `Organization`, `BreadcrumbList`, `FAQPage`)
+- Per-route client meta via `apps/editor/src/seo/usePageMeta.ts` (`/` indexable, `/editor` noindex)
 - `public/sitemap.xml`, `public/robots.txt`, `public/site.webmanifest`
+- Static cache headers: `public/_headers`, `vercel.json`
 - `og-image.png` (1200×630)
 
 Set `VITE_SITE_URL` before `npm run build` so absolute URLs match your deploy host.
+
+## API cache & rate limits
+
+- In-memory `CacheService` for projects, fonts, stock search/fetch
+- HTTP `Cache-Control` on fonts/stock/health/assets (via `@CacheControl`)
+- Global `@nestjs/throttler` guard — tune with `THROTTLE_*` in `.env`
 
 ## Monorepo layout (Turborepo)
 
@@ -86,6 +94,7 @@ Editor Neural Lab → editor-ai-client (+ X-Workspace-Id) → NestJS /api
   → AiEngineService → Replicate / remove.bg
   → ProjectsService / AssetsService → data/workspaces/{workspaceId}/…
   → CacheService (in-memory TTL, workspace-scoped keys)
+  → ThrottlerGuard (default / ai / stock buckets)
 ```
 
 ## License

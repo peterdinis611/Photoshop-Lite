@@ -16,6 +16,7 @@ describe('public SEO assets', () => {
     expect(robots).toMatch(/Allow:\s*\//i);
     expect(robots).toMatch(/Sitemap:\s*https:\/\/.+/i);
     expect(robots).toMatch(/Disallow:\s*\/api\//i);
+    expect(robots).toMatch(/Disallow:\s*\/editor/i);
   });
 
   it('ships a valid sitemap.xml homepage entry', () => {
@@ -61,8 +62,11 @@ describe('index.html SEO head', () => {
     expect(html).toContain('name="robots"');
     expect(html).toContain('property="og:image"');
     expect(html).toContain('name="twitter:card"');
+    expect(html).toContain('name="twitter:site"');
     expect(html).toContain('application/ld+json');
     expect(html).toContain('WebApplication');
+    expect(html).toContain('FAQPage');
+    expect(html).toContain('BreadcrumbList');
     expect(html).toContain('rel="canonical"');
     expect(html).toContain('%SITE_URL%');
   });

@@ -8,6 +8,7 @@ import type {
 import { CacheKeys, CacheService } from '../cache/cache.service';
 
 const STOCK_TTL_MS = 1000 * 60 * 30; // 30m
+const STOCK_FETCH_TTL_MS = 1000 * 60 * 60; // 1h
 const FETCH_MAX_BYTES = 12 * 1024 * 1024;
 
 /** Hosts we will proxy for canvas place (Unsplash / Pexels / common CC CDNs). */
@@ -97,29 +98,38 @@ export class StockService {
       throw new BadRequestException(`Host not allowed for stock fetch: ${host}`);
     }
 
-    const res = await fetch(parsed.toString(), {
-      headers: {
-        Accept: 'image/*,*/*;q=0.8',
-        'User-Agent': 'PhotoshopLiteStockProxy/1.0',
+    const cacheKey = CacheKeys.stockFetch(parsed.toString());
+    return this.cache.wrap(
+      cacheKey,
+      async () => {
+        const res = await fetch(parsed.toString(), {
+          headers: {
+            Accept: 'image/*,*/*;q=0.8',
+            'User-Agent': 'PhotoshopLiteStockProxy/1.0',
+          },
+          redirect: 'follow',
+        });
+        if (!res.ok) {
+          throw new BadRequestException(`Upstream image HTTP ${res.status}`);
+        }
+        const contentType = (res.headers.get('content-type') || 'image/jpeg')
+          .split(';')[0]
+          .trim();
+        if (!contentType.startsWith('image/')) {
+          throw new BadRequestException(`Not an image (${contentType})`);
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.byteLength > FETCH_MAX_BYTES) {
+          throw new BadRequestException('Image too large to proxy');
+        }
+        return {
+          dataUrl: `data:${contentType};base64,${buf.toString('base64')}`,
+          contentType,
+          byteLength: buf.byteLength,
+        };
       },
-      redirect: 'follow',
-    });
-    if (!res.ok) {
-      throw new BadRequestException(`Upstream image HTTP ${res.status}`);
-    }
-    const contentType = (res.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
-    if (!contentType.startsWith('image/')) {
-      throw new BadRequestException(`Not an image (${contentType})`);
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength > FETCH_MAX_BYTES) {
-      throw new BadRequestException('Image too large to proxy');
-    }
-    return {
-      dataUrl: `data:${contentType};base64,${buf.toString('base64')}`,
-      contentType,
-      byteLength: buf.byteLength,
-    };
+      STOCK_FETCH_TTL_MS
+    );
   }
 
   private async searchProvider(

@@ -63,9 +63,14 @@ const MenuBtn: React.FC<{
   onClick: () => void;
   children: React.ReactNode;
   accent?: boolean;
-}> = ({ active, onClick, children, accent }) => (
+  label: string;
+}> = ({ active, onClick, children, accent, label }) => (
   <button
+    type="button"
     onClick={onClick}
+    aria-expanded={active}
+    aria-haspopup="menu"
+    aria-label={`${label} menu`}
     className={`px-2.5 py-1 rounded-[var(--radius-sm)] text-[12px] font-medium transition-colors cursor-pointer ${
       active
         ? 'bg-[var(--bg-elevated)] text-[var(--text-primary)]'
@@ -283,6 +288,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
       ref={barRef}
       className="shell-nav relative z-[80] h-12 bg-[var(--bg-panel)] border-b border-[var(--border-subtle)] px-2.5 flex items-center gap-2 select-none"
       data-tour="tour-nav"
+      aria-label="Editor toolbar"
     >
       <input
         ref={fileInputRef}
@@ -349,6 +355,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               type="button"
               data-tour="tour-project-title"
               title="Rename project"
+              aria-label={`Rename project, current title ${projectTitle || 'Untitled'}`}
               onClick={beginRename}
               className="group mt-0.5 flex items-center gap-1 max-w-[140px] text-left cursor-pointer"
             >
@@ -365,10 +372,15 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
       </div>
 
       {/* Photoshop-style menus */}
-      <nav className="flex items-center gap-0.5 shrink-0">
+      <nav className="flex items-center gap-0.5 shrink-0" aria-label="Application menus">
         {MENU_BUTTONS.map(({ id, label, accent }) => (
           <div key={id} className="relative">
-            <MenuBtn active={activeMenu === id} onClick={() => toggle(id)} accent={accent}>
+            <MenuBtn
+              active={activeMenu === id}
+              onClick={() => toggle(id)}
+              accent={accent}
+              label={label}
+            >
               {label}
             </MenuBtn>
             {activeMenu === id && renderMenu(id)}
@@ -380,95 +392,115 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
 
       {/* Action dock — History · Zoom · Lab · Export */}
       <div className="flex items-center gap-2 shrink-0">
-        <div className="dock-rail hidden sm:flex" aria-label="History">
+        <div className="dock-rail hidden sm:flex" role="toolbar" aria-label="History">
           <button
+            type="button"
             disabled={past.length === 0}
             onClick={undo}
             title="Undo (⌘Z)"
+            aria-label="Undo"
             className="dock-btn dock-btn-icon"
           >
-            <Undo2 size={14} />
+            <Undo2 size={14} aria-hidden />
           </button>
           <button
+            type="button"
             disabled={future.length === 0}
             onClick={redo}
             title="Redo (⌘⇧Z)"
+            aria-label="Redo"
             className="dock-btn dock-btn-icon"
           >
-            <Redo2 size={14} />
+            <Redo2 size={14} aria-hidden />
           </button>
         </div>
 
-        <div className="dock-rail hidden sm:flex" aria-label="Zoom">
+        <div className="dock-rail hidden sm:flex" role="toolbar" aria-label="Zoom">
           <button
+            type="button"
             onClick={() => setZoom((z) => Math.max(0.1, z / 1.2))}
             title="Zoom out (⌘-)"
+            aria-label="Zoom out"
             className="dock-btn dock-btn-icon"
           >
-            <ZoomOut size={13} />
+            <ZoomOut size={13} aria-hidden />
           </button>
           <button
             type="button"
             title="Reset to 100% (⌘1)"
+            aria-label={`Zoom ${Math.round(zoom * 100)} percent, reset to 100 percent`}
             onClick={() => setZoom(1)}
             className="dock-zoom-value"
           >
             {Math.round(zoom * 100)}%
           </button>
           <button
+            type="button"
             onClick={() => setZoom((z) => Math.min(8, z * 1.2))}
             title="Zoom in (⌘=)"
+            aria-label="Zoom in"
             className="dock-btn dock-btn-icon"
           >
-            <ZoomIn size={13} />
+            <ZoomIn size={13} aria-hidden />
           </button>
-          <div className="dock-split" />
+          <div className="dock-split" aria-hidden />
           <button
+            type="button"
             onClick={onFitToScreen}
             title="Fit to screen (⌘0)"
+            aria-label="Fit to screen"
             className="dock-btn dock-btn-icon"
           >
-            <Maximize2 size={13} />
+            <Maximize2 size={13} aria-hidden />
           </button>
         </div>
 
-        <div className="dock-rail" aria-label="Neural lab actions">
+        <div className="dock-rail" role="toolbar" aria-label="Neural lab actions">
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Place image"
+            aria-label="Place image"
             className="dock-btn"
           >
-            <FolderOpen size={13} />
+            <FolderOpen size={13} aria-hidden />
             <span className="hidden lg:inline">Place</span>
           </button>
           <button
+            type="button"
             onClick={() => handleLoadSample('sample-portrait')}
             title="Load demo photo"
+            aria-label="Load demo photo"
             className="dock-btn hidden md:inline-flex"
           >
-            <ImageIcon size={13} />
+            <ImageIcon size={13} aria-hidden />
             <span className="hidden lg:inline">Demo</span>
           </button>
 
-          <div className="dock-split" />
+          <div className="dock-split" aria-hidden />
 
           <div className="relative flex items-center">
             <button
+              type="button"
               disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
               onClick={() => runRevive('natural')}
               title="Photo Revive"
+              aria-label="Photo Revive"
               className="dock-btn dock-btn-ai"
             >
-              <SunMedium size={13} />
+              <SunMedium size={13} aria-hidden />
               <span className="hidden md:inline">Revive</span>
             </button>
             <button
+              type="button"
               onClick={() => toggle('revive')}
               className="dock-btn dock-btn-icon dock-btn-ai"
               title="Revive modes"
               aria-label="Revive modes"
+              aria-expanded={activeMenu === 'revive'}
+              aria-haspopup="menu"
             >
-              <ChevronDown size={12} />
+              <ChevronDown size={12} aria-hidden />
             </button>
             <AnimatedMenu
               open={activeMenu === 'revive'}
@@ -501,21 +533,26 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
 
           <div className="relative flex items-center">
             <button
+              type="button"
               disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
               onClick={() => runCleanup('standard')}
               title="Photo Cleanup"
+              aria-label="Photo Cleanup"
               className="dock-btn dock-btn-cool"
             >
-              <Eraser size={13} />
+              <Eraser size={13} aria-hidden />
               <span className="hidden md:inline">Clean</span>
             </button>
             <button
+              type="button"
               onClick={() => toggle('cleanup')}
               className="dock-btn dock-btn-icon dock-btn-cool"
               title="Cleanup modes"
               aria-label="Cleanup modes"
+              aria-expanded={activeMenu === 'cleanup'}
+              aria-haspopup="menu"
             >
-              <ChevronDown size={12} />
+              <ChevronDown size={12} aria-hidden />
             </button>
             <AnimatedMenu
               open={activeMenu === 'cleanup'}
@@ -546,6 +583,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
           </div>
 
           <button
+            type="button"
             disabled={aiStatus.isProcessing || !layers.some((l) => l.type === 'image')}
             onClick={() => {
               const id = resolveImageId();
@@ -555,29 +593,34 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
               }
             }}
             title="Remove background"
+            aria-label="Remove background"
             className="dock-btn dock-btn-cutout"
           >
-            <Scissors size={13} />
+            <Scissors size={13} aria-hidden />
             <span className="hidden lg:inline">Cutout</span>
           </button>
 
-          <div className="dock-split hidden xl:block" />
+          <div className="dock-split hidden xl:block" aria-hidden />
 
           <button
+            type="button"
             disabled={!selectedLayerId}
             onClick={() => selectedLayerId && duplicateLayer(selectedLayerId)}
             title="Duplicate layer (⌘D)"
+            aria-label="Duplicate layer"
             className="dock-btn dock-btn-icon hidden xl:inline-flex"
           >
-            <Copy size={13} />
+            <Copy size={13} aria-hidden />
           </button>
           <button
+            type="button"
             disabled={!selectedLayer}
             onClick={() => flip('h')}
             title="Flip horizontal"
+            aria-label="Flip horizontal"
             className="dock-btn dock-btn-icon hidden xl:inline-flex"
           >
-            <FlipHorizontal size={13} />
+            <FlipHorizontal size={13} aria-hidden />
           </button>
         </div>
 
@@ -585,9 +628,10 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
           type="button"
           onClick={() => setExportModalOpen(true)}
           title="Export (⌘E)"
+          aria-label="Export image"
           className="dock-export"
         >
-          <Download size={13} strokeWidth={2.4} />
+          <Download size={13} strokeWidth={2.4} aria-hidden />
           Export
         </button>
       </div>

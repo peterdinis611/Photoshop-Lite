@@ -6,8 +6,10 @@ import type {
   ProjectSummaryDto,
   ProjectVersionSummaryDto,
 } from '@photoshop-lite/shared-types';
+import { CacheControl } from '../common/cache-control';
 
 @Controller('projects')
+@CacheControl('private, no-store')
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 

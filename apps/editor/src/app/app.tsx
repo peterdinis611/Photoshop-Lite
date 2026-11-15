@@ -27,10 +27,24 @@ import { KonvaStageProvider } from '@photoshop-lite/editor-konva';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { LandingPage } from '../pages/LandingPage';
+import { usePageMeta } from '../seo/usePageMeta';
+import { SkipLink } from '../a11y/SkipLink';
 
 function EditorShell() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fitToScreen = useEditorStore((s) => s.fitToScreen);
+  const layers = useEditorStore((s) => s.layers);
+  const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
+  const activeTool = useEditorStore((s) => s.activeTool);
+
+  usePageMeta({
+    title: 'Editor — PhotoshopLite',
+    description:
+      'Open the PhotoshopLite darkroom: layers, retouch, AI cutout, and export in your browser.',
+    robots: 'noindex, nofollow',
+    canonicalPath: '/editor',
+    ogTitle: 'PhotoshopLite Editor',
+  });
 
   const handleFit = useCallback(() => {
     if (canvasContainerRef.current) {
@@ -44,18 +58,36 @@ function EditorShell() {
   useEditorHotkeys({ canvasContainerRef, onFitToScreen: handleFit });
   useAutoStartOnboarding();
 
+  const selected = layers.find((l) => l.id === selectedLayerId);
+  const canvasSummary = selected
+    ? `Canvas. Selected layer: ${selected.name}, type ${selected.type}. Active tool: ${activeTool}. ${layers.length} layers total.`
+    : layers.length === 0
+      ? `Empty canvas. Active tool: ${activeTool}. Use Place or File menu to open an image. Layers panel lists document structure.`
+      : `Canvas with ${layers.length} layers. No layer selected. Active tool: ${activeTool}.`;
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
+      <SkipLink href="#document-canvas">Skip to canvas</SkipLink>
+      <SkipLink href="#editor-status">Skip to status</SkipLink>
+      <h1 className="sr-only">PhotoshopLite editor</h1>
+
       <TopNavBar onFitToScreen={handleFit} />
       <OptionsBar />
 
       <div className="flex-1 flex overflow-hidden relative">
         <ToolsPanel />
         <main
+          id="document-canvas"
           ref={canvasContainerRef}
           className="shell-canvas flex-1 relative overflow-hidden h-full"
           data-tour="tour-canvas"
+          tabIndex={-1}
+          aria-label={canvasSummary}
         >
+          <p className="sr-only" id="canvas-instructions">
+            Pixel canvas is visual. Use the Tools panel, Layers panel, and menus for keyboard
+            editing. Status bar announces selection and tool hints.
+          </p>
           <CanvasStage containerRef={canvasContainerRef} />
           <CanvasDropZone onImagesAdded={handleFit} />
         </main>

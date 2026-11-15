@@ -32,6 +32,7 @@
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",
     "@nestjs/platform-express": "^12.1.0",
+    "@nestjs/throttler": "^6.7.1",
     "@tanstack/react-hotkeys": "^0.13.0",
     "@tanstack/react-pacer": "^0.24.0",
     "ag-psd": "^34.2.0",

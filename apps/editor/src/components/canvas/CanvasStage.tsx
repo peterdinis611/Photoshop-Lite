@@ -145,13 +145,24 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     };
   }, [ctx, onToolKeyDown, session]);
 
+  const selectedLayerForTransform = layers.find((l) => l.id === selectedLayerId);
+  const { freeTransformMode, cornerWarpMode, anchors, rotateEnabled } = getTransformerConfig(
+    activeTool,
+    transformMode,
+    selectedLayerForTransform
+  );
+
   // Update Transformer selection (Effect Event keeps latest ids without rebinding)
   const syncTransformer = useEffectEvent(() => {
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
 
-    if ((activeTool !== 'select' && activeTool !== 'transform') || !selectedLayerId) {
+    if (
+      (activeTool !== 'select' && activeTool !== 'transform') ||
+      !selectedLayerId ||
+      cornerWarpMode
+    ) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
@@ -168,7 +179,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
   useEffect(() => {
     syncTransformer();
-  }, [selectedLayerId, activeTool, layers]);
+  }, [selectedLayerId, activeTool, layers, cornerWarpMode]);
 
   // Mouse wheel zoom/pan — throttled with TanStack Pacer (~60fps)
   const applyWheel = useThrottledCallback(
@@ -249,12 +260,6 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
   const pointerPolicy = listeningPolicy(activeTool);
 
-  const selectedLayerForTransform = layers.find((l) => l.id === selectedLayerId);
-  const { freeTransformMode, anchors, rotateEnabled } = getTransformerConfig(
-    activeTool,
-    transformMode,
-    selectedLayerForTransform
-  );
 
   const getCursorClass = () => {
     if (session.spacePressed || session.panning) return 'cursor-grab active:cursor-grabbing';
@@ -508,6 +513,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
               setCropSettings={setCropSettings}
             />
           )}
+
+          {/* Active tool's interactive handles (perspective / distort corners) */}
+          {dispatch.renderUi()}
 
           {/* Adjustment layer badges (UI layer so they never end up in exports) */}
           {(() => {

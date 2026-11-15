@@ -116,9 +116,13 @@ export const RightSidebar: React.FC = () => {
       data-testid="right-sidebar"
       data-tour="tour-sidebar"
       data-open={isOpen ? 'true' : 'false'}
+      aria-label="Inspector panels"
     >
       {/* Icon rail — always visible; collapses content */}
       <div
+        role="tablist"
+        aria-orientation="vertical"
+        aria-label="Panel tabs"
         className={`flex flex-col items-center gap-0.5 py-1.5 px-1 border-[var(--border-subtle)] shrink-0 ${
           isOpen ? 'border-r w-11' : 'w-full'
         }`}
@@ -127,10 +131,12 @@ export const RightSidebar: React.FC = () => {
           type="button"
           onClick={toggleOpen}
           title={isOpen ? 'Close panel' : 'Open panel'}
+          aria-label={isOpen ? 'Close panel' : 'Open panel'}
+          aria-expanded={isOpen}
           className="ui-interactive w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--accent-hot)] hover:bg-[var(--bg-elevated)] cursor-pointer mb-1"
           data-testid="sidebar-toggle"
         >
-          {isOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
+          {isOpen ? <PanelRightClose size={15} aria-hidden /> : <PanelRightOpen size={15} aria-hidden />}
         </button>
 
         {tabs.map((tab) => {
@@ -139,6 +145,10 @@ export const RightSidebar: React.FC = () => {
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              id={`sidebar-tab-${tab.id}`}
+              aria-selected={isActive}
+              aria-controls={isOpen ? `sidebar-panel-${tab.id}` : undefined}
               data-testid={`tab-${tab.id}`}
               onClick={() => selectTab(tab.id)}
               className={`ui-interactive relative w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center cursor-pointer transition-colors ${
@@ -151,10 +161,18 @@ export const RightSidebar: React.FC = () => {
                   ? `${tab.label} · click to close`
                   : tab.label
               }
+              aria-label={
+                tab.badge
+                  ? `${tab.label}${tab.id === 'ai' ? ', processing' : ', recording'}`
+                  : tab.label
+              }
             >
               {tab.icon}
               {tab.badge && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] absolute top-1 right-1 animate-pulse" />
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] absolute top-1 right-1 animate-pulse"
+                  aria-hidden
+                />
               )}
             </button>
           );
@@ -162,7 +180,12 @@ export const RightSidebar: React.FC = () => {
       </div>
 
       {isOpen && (
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div
+          className="flex-1 min-w-0 flex flex-col overflow-hidden"
+          role="tabpanel"
+          id={`sidebar-panel-${activeTab}`}
+          aria-labelledby={`sidebar-tab-${activeTab}`}
+        >
           <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-app)]/80">
             <span className="font-display font-bold text-[12px] text-[var(--text-primary)] tracking-tight">
               {tabs.find((t) => t.id === activeTab)?.label ?? 'Panel'}
@@ -172,6 +195,7 @@ export const RightSidebar: React.FC = () => {
               onClick={() => setIsOpen(false)}
               className="text-[10px] font-mono-ui uppercase tracking-wider text-[var(--text-faint)] hover:text-[var(--accent-hot)] cursor-pointer px-1.5 py-0.5 rounded hover:bg-[var(--bg-elevated)]"
               title="Close panel"
+              aria-label="Close panel"
             >
               Close
             </button>

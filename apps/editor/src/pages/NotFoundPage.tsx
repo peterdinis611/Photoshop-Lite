@@ -1,15 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StatusPageShell } from './StatusPageShell';
+import { usePageMeta } from '../seo/usePageMeta';
 
 /** 404 — missing frame / empty contact sheet. */
 export const NotFoundPage: React.FC = () => {
-  useEffect(() => {
-    document.title = '404 — Frame not found · PhotoshopLite';
-    return () => {
-      document.title =
-        'PhotoshopLite — Free Browser Photo Editor | Layers, AI Cutout & Revive';
-    };
-  }, []);
+  usePageMeta({
+    title: '404 — Frame not found · PhotoshopLite',
+    description: 'This contact sheet doesn’t have that exposure. Return to the PhotoshopLite darkroom.',
+    robots: 'noindex, follow',
+    canonicalPath: '/',
+  });
 
   return (
     <StatusPageShell
