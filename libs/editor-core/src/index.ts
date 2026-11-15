@@ -133,6 +133,9 @@ export type { Quad, WarpMethod, WarpOptions, WarpResult, WarpedImage } from './p
 export { extractImageExif } from './imageExif';
 export type { ImageExifSummary } from './imageExif';
 
+export { extractPaletteFromImage } from './extractPalette';
+export type { ExtractedPalette } from './extractPalette';
+
 export { compressImageSource } from './imageCompress';
 export type { CompressFormat, CompressOptions, CompressResult } from './imageCompress';
 

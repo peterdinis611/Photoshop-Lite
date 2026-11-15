@@ -15,7 +15,6 @@ export class AppError extends Error {
   readonly code: ErrorCode;
   readonly status?: number;
   readonly details?: unknown;
-  readonly cause?: unknown;
 
   constructor(
     message: string,
@@ -26,12 +25,11 @@ export class AppError extends Error {
       cause?: unknown;
     } = {}
   ) {
-    super(message);
+    super(message, options.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = 'AppError';
     this.code = options.code ?? 'INTERNAL';
     this.status = options.status;
     this.details = options.details;
-    this.cause = options.cause;
   }
 
   static fromUnknown(error: unknown, fallback = 'Unexpected error'): AppError {

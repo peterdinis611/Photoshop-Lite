@@ -71,7 +71,7 @@ export function downloadProjectFile(project: ProjectFileData): void {
   const blob = new Blob([serializeProject(project)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  const safeName = (project.title || 'artwork').replace(/[^\w\-]+/g, '-').toLowerCase();
+  const safeName = (project.title || 'artwork').replace(/[^\w-]+/g, '-').toLowerCase();
   link.download = `${safeName}${PROJECT_FILE_EXTENSION}`;
   link.href = url;
   link.click();

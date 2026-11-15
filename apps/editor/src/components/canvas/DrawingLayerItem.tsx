@@ -13,7 +13,7 @@ interface DrawingLayerItemProps {
 
 export const DrawingLayerItem: React.FC<DrawingLayerItemProps> = ({
   layer,
-  isSelected,
+  isSelected: _isSelected,
   onSelect,
   onChange,
 }) => {

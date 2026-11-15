@@ -1,4 +1,4 @@
-import React, { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ImagePlus,
   Upload,
@@ -51,52 +51,55 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   // Blank New Document keeps 0 layers but must hide this overlay
   const isEmpty = !isDocumentOpen && layersCount === 0;
 
-  const importFiles = useEffectEvent(async (files: File[]) => {
-    const images = collectImageFiles(files);
-    if (images.length === 0) {
-      setError('Drop PNG, JPEG, WEBP, GIF, or AVIF files');
-      window.setTimeout(() => setError(null), 2800);
-      return;
-    }
-
-    setIsImporting(true);
-    setError(null);
-    setProgress({
-      fileName: images[0].name,
-      index: 0,
-      total: images.length,
-      phase: 'read',
-      percent: 2,
-    });
-
-    try {
-      const loaded = await loadImageFiles(images, setProgress);
-      if (loaded.length === 0) {
-        setError('Could not read those images — try JPEG/PNG/WEBP');
-        window.setTimeout(() => setError(null), 3200);
+  const importFiles = useCallback(
+    async (files: File[]) => {
+      const images = collectImageFiles(files);
+      if (images.length === 0) {
+        setError('Drop PNG, JPEG, WEBP, GIF, or AVIF files');
+        window.setTimeout(() => setError(null), 2800);
         return;
       }
 
-      startTransition(() => {
-        for (const img of loaded) {
-          addImageLayer(img.src, img.name, img.width, img.height);
-        }
+      setIsImporting(true);
+      setError(null);
+      setProgress({
+        fileName: images[0].name,
+        index: 0,
+        total: images.length,
+        phase: 'read',
+        percent: 2,
       });
-      window.setTimeout(() => onImagesAdded?.(), 140);
 
-      if (loaded.some((img) => img.downscaled)) {
-        setError('Very large photo was optimized to fit the browser safely');
-        window.setTimeout(() => setError(null), 3600);
+      try {
+        const loaded = await loadImageFiles(images, setProgress);
+        if (loaded.length === 0) {
+          setError('Could not read those images — try JPEG/PNG/WEBP');
+          window.setTimeout(() => setError(null), 3200);
+          return;
+        }
+
+        startTransition(() => {
+          for (const img of loaded) {
+            addImageLayer(img.src, img.name, img.width, img.height);
+          }
+        });
+        window.setTimeout(() => onImagesAdded?.(), 140);
+
+        if (loaded.some((img) => img.downscaled)) {
+          setError('Very large photo was optimized to fit the browser safely');
+          window.setTimeout(() => setError(null), 3600);
+        }
+      } finally {
+        setIsImporting(false);
+        setIsDragging(false);
+        setProgress(null);
+        dragDepthRef.current = 0;
       }
-    } finally {
-      setIsImporting(false);
-      setIsDragging(false);
-      setProgress(null);
-      dragDepthRef.current = 0;
-    }
-  });
+    },
+    [addImageLayer, onImagesAdded]
+  );
 
-  const pasteFromClipboard = useEffectEvent(async () => {
+  const pasteFromClipboard = useCallback(async () => {
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
@@ -113,7 +116,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       setError('Clipboard paste needs permission — use Browse instead');
       window.setTimeout(() => setError(null), 3200);
     }
-  });
+  }, [importFiles]);
 
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {
@@ -164,7 +167,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       window.removeEventListener('drop', onDrop);
       window.removeEventListener('paste', onPaste);
     };
-  }, []);
+  }, [importFiles]);
 
   const onBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

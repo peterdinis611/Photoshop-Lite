@@ -183,7 +183,7 @@ export function analyzeAndAutoEnhance(img: HTMLImageElement): ImageAdjustments {
   calculatedContrast = Math.max(10, Math.min(45, calculatedContrast));
 
   // Saturation boost if image looks washed out
-  let calculatedSaturation = avgSat < 0.25 ? 30 : avgSat < 0.4 ? 18 : 8;
+  const calculatedSaturation = avgSat < 0.25 ? 30 : avgSat < 0.4 ? 18 : 8;
   const calculatedVibrance = 20;
   const calculatedSharpness = 25;
   const calculatedExposure = calculatedBrightness > 15 ? 5 : 0;

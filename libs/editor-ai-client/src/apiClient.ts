@@ -18,6 +18,8 @@ import type {
   HealthCheckResponse,
   StockFetchResponseDto,
   StockSearchResponseDto,
+  GeocodeResponseDto,
+  PaletteHarmonyResponseDto,
 } from '@photoshop-lite/shared-types';
 import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
@@ -237,6 +239,21 @@ export class AiApiClient {
       undefined,
       'GET'
     );
+  }
+
+  reverseGeocode(lat: number, lon: number): Promise<GeocodeResponseDto> {
+    return this.request<GeocodeResponseDto>(
+      `/geo/reverse?lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
+      undefined,
+      'GET'
+    );
+  }
+
+  paletteHarmony(seedHex?: string): Promise<PaletteHarmonyResponseDto> {
+    const q = seedHex?.replace(/^#/, '')
+      ? `?seed=${encodeURIComponent(seedHex.replace(/^#/, ''))}`
+      : '';
+    return this.request<PaletteHarmonyResponseDto>(`/palette/harmony${q}`, undefined, 'GET');
   }
 }
 

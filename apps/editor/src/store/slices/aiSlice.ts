@@ -1140,7 +1140,7 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
           return;
         }
         throw new Error(
-          `${actionLabel[kind]} needs Replicate. Set REPLICATE_API_TOKEN in .env or paste an r8_ key in Lab → Keys. Local Revive / Clean / Relight / Cutout / Upscale still work offline.`
+          `${actionLabel[kind]} needs Replicate or Hugging Face. Set REPLICATE_API_TOKEN or HF_TOKEN in .env (or paste an r8_ key in Lab → Keys). Local Revive / Clean / Relight / Cutout / Upscale still work offline.`
         );
       }
 
@@ -1179,6 +1179,19 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
             action: null,
             progress: 100,
             statusText: resultText ? `Caption: ${resultText}` : 'Caption done',
+          },
+        });
+        return;
+      }
+
+      if (kind === 'segment' && !resultSrc && resultText) {
+        set({
+          lastCaption: resultText,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: resultText,
           },
         });
         return;

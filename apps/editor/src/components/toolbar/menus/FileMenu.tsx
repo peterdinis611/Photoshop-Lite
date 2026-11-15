@@ -10,6 +10,7 @@ import {
   Cloud,
   Image as ImageIcon,
   Download,
+  Shapes,
 } from 'lucide-react';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../../store/editorStore';
@@ -39,6 +40,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
   const {
     setNewCanvasModalOpen,
     setStockModalOpen,
+    setIconifyModalOpen,
     setExportModalOpen,
     saveProject,
     saveProjectToCloud,
@@ -87,6 +89,14 @@ export const FileMenu: React.FC<FileMenuProps> = ({
         }}
       >
         <Images size={13} /> Stock & CC Photos…
+      </Item>
+      <Item
+        onClick={() => {
+          setIconifyModalOpen(true);
+          onClose();
+        }}
+      >
+        <Shapes size={13} /> Iconify Icons…
       </Item>
       <Item onClick={() => { void pasteFromClipboard(); }} hint="⌘V">
         <ClipboardPaste size={13} /> Paste Image…

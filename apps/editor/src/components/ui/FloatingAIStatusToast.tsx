@@ -45,7 +45,7 @@ export const FloatingAIStatusToast: React.FC = () => {
       const timer = setTimeout(() => clearToast(), 4500);
       return () => clearTimeout(timer);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- useEffectEvent is non-reactive
+    return undefined;
   }, [aiStatus.isProcessing, aiStatus.statusText, aiStatus.error]);
 
   if (!aiStatus.isProcessing && !aiStatus.statusText && !aiStatus.error) {

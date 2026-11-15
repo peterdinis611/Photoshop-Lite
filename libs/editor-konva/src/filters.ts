@@ -124,7 +124,7 @@ export function applyImageNodeFilters(
   adjustments: ImageAdjustments
 ): void {
   registerPhotoAdjustFilter();
-  const filters: ((imageData: ImageData) => void)[] = [];
+  const filters: Konva.Filter[] = [];
 
   if (adjustments.brightness !== 0) {
     filters.push(Konva.Filters.Brighten);
@@ -155,7 +155,7 @@ export function applyImageNodeFilters(
   (imageNode as unknown as { photoAdjustments: ImageAdjustments }).photoAdjustments =
     adjustments;
   filters.push(
-    (Konva.Filters as unknown as Record<string, (imgData: ImageData) => void>).PhotoAdjust
+    (Konva.Filters as unknown as Record<string, Konva.Filter>).PhotoAdjust
   );
 
   imageNode.clearCache();

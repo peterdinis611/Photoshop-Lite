@@ -46,7 +46,7 @@ export class StockService {
   async search(query: string, page = 1): Promise<StockSearchResponseDto> {
     const q = query.trim() || 'nature';
     const pageSafe = Math.max(1, Math.min(10, page));
-    const providers: StockProvider[] = ['unsplash', 'pexels', 'openverse'];
+    const providers: StockProvider[] = ['unsplash', 'pexels', 'openverse', 'pixabay'];
     const sources: StockSearchResponseDto['sources'] = {};
     const buckets = await Promise.all(
       providers.map(async (provider) => {
@@ -142,6 +142,7 @@ export class StockService {
       () => {
         if (provider === 'unsplash') return this.searchUnsplash(q, page);
         if (provider === 'pexels') return this.searchPexels(q, page);
+        if (provider === 'pixabay') return this.searchPixabay(q, page);
         return this.searchOpenverse(q, page);
       },
       STOCK_TTL_MS
@@ -226,6 +227,50 @@ export class StockService {
       height: p.height,
       license: 'Pexels License',
       sourcePageUrl: p.url,
+    }));
+  }
+
+  private async searchPixabay(q: string, page: number): Promise<StockPhotoItem[] | null> {
+    const key = process.env.PIXABAY_API_KEY?.trim();
+    if (!key) return null;
+
+    const url = new URL('https://pixabay.com/api/');
+    url.searchParams.set('key', key);
+    url.searchParams.set('q', q);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('per_page', '12');
+    url.searchParams.set('image_type', 'photo');
+    url.searchParams.set('safesearch', 'true');
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Pixabay HTTP ${res.status}`);
+    const data = (await res.json()) as {
+      hits?: Array<{
+        id: number;
+        pageURL: string;
+        previewURL: string;
+        webformatURL: string;
+        largeImageURL?: string;
+        imageWidth: number;
+        imageHeight: number;
+        user: string;
+        user_id: number;
+        tags?: string;
+      }>;
+    };
+
+    return (data.hits ?? []).map((p) => ({
+      id: `pixabay_${p.id}`,
+      provider: 'pixabay' as const,
+      title: p.tags || 'Pixabay photo',
+      author: p.user || 'Unknown',
+      authorUrl: `https://pixabay.com/users/${encodeURIComponent(p.user)}-${p.user_id}/`,
+      thumbUrl: p.previewURL || p.webformatURL,
+      fullUrl: p.largeImageURL || p.webformatURL,
+      width: p.imageWidth,
+      height: p.imageHeight,
+      license: 'Pixabay License',
+      sourcePageUrl: p.pageURL,
     }));
   }
 

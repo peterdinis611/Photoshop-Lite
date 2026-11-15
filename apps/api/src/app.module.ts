@@ -9,6 +9,8 @@ import { FontsModule } from './fonts/fonts.module';
 import { StockModule } from './stock/stock.module';
 import { CacheModule } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
+import { GeoModule } from './geo/geo.module';
+import { PaletteModule } from './palette/palette.module';
 import { CacheControlInterceptor } from './common/cache-control';
 import { buildThrottlerOptions } from './common/throttle.config';
 
@@ -23,6 +25,8 @@ import { buildThrottlerOptions } from './common/throttle.config';
     AssetsModule,
     FontsModule,
     StockModule,
+    GeoModule,
+    PaletteModule,
   ],
   controllers: [],
   providers: [

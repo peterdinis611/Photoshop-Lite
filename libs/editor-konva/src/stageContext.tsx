@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useState } from 'react';
 import type Konva from 'konva';
 
 interface StageContextValue {
@@ -21,23 +21,21 @@ export function getStage(): Konva.Stage | null {
 }
 
 export const KonvaStageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const stageRef = useRef<Konva.Stage | null>(null);
-  const [, bump] = React.useState(0);
+  const [stage, setStageState] = useState<Konva.Stage | null>(null);
 
-  const setStage = useCallback((stage: Konva.Stage | null) => {
-    stageRef.current = stage;
-    registerStage(stage);
-    bump((n) => n + 1);
+  const setStage = useCallback((next: Konva.Stage | null) => {
+    registerStage(next);
+    setStageState(next);
   }, []);
 
   const value = useMemo<StageContextValue>(
     () => ({
-      stage: stageRef.current,
+      stage,
       setStage,
       findById: <T extends Konva.Node = Konva.Node>(id: string) =>
-        stageRef.current?.findOne<T>(`#${id}`) ?? undefined,
+        stage?.findOne<T>(`#${id}`) ?? undefined,
     }),
-    [setStage, stageRef.current]
+    [setStage, stage]
   );
 
   return <StageContext.Provider value={value}>{children}</StageContext.Provider>;

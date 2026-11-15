@@ -1,8 +1,12 @@
 import { useMemo, type RefObject } from 'react';
-import { useHotkeys, type UseHotkeyDefinition } from '@tanstack/react-hotkeys';
+import {
+  useHotkeys,
+  type RegisterableHotkey,
+  type UseHotkeyDefinition,
+} from '@tanstack/react-hotkeys';
 import { useEditorStore } from '../store/editorStore';
 import { clearImageSelection } from '../utils/maskHelpers';
-import { markOnboardingComplete } from '../components/onboarding/OnboardingTour';
+import { markOnboardingComplete } from '../components/onboarding/onboardingSteps';
 import type { ToolType } from '../types/editor';
 
 type FitFn = () => void;
@@ -17,7 +21,7 @@ export function useEditorHotkeys(options: {
   const { canvasContainerRef, onFitToScreen } = options;
 
   const defs = useMemo<UseHotkeyDefinition[]>(() => {
-    const tool = (hotkey: string, id: ToolType, name: string): UseHotkeyDefinition => ({
+    const tool = (hotkey: RegisterableHotkey, id: ToolType, name: string): UseHotkeyDefinition => ({
       hotkey,
       callback: () => useEditorStore.getState().setActiveTool(id),
       options: { meta: { name, group: 'Tools', description: `Activate ${name}` } },
@@ -246,7 +250,7 @@ export function useEditorHotkeys(options: {
         options: { meta: { name: 'Toggle Layer Lock', group: 'Layer' } },
       },
       {
-        hotkey: 'Mod+Shift+Period',
+        hotkey: 'Mod+Shift+[Period]',
         callback: () => {
           const { selectedLayerId, toggleLayerVisibility } = useEditorStore.getState();
           if (selectedLayerId) toggleLayerVisibility(selectedLayerId);

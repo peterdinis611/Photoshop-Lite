@@ -38,7 +38,7 @@ export const ImageSizeModal: React.FC = () => {
     setWidth(Math.round(layer.width));
     setHeight(Math.round(layer.height));
     setError(null);
-  }, [open, layer?.id, layer?.width, layer?.height]);
+  }, [open, layer]);
 
   const estimate = useMemo(() => {
     const px = width * height;

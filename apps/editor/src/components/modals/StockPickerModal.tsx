@@ -105,7 +105,7 @@ export const StockPickerModal: React.FC = () => {
                 Stock & CC photos
               </p>
               <p className="font-mono-ui text-[9px] text-[var(--text-faint)] truncate">
-                Unsplash · Pexels · Openverse
+                Unsplash · Pexels · Openverse · Pixabay
               </p>
             </div>
           </div>
@@ -164,7 +164,7 @@ export const StockPickerModal: React.FC = () => {
           )}
           {!loading && result && result.items.length === 0 && (
             <p className="text-center text-[12px] text-[var(--text-faint)] py-10">
-              No results — try another query, or set UNSPLASH_ACCESS_KEY / PEXELS_API_KEY for more
+              No results — try another query, or set UNSPLASH / PEXELS / PIXABAY keys for more
               sources. Openverse works without a key.
             </p>
           )}

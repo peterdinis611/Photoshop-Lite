@@ -3,9 +3,8 @@ import {
   hasCompletedOnboarding,
   markOnboardingComplete,
   ONBOARDING_STEPS,
-} from './OnboardingTour';
-
-const STORAGE_KEY = 'px_onboarding_done';
+  STORAGE_KEY,
+} from './onboardingSteps';
 
 describe('onboarding helpers', () => {
   beforeEach(() => {

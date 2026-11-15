@@ -12,6 +12,7 @@ export interface UISlice {
   isImageSizeModalOpen: boolean;
   isStockModalOpen: boolean;
   isExifModalOpen: boolean;
+  isIconifyModalOpen: boolean;
   setExportModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setNewCanvasModalOpen: (open: boolean) => void;
@@ -20,6 +21,7 @@ export interface UISlice {
   setImageSizeModalOpen: (open: boolean) => void;
   setStockModalOpen: (open: boolean) => void;
   setExifModalOpen: (open: boolean) => void;
+  setIconifyModalOpen: (open: boolean) => void;
   setBeforeAfterOpen: (open: boolean) => void;
   setSecondaryColor: (color: string) => void;
   swapBrushColors: () => void;
@@ -34,6 +36,8 @@ export const createUISlice: StateCreator<EditorStore, [], [], UISlice> = (set, g
   isStockModalOpen: false,
 
   isExifModalOpen: false,
+
+  isIconifyModalOpen: false,
 
   isShortcutsModalOpen: false,
 
@@ -62,6 +66,8 @@ export const createUISlice: StateCreator<EditorStore, [], [], UISlice> = (set, g
   setStockModalOpen: (open) => set({ isStockModalOpen: open }),
 
   setExifModalOpen: (open) => set({ isExifModalOpen: open }),
+
+  setIconifyModalOpen: (open) => set({ isIconifyModalOpen: open }),
 
   setBeforeAfterOpen: (open) => set({ isBeforeAfterOpen: open }),
 

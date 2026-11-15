@@ -3,10 +3,8 @@
   "compilerOptions": {
     "module": "esnext",
     "moduleResolution": "bundler",
-    "declaration": true,
-    "declarationMap": true,
     "lib": ["es2022", "dom", "dom.iterable"]
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../shared/types" }]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
 }

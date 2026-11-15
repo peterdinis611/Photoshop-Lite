@@ -24,6 +24,8 @@ export type {
   StockPhotoItem,
   StockSearchResponseDto,
   StockFetchResponseDto,
+  GeocodeResponseDto,
+  PaletteHarmonyResponseDto,
 } from './api.types';
 export type * from './editor.types';
 export {

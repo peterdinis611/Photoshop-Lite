@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { GlobalExceptionFilter } from './global-exception.filter';
-import { BadRequestException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost } from '@nestjs/common';
 
 function mockHost() {
@@ -38,7 +38,9 @@ describe('GlobalExceptionFilter', () => {
   it('maps unknown Error to 500', () => {
     const filter = new GlobalExceptionFilter();
     const { host, status, json } = mockHost();
+    const logSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     filter.catch(new Error('boom'), host);
+    logSpy.mockRestore();
     expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({

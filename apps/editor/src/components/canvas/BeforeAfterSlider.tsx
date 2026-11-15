@@ -94,12 +94,6 @@ export const BeforeAfterSlider: React.FC<BeforeAfterSliderProps> = ({ onClose })
     };
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const displayScale = Math.min(
-    (containerRef.current?.clientWidth || 800) / canvasWidth,
-    (containerRef.current?.clientHeight || 600) / canvasHeight,
-    1
-  );
-
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center" onClick={onClose}>
       {/* Panel */}

@@ -39,14 +39,14 @@ describe('a11y primitives', () => {
 describe('LandingPage a11y', () => {
   it('has skip links, main landmark, and labeled stack region', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <LandingPage />
       </MemoryRouter>
     );
     const skip = screen.getByRole('link', { name: /skip to open editor/i, hidden: true });
     expect(skip.getAttribute('href')).toBe('#landing-cta');
     expect(screen.getByRole('main')).toBeTruthy();
-    expect(screen.getByRole('region', { name: /interactive layer stack/i })).toBeTruthy();
+    expect(screen.getByRole('region', { name: /layer stack/i })).toBeTruthy();
     expect(screen.getAllByRole('link', { name: /open editor/i }).length).toBeGreaterThan(0);
   });
 });

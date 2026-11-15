@@ -2853,40 +2853,83 @@ input[type='range'] {
   animation: landing-float 7.5s ease-in-out infinite;
 }
 
+.landing__swipe-nav {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.landing__swipe-btn {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 146, 58, 0.5);
+  background: rgba(14, 12, 10, 0.88);
+  color: var(--accent-hot);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, transform 0.2s;
+}
+.landing__swipe-btn:hover {
+  background: var(--accent);
+  color: #1a1208;
+  transform: scale(1.08);
+}
+.landing__swipe-meter {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+}
+
 .landing__plate {
   --pz: 0px;
   --prot: 0deg;
   --fx: 0px;
   --fy: 0px;
   --fr: 0deg;
+  --sx: 0px;
+  --sy: 0px;
+  --ss: 1;
   position: absolute;
   inset: 0;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
-  cursor: pointer;
+  cursor: grab;
   transform-style: preserve-3d;
-  transform: translateZ(var(--pz)) rotateZ(var(--prot));
-  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translate3d(var(--sx), var(--sy), var(--pz)) rotateZ(var(--prot)) scale(var(--ss));
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.35s ease;
   animation: landing-plate-in 1s calc(0.45s + var(--pi, 0) * 0.1s) cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.landing__viewport.is-swiping .landing__plate {
+  transition: none;
+  cursor: grabbing;
+}
+.landing__plate.is-front .landing__plate-face {
+  border-color: rgba(232, 168, 74, 0.45);
+  box-shadow:
+    0 28px 70px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(232, 168, 74, 0.2) inset,
+    0 0 40px rgba(212, 146, 58, 0.18);
 }
 
 .landing--fanned .landing__plate {
-  transform: translate3d(var(--fx), var(--fy), calc(var(--pz) + 40px)) rotateZ(calc(var(--prot) + var(--fr))) scale(0.92);
-}
-
-.landing:not(.landing--fanned) .landing__viewport:hover .landing__plate--copper {
-  transform: translateZ(calc(var(--pz) - 14px)) rotateZ(calc(var(--prot) - 4deg)) translateX(-12px);
-}
-.landing:not(.landing--fanned) .landing__viewport:hover .landing__plate--teal {
-  transform: translateZ(calc(var(--pz) + 10px)) rotateZ(calc(var(--prot) + 5deg)) translateX(14px);
-}
-.landing:not(.landing--fanned) .landing__viewport:hover .landing__plate--ink {
-  transform: translateZ(calc(var(--pz) - 6px)) rotateZ(calc(var(--prot) + 3deg)) translateY(-8px);
-}
-.landing:not(.landing--fanned) .landing__viewport:hover .landing__plate--paper {
-  transform: translateZ(calc(var(--pz) + 42px)) rotateZ(var(--prot)) scale(1.03);
+  transform: translate3d(var(--fx), var(--fy), calc(var(--pz) + 40px))
+    rotateZ(calc(var(--prot) + var(--fr))) scale(0.92);
+  cursor: pointer;
 }
 
 .landing__plate-face {
@@ -3435,11 +3478,11 @@ input[type='range'] {
 @keyframes landing-plate-in {
   from {
     opacity: 0;
-    transform: translateZ(-160px) rotateX(24deg) scale(0.88);
+    transform: translate3d(var(--sx), calc(var(--sy) + 24px), -160px) rotateX(24deg) scale(0.88);
   }
   to {
     opacity: 1;
-    transform: translateZ(var(--pz)) rotateZ(var(--prot));
+    transform: translate3d(var(--sx), var(--sy), var(--pz)) rotateZ(var(--prot)) scale(var(--ss));
   }
 }
 @keyframes landing-shine {

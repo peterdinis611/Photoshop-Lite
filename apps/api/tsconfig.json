@@ -10,12 +10,5 @@
     "emitDecoratorMetadata": true
   },
   "include": ["src/**/*"],
-  "references": [
-    {
-      "path": "../../libs/ai"
-    },
-    {
-      "path": "../../libs/shared/types"
-    }
-  ]
+  "exclude": ["src/**/*.spec.ts", "src/**/*.spec.tsx"]
 }

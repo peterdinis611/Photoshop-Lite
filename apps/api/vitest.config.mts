@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = resolve(import.meta.dirname, '../..');
+const dirname = fileURLToPath(new URL('.', import.meta.url));
+const root = resolve(dirname, '../..');
 
 export default defineConfig({
-  root: import.meta.dirname,
+  root: dirname,
   resolve: {
     alias: {
       '@photoshop-lite/shared-types': resolve(root, 'libs/shared/types/src/index.ts'),

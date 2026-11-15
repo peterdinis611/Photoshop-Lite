@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { HotkeysProvider } from '@tanstack/react-hotkeys';
 import { PacerProvider } from '@tanstack/react-pacer';
@@ -16,10 +16,9 @@ import { ShortcutsModal } from '../components/modals/ShortcutsModal';
 import { ImageSizeModal } from '../components/modals/ImageSizeModal';
 import { StockPickerModal } from '../components/modals/StockPickerModal';
 import { ExifModal } from '../components/modals/ExifModal';
-import {
-  OnboardingTour,
-  useAutoStartOnboarding,
-} from '../components/onboarding/OnboardingTour';
+import { IconifyModal } from '../components/modals/IconifyModal';
+import { OnboardingTour } from '../components/onboarding/OnboardingTour';
+import { useAutoStartOnboarding } from '../components/onboarding/useAutoStartOnboarding';
 import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
 import { StatusBar } from '../components/toolbar/StatusBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -102,6 +101,7 @@ function EditorShell() {
       <ImageSizeModal />
       <StockPickerModal />
       <ExifModal />
+      <IconifyModal />
       <ShortcutsModal />
       <OnboardingTour />
       <FloatingAIStatusToast />

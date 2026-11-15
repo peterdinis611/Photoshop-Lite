@@ -11,8 +11,12 @@ export interface HealthCheckResponse {
   unsplashConfigured?: boolean;
   /** Server has PEXELS_API_KEY */
   pexelsConfigured?: boolean;
+  /** Server has PIXABAY_API_KEY */
+  pixabayConfigured?: boolean;
   /** Openverse needs no key — always available when API is up */
   openverseAvailable?: boolean;
+  /** Server has HF_TOKEN / HUGGINGFACE_API_KEY — AI fallback without Replicate */
+  huggingfaceConfigured?: boolean;
 }
 
 export interface RemoveBgRequestDto {
@@ -180,7 +184,7 @@ export interface GoogleFontsResponseDto {
 
 // ─── Stock / CC photos ───────────────────────────────────────────
 
-export type StockProvider = 'unsplash' | 'pexels' | 'openverse';
+export type StockProvider = 'unsplash' | 'pexels' | 'openverse' | 'pixabay';
 
 export interface StockPhotoItem {
   id: string;
@@ -208,4 +212,18 @@ export interface StockFetchResponseDto {
   dataUrl: string;
   contentType: string;
   byteLength: number;
+}
+
+/** Reverse-geocode result (Nominatim). */
+export interface GeocodeResponseDto {
+  label: string | null;
+  latitude: number;
+  longitude: number;
+  raw?: string;
+}
+
+/** Colormind / harmony palette (5 hex colors). */
+export interface PaletteHarmonyResponseDto {
+  colors: string[];
+  source: 'colormind' | 'fallback';
 }

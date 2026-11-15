@@ -13,6 +13,10 @@ export interface ImageExifSummary {
   dateTime?: string;
   orientation?: number;
   software?: string;
+  latitude?: number;
+  longitude?: number;
+  /** Filled later via Nominatim reverse geocode */
+  locationLabel?: string;
   hasExif: boolean;
 }
 
@@ -100,6 +104,7 @@ function parseExifTiff(view: DataView, tiffStart: number, out: ImageExifSummary)
   const ifd0 = tiffStart + get32(tiffStart + 4);
   if (ifd0 + 2 > view.byteLength) return;
   const entries = get16(ifd0);
+  let gpsOffset = 0;
 
   for (let i = 0; i < entries; i++) {
     const e = ifd0 + 2 + i * 12;
@@ -123,8 +128,82 @@ function parseExifTiff(view: DataView, tiffStart: number, out: ImageExifSummary)
       out.orientation = get16(dataPos);
     } else if (tag === 0x0131 && type === 2) {
       out.software = readJpegExifAscii(view, dataPos, count);
+    } else if (tag === 0x8825 && type === 4) {
+      gpsOffset = get32(valueOffset);
     }
   }
+
+  if (gpsOffset) {
+    parseGpsIfd(view, tiffStart, tiffStart + gpsOffset, get16, get32, out);
+  }
+}
+
+function readRational(
+  view: DataView,
+  tiffStart: number,
+  offset: number,
+  get32: (o: number) => number
+): number {
+  const num = get32(offset);
+  const den = get32(offset + 4);
+  return den ? num / den : 0;
+}
+
+function parseGpsIfd(
+  view: DataView,
+  tiffStart: number,
+  ifd: number,
+  get16: (o: number) => number,
+  get32: (o: number) => number,
+  out: ImageExifSummary
+) {
+  if (ifd + 2 > view.byteLength) return;
+  const entries = get16(ifd);
+  let latRef = 'N';
+  let lonRef = 'E';
+  let latVals: number[] | null = null;
+  let lonVals: number[] | null = null;
+
+  for (let i = 0; i < entries; i++) {
+    const e = ifd + 2 + i * 12;
+    if (e + 12 > view.byteLength) break;
+    const tag = get16(e);
+    const type = get16(e + 2);
+    const count = get32(e + 4);
+    const valueOffset = e + 8;
+    const dataPos = type === 2 && count <= 4 ? valueOffset : tiffStart + get32(valueOffset);
+
+    if (tag === 1 && type === 2) {
+      latRef = readJpegExifAscii(view, dataPos, count) || 'N';
+    } else if (tag === 2 && type === 5 && count >= 3) {
+      latVals = [
+        readRational(view, tiffStart, dataPos, get32),
+        readRational(view, tiffStart, dataPos + 8, get32),
+        readRational(view, tiffStart, dataPos + 16, get32),
+      ];
+    } else if (tag === 3 && type === 2) {
+      lonRef = readJpegExifAscii(view, dataPos, count) || 'E';
+    } else if (tag === 4 && type === 5 && count >= 3) {
+      lonVals = [
+        readRational(view, tiffStart, dataPos, get32),
+        readRational(view, tiffStart, dataPos + 8, get32),
+        readRational(view, tiffStart, dataPos + 16, get32),
+      ];
+    }
+  }
+
+  if (latVals && lonVals) {
+    const lat = dmsToDecimal(latVals) * (latRef.toUpperCase() === 'S' ? -1 : 1);
+    const lon = dmsToDecimal(lonVals) * (lonRef.toUpperCase() === 'W' ? -1 : 1);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      out.latitude = Number(lat.toFixed(6));
+      out.longitude = Number(lon.toFixed(6));
+    }
+  }
+}
+
+function dmsToDecimal(dms: number[]): number {
+  return (dms[0] || 0) + (dms[1] || 0) / 60 + (dms[2] || 0) / 3600;
 }
 
 function sniffMime(src: string): string | undefined {

@@ -46,6 +46,8 @@ bun run dev
 See [`.env.example`](.env.example):
 
 - `REPLICATE_API_TOKEN` — server-side Replicate key for Cloud Lab
+- `HF_TOKEN` — Hugging Face Inference fallback (caption / upscale / segment hint)
+- `PIXABAY_API_KEY` — Pixabay stock search
 - `REMOVE_BG_API_KEY` — optional remove.bg
 - `DATA_DIR` — projects/assets root (default `apps/api/data`)
 - `PORT` — API port (default `3001`)

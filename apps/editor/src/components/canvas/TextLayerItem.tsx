@@ -13,7 +13,7 @@ interface TextLayerItemProps {
 
 export const TextLayerItem: React.FC<TextLayerItemProps> = ({
   layer,
-  isSelected,
+  isSelected: _isSelected,
   onSelect,
   onChange,
 }) => {

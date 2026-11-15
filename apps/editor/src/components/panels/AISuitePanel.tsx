@@ -26,6 +26,7 @@ import {
   Blend,
   Expand,
   Layers2,
+  Palette,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 import { REVIVE_MODES, type ReviveMode } from '../../utils/photoRevive';
@@ -37,6 +38,7 @@ import { OUTPAINT_PRESETS, type OutpaintPreset } from '../../utils/photoOutpaint
 import { loadImageFiles } from '../../utils/loadImageFiles';
 import type { AiStylePreset } from '@photoshop-lite/shared-types';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
+import { extractPaletteFromImage } from '@photoshop-lite/editor-core';
 
 const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
   { id: 'film', label: 'Film' },
@@ -75,9 +77,13 @@ export const AISuitePanel: React.FC = () => {
     brushSettings,
     updateBrushSettings,
     marqueeSelection,
+    updateAdjustments,
+    commitHistory,
   } = useEditorStore();
 
   const [zone, setZone] = useState<LabZone>('local');
+  const [paletteColors, setPaletteColors] = useState<string[]>([]);
+  const [paletteBusy, setPaletteBusy] = useState(false);
   const [localRecipe, setLocalRecipe] = useState<LocalRecipe>('revive');
   const [provider, setProvider] = useState<'client' | 'remove.bg'>('client');
   const [upscaleFactor, setUpscaleFactor] = useState<number>(2);
@@ -109,6 +115,7 @@ export const AISuitePanel: React.FC = () => {
   const [cloudStyle, setCloudStyle] = useState<AiStylePreset>('film');
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [serverReplicate, setServerReplicate] = useState(false);
+  const [serverHuggingFace, setServerHuggingFace] = useState(false);
   const [serverReachable, setServerReachable] = useState(false);
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
@@ -121,8 +128,10 @@ export const AISuitePanel: React.FC = () => {
   const activePortrait = PORTRAIT_MODES.find((m) => m.id === portraitMode);
   const activeClarity = CLARITY_MODES.find((m) => m.id === clarityMode);
   const busy = aiStatus.isProcessing;
-  const cloudReady = Boolean(replicateApiKey) || serverReplicate;
-  const keysReady = Boolean(removeBgApiKey || replicateApiKey || serverReplicate);
+  const cloudReady = Boolean(replicateApiKey) || serverReplicate || serverHuggingFace;
+  const keysReady = Boolean(
+    removeBgApiKey || replicateApiKey || serverReplicate || serverHuggingFace
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -132,11 +141,13 @@ export const AISuitePanel: React.FC = () => {
         if (cancelled) return;
         setServerReachable(true);
         setServerReplicate(Boolean(h.replicateConfigured));
+        setServerHuggingFace(Boolean(h.huggingfaceConfigured));
       })
       .catch(() => {
         if (cancelled) return;
         setServerReachable(false);
         setServerReplicate(false);
+        setServerHuggingFace(false);
       });
     return () => {
       cancelled = true;
@@ -1009,6 +1020,68 @@ export const AISuitePanel: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </section>
+
+              <section className="lab-card">
+                <div className="lab-card-head">
+                  <div>
+                    <h3 className="flex items-center gap-1.5">
+                      <Palette size={14} className="text-[var(--accent-hot)]" />
+                      Palette
+                    </h3>
+                    <p>Extract colors → grade presets + brush.</p>
+                  </div>
+                  <span className="lab-badge">Local</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isImage || paletteBusy || busy}
+                  className="lab-cta lab-cta--quiet"
+                  onClick={async () => {
+                    if (!selectedLayer || selectedLayer.type !== 'image') return;
+                    setPaletteBusy(true);
+                    try {
+                      const extracted = await extractPaletteFromImage(selectedLayer.src, 5);
+                      let colors = extracted.colors;
+                      try {
+                        const harmony = await aiApiClient.paletteHarmony(colors[0]);
+                        if (harmony.colors?.length) {
+                          colors = [...colors.slice(0, 2), ...harmony.colors.slice(0, 3)].slice(
+                            0,
+                            5
+                          );
+                        }
+                      } catch {
+                        /* Colormind optional */
+                      }
+                      setPaletteColors(colors);
+                      commitHistory('Extract palette');
+                      updateAdjustments(selectedLayer.id, extracted.grade);
+                      if (colors[0]) updateBrushSettings({ color: colors[0] });
+                    } finally {
+                      setPaletteBusy(false);
+                    }
+                  }}
+                >
+                  <Palette size={14} />
+                  {paletteBusy ? 'Extracting…' : 'Extract & grade'}
+                </button>
+                {paletteColors.length > 0 && (
+                  <div className="flex gap-1.5 mt-2 flex-wrap" role="list" aria-label="Palette">
+                    {paletteColors.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        role="listitem"
+                        title={c}
+                        aria-label={`Set brush ${c}`}
+                        onClick={() => updateBrushSettings({ color: c })}
+                        className="w-7 h-7 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] cursor-pointer"
+                        style={{ background: c }}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
 
               <section className="lab-card">

@@ -2,27 +2,5 @@
   "extends": "./tsconfig.base.json",
   "compileOnSave": false,
   "files": [],
-  "references": [
-    {
-      "path": "./apps/editor"
-    },
-    {
-      "path": "./apps/api"
-    },
-    {
-      "path": "./apps/editor-e2e"
-    },
-    {
-      "path": "./libs/shared/types"
-    },
-    {
-      "path": "./libs/ai"
-    },
-    {
-      "path": "./libs/editor-core"
-    },
-    {
-      "path": "./libs/editor-ai-client"
-    }
-  ]
+  "include": []
 }

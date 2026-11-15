@@ -36,7 +36,7 @@ export async function applySpotHealingToImage(
   spotY: number,
   radius: number
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {

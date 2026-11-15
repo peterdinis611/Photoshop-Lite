@@ -45,6 +45,18 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
     try {
       const exif = await extractImageExif(layer.src, { fileName: layer.name });
       set({ lastExif: exif, isExifModalOpen: true });
+      if (exif.latitude != null && exif.longitude != null) {
+        try {
+          const geo = await aiApiClient.reverseGeocode(exif.latitude, exif.longitude);
+          if (geo.label) {
+            set({
+              lastExif: { ...exif, locationLabel: geo.label },
+            });
+          }
+        } catch {
+          /* Nominatim optional */
+        }
+      }
     } catch (e: unknown) {
       set({
         aiStatus: {

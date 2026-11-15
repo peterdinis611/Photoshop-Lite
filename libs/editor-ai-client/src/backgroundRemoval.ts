@@ -33,7 +33,7 @@ export async function rasterizeToCanvas(src: string): Promise<HTMLCanvasElement>
       ctx.drawImage(img, 0, 0, w, h);
       resolve(canvas);
     };
-    img.onerror = (e) => reject(new Error('Failed to load image for background removal'));
+    img.onerror = () => reject(new Error('Failed to load image for background removal'));
     img.src = src;
   });
 }

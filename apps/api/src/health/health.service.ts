@@ -13,7 +13,11 @@ export class HealthService {
       removeBgConfigured: Boolean(process.env.REMOVE_BG_API_KEY?.trim()),
       unsplashConfigured: Boolean(process.env.UNSPLASH_ACCESS_KEY?.trim()),
       pexelsConfigured: Boolean(process.env.PEXELS_API_KEY?.trim()),
+      pixabayConfigured: Boolean(process.env.PIXABAY_API_KEY?.trim()),
       openverseAvailable: true,
+      huggingfaceConfigured: Boolean(
+        process.env.HF_TOKEN?.trim() || process.env.HUGGINGFACE_API_KEY?.trim()
+      ),
     };
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { NotFoundPage } from './NotFoundPage';
@@ -7,10 +7,12 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 
 afterEach(() => cleanup());
 
+const routerFuture = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
+
 describe('NotFoundPage', () => {
   it('renders 404 darkroom copy and home link', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <NotFoundPage />
       </MemoryRouter>
     );
@@ -24,7 +26,7 @@ describe('NotFoundPage', () => {
 describe('ErrorPage', () => {
   it('shows error detail and reload action', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <ErrorPage error={new Error('Develop failed')} />
       </MemoryRouter>
     );
@@ -39,9 +41,10 @@ describe('ErrorBoundary + routing', () => {
     const Boom = () => {
       throw new Error('Boom plate');
     };
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <ErrorBoundary>
           <Boom />
         </ErrorBoundary>
@@ -50,11 +53,12 @@ describe('ErrorBoundary + routing', () => {
 
     expect(screen.getByText(/Plate fogged/i)).toBeTruthy();
     expect(screen.getByText(/Boom plate/)).toBeTruthy();
+    errSpy.mockRestore();
   });
 
   it('shows NotFound for unknown routes', () => {
     render(
-      <MemoryRouter initialEntries={['/no-such-reel']}>
+      <MemoryRouter future={routerFuture} initialEntries={['/no-such-reel']}>
         <Routes>
           <Route path="/" element={<div>editor</div>} />
           <Route path="*" element={<NotFoundPage />} />

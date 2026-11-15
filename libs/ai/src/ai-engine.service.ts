@@ -11,6 +11,7 @@ import type {
   AiRelightPreset,
 } from '@photoshop-lite/shared-types';
 import { REAL_ESRGAN_VERSION, REPLICATE_MODEL_REFS, styleModelRef } from './replicate-models';
+import { hfCaption, hfSegmentHint, hfUpscale, huggingfaceToken } from './huggingface';
 
 type PredictionStart = {
   id?: string;
@@ -147,18 +148,28 @@ export class AiEngineService {
       },
     });
 
-    if (started.fallbackToClient) {
+    if (!started.fallbackToClient) {
       return {
-        success: false,
-        fallbackToClient: true,
-        message: started.message,
+        success: true,
+        predictionId: started.predictionId,
+        statusUrl: started.statusUrl,
       };
     }
 
+    const hf = huggingfaceToken();
+    if (hf) {
+      try {
+        const image = await hfUpscale(imageBase64, hf);
+        return { success: true, imageBase64: image };
+      } catch {
+        /* fall through to client */
+      }
+    }
+
     return {
-      success: true,
-      predictionId: started.predictionId,
-      statusUrl: started.statusUrl,
+      success: false,
+      fallbackToClient: true,
+      message: started.message || 'No Replicate/HF token — use client upscale.',
     };
   }
 
@@ -302,7 +313,7 @@ export class AiEngineService {
 
   async segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.segment,
       apiKey: dto.apiKey,
       input: {
@@ -310,11 +321,27 @@ export class AiEngineService {
         caption: dto.prompt || 'person',
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    const hf = huggingfaceToken();
+    if (hf) {
+      try {
+        const text = await hfSegmentHint(dto.imageBase64, hf, dto.prompt);
+        return { success: true, text, message: 'Hugging Face subject hint (no mask)' };
+      } catch (err) {
+        return {
+          success: false,
+          fallbackToClient: true,
+          message: err instanceof Error ? err.message : started.message,
+        };
+      }
+    }
+    return started;
   }
 
   async caption(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.caption,
       apiKey: dto.apiKey,
       input: {
@@ -322,6 +349,22 @@ export class AiEngineService {
         task: 'image_captioning',
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    const hf = huggingfaceToken();
+    if (hf) {
+      try {
+        const text = await hfCaption(dto.imageBase64, hf);
+        return { success: true, text };
+      } catch (err) {
+        return {
+          success: false,
+          fallbackToClient: true,
+          message: err instanceof Error ? err.message : started.message,
+        };
+      }
+    }
+    return started;
   }
 
   async pollPrediction(dto: PredictionPollRequestDto): Promise<PredictionPollResponseDto> {
@@ -395,7 +438,7 @@ export class AiEngineService {
       if (Array.isArray(output) && output.length > 0) {
         const first = output[0];
         if (typeof first === 'string') {
-          return this.downloadAsBase64(first, status);
+          return this.downloadAsBase64(first);
         }
       }
       return { status: 'failed', error: 'Prediction succeeded but returned no usable output' };
@@ -405,13 +448,10 @@ export class AiEngineService {
       return { status: 'succeeded', imageBase64: outputUrl, outputUrl };
     }
 
-    return this.downloadAsBase64(outputUrl, status);
+    return this.downloadAsBase64(outputUrl);
   }
 
-  private async downloadAsBase64(
-    outputUrl: string,
-    status: string
-  ): Promise<PredictionPollResponseDto> {
+  private async downloadAsBase64(outputUrl: string): Promise<PredictionPollResponseDto> {
     const imageRes = await fetch(outputUrl);
     if (!imageRes.ok) {
       throw new Error('Failed to download result from Replicate');
