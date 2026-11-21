@@ -13,7 +13,7 @@ import {
   Eraser,
   Spline,
   SlidersHorizontal,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { FILTER_PRESETS, DEFAULT_ADJUSTMENTS } from '../../utils/filterHelpers';
 import { ImageAdjustments } from '../../types/editor';

@@ -13,7 +13,7 @@ import {
   Image as ImageIcon,
   Download,
   Shapes,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../../store/editorStore';
 import { loadSampleImages, type SampleImage } from '../../../assets/loadSampleImages';
@@ -230,7 +230,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
         onClick={async () => {
           try {
             const blob = await exportPsdPartial({
-              title: projectTitle || 'Untitled',
+              title: projectTitle || 'Untitled plate',
               width: canvasWidth,
               height: canvasHeight,
               layers,

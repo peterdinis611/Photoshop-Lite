@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Sparkles } from 'lucide-react';
+import { Layers, Sparkles } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 export const StylesPanel: React.FC = () => {

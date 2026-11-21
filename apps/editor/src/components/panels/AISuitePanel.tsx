@@ -27,7 +27,7 @@ import {
   Expand,
   Layers2,
   Palette,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { REVIVE_MODES, type ReviveMode } from '../../utils/photoRevive';
 import { CLEANUP_MODES, type CleanupMode } from '../../utils/photoCleanup';

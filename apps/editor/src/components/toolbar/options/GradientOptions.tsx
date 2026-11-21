@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { ColorOpt, OptChip, OptHint, OptSep, SizeOpt } from '../../ui/OptionControls';
 

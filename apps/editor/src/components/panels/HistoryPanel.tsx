@@ -1,5 +1,5 @@
 import React from 'react';
-import { History, Undo2, Redo2 } from 'lucide-react';
+import { History, Undo2, Redo2 } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 export const HistoryPanel: React.FC = () => {

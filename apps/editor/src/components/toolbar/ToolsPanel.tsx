@@ -39,7 +39,7 @@ import {
   BoxSelect,
   Waves,
   Move3d,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ToolType, ShapeType } from '../../types/editor';
 import { BeforeAfterSlider } from '../canvas/BeforeAfterSlider';

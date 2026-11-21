@@ -1,6 +1,6 @@
 import React from 'react';
 import { Rect, Line } from 'react-konva';
-import { Check, X } from 'lucide-react';
+import { Check, X } from 'pulsoicon-react';
 import type { CropSettings } from '../../../types/editor';
 import type { ToolHandler } from './types';
 

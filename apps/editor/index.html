@@ -84,28 +84,60 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
 
-    <!-- Performance: non-blocking fonts + warm editor route -->
+    <!-- Performance: hints + non-blocking fonts + warm /editor -->
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="/favicon.svg" as="image" type="image/svg+xml" />
     <link
       rel="preload"
       as="style"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      fetchpriority="high"
     />
     <link
+      id="pl-fonts"
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
       media="print"
-      onload="this.media='all'"
+      onload="this.media='all';this.onload=null"
     />
+    <script>
+      /* Font swap fallback if onload is blocked; keep first paint unblocked. */
+      (function () {
+        var l = document.getElementById('pl-fonts');
+        if (!l) return;
+        setTimeout(function () {
+          if (l.media === 'print') l.media = 'all';
+        }, 1800);
+      })();
+    </script>
     <noscript>
       <link
         href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet"
       />
     </noscript>
+    <!-- Speculative load of the editor route (Chrome / Edge) -->
+    <script type="speculationrules">
+      {
+        "prefetch": [
+          {
+            "source": "list",
+            "urls": ["/editor"],
+            "eagerness": "moderate"
+          }
+        ],
+        "prerender": [
+          {
+            "source": "document",
+            "where": { "href_matches": "/editor" },
+            "eagerness": "conservative"
+          }
+        ]
+      }
+    </script>
 
     <!-- Structured data -->
     <script type="application/ld+json">

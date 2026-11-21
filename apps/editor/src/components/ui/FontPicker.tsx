@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useDebouncedCallback, useDebouncedValue } from '@tanstack/react-pacer';
 import type { GoogleFontItem } from '@photoshop-lite/shared-types';
 import { fetchGoogleFonts, loadGoogleFont } from '../../utils/googleFonts';
+import { createFastFuse, fuseSearch } from '../../utils/fuzzySearch';
 import { AnimatedMenu } from './AnimatedMenu';
 
 interface FontPickerProps {
@@ -12,37 +13,47 @@ interface FontPickerProps {
 export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [debouncedQuery] = useDebouncedValue(query, { wait: 180 });
+  const [debouncedQuery] = useDebouncedValue(query, { wait: 80 });
   const [fonts, setFonts] = useState<GoogleFontItem[]>([]);
   const [source, setSource] = useState<'google-api' | 'fallback'>('fallback');
   const [loading, setLoading] = useState(false);
 
-  const searchRemote = useDebouncedCallback(
-    (q: string) => {
-      setLoading(true);
-      fetchGoogleFonts(q)
-        .then((res) => {
-          setFonts(res.items);
-          setSource(res.source);
-        })
-        .finally(() => setLoading(false));
-    },
-    { wait: 280 }
-  );
-
+  // Full catalog once — Fuse handles typeahead locally (no /fonts?q= per keystroke)
   useEffect(() => {
-    searchRemote('');
-  }, [searchRemote]);
-
-  useEffect(() => {
-    if (!open) return;
-    searchRemote(debouncedQuery.trim());
-  }, [debouncedQuery, open, searchRemote]);
+    let cancelled = false;
+    setLoading(true);
+    fetchGoogleFonts()
+      .then((res) => {
+        if (cancelled) return;
+        setFonts(res.items);
+        setSource(res.source);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!value) return;
     void loadGoogleFont(value);
   }, [value]);
+
+  const fuse = useMemo(
+    () => createFastFuse(fonts, [
+      { name: 'family', weight: 0.75 },
+      { name: 'category', weight: 0.25 },
+    ]),
+    [fonts]
+  );
+
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.trim();
+    if (!q) return fonts.slice(0, 80);
+    return fuseSearch(fuse, q, 80);
+  }, [fonts, fuse, debouncedQuery]);
 
   const preloadFont = useDebouncedCallback(
     (family: string) => {
@@ -50,12 +61,6 @@ export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
     },
     { wait: 100 }
   );
-
-  const filtered = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase();
-    if (!q) return fonts.slice(0, 80);
-    return fonts.filter((f) => f.family.toLowerCase().includes(q)).slice(0, 80);
-  }, [fonts, debouncedQuery]);
 
   const pick = async (family: string) => {
     await loadGoogleFont(family);
@@ -84,42 +89,42 @@ export const FontPicker: React.FC<FontPickerProps> = ({ value, onChange }) => {
         className="top-full left-0 mt-1 !p-0 flex flex-col overflow-hidden"
         closeOnLeave={false}
       >
-          <div className="p-2 border-b border-[var(--border-subtle)] relative z-[1]">
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search Google Fonts…"
-              className="w-full bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
-            />
-            <div className="mt-1 text-[9px] font-mono-ui text-[var(--text-faint)]">
-              {loading
-                ? 'Searching…'
-                : `${filtered.length} fonts · ${source === 'google-api' ? 'Google API' : 'fallback'} · Pacer`}
-            </div>
+        <div className="p-2 border-b border-[var(--border-subtle)] relative z-[1]">
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search fonts…"
+            className="w-full bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none focus:border-[var(--accent)]"
+          />
+          <div className="mt-1 text-[9px] font-mono-ui text-[var(--text-faint)]">
+            {loading
+              ? 'Loading catalog…'
+              : `${filtered.length} · Fuse · ${source === 'google-api' ? 'Google' : 'fallback'}`}
           </div>
-          <div className="overflow-y-auto flex-1 py-1 relative z-[1]">
-            {filtered.map((f) => (
-              <button
-                key={f.family}
-                type="button"
-                onMouseEnter={() => preloadFont(f.family)}
-                onClick={() => pick(f.family)}
-                className={`w-full text-left px-3 py-1.5 text-[12px] cursor-pointer flex items-center justify-between gap-2 ${
-                  f.family === value
-                    ? 'bg-[var(--accent)] text-[#1a1208]'
-                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
-                }`}
-                style={{ fontFamily: f.family }}
-              >
-                <span className="truncate">{f.family}</span>
-                <span className="text-[9px] font-mono-ui opacity-60 shrink-0">{f.category}</span>
-              </button>
-            ))}
-            {!loading && filtered.length === 0 && (
-              <div className="px-3 py-4 text-[11px] text-[var(--text-faint)]">No fonts match</div>
-            )}
-          </div>
+        </div>
+        <div className="overflow-y-auto flex-1 py-1 relative z-[1]">
+          {filtered.map((f) => (
+            <button
+              key={f.family}
+              type="button"
+              onMouseEnter={() => preloadFont(f.family)}
+              onClick={() => pick(f.family)}
+              className={`w-full text-left px-3 py-1.5 text-[12px] cursor-pointer flex items-center justify-between gap-2 ${
+                f.family === value
+                  ? 'bg-[var(--accent)] text-[#1a1208]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-primary)]'
+              }`}
+              style={{ fontFamily: f.family }}
+            >
+              <span className="truncate">{f.family}</span>
+              <span className="text-[9px] font-mono-ui opacity-60 shrink-0">{f.category}</span>
+            </button>
+          ))}
+          {!loading && filtered.length === 0 && (
+            <div className="px-3 py-4 text-[11px] text-[var(--text-faint)]">No fonts match</div>
+          )}
+        </div>
       </AnimatedMenu>
     </div>
   );

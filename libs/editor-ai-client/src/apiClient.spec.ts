@@ -175,4 +175,28 @@ describe('AiApiClient', () => {
     await client.paletteHarmony('#d4923a');
     expect(fetch).toHaveBeenCalledWith('/api/palette/harmony?seed=d4923a', expect.any(Object));
   });
+
+  it('searches stock with encoded query + page', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [], query: 'portrait', providers: [], sources: {} }),
+    });
+    await client.searchStock('portrait light', 2);
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/stock/search?q=portrait%20light&page=2',
+      expect.any(Object)
+    );
+  });
+
+  it('lists avatars catalog kind', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ kind: 'avatars', items: [], source: 'dicebear' }),
+    });
+    await client.listCatalog('avatars', { q: 'lab' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/catalog?kind=avatars&q=lab',
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
 });

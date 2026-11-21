@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Key, Check, ExternalLink } from 'lucide-react';
+import { X, Key, Check, ExternalLink } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 export const SettingsModal: React.FC = () => {

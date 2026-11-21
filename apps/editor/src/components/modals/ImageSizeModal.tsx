@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { X, Scaling, Minimize2, Link2, Unlink2 } from 'lucide-react';
+import { X, Scaling, Minimize2, Link2, Unlink2 } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { formatBytes, type ResizeFormat } from '../../utils/resizeImage';
 

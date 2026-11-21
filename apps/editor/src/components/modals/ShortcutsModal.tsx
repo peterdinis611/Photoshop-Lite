@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Keyboard, X } from 'lucide-react';
+import { Keyboard, X } from 'pulsoicon-react';
 import { formatForDisplay, useHotkeyRegistrations } from '@tanstack/react-hotkeys';
 import { useEditorStore } from '../../store/editorStore';
 

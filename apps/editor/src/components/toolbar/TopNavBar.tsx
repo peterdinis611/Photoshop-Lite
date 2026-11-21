@@ -18,7 +18,7 @@ import {
   SunMedium,
   Eraser,
   Pencil,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
 import { findSampleImage } from '../../assets/loadSampleImages';
@@ -26,6 +26,12 @@ import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import { importPsdFile } from '../../utils/psdImport';
 import { notify } from '../../utils/notify';
+import {
+  commitPlateTitle,
+  isUnnamedPlate,
+  plateRenameDraft,
+  resolvePlateTitle,
+} from '../../utils/plateTitle';
 import {
   AnimatedMenu,
   MenuItem as Item,
@@ -134,16 +140,22 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   const { layers, selectedLayerId, selectedLayer, resolveImageId, runRevive, runCleanup, flip } =
     useMenuActions(close);
 
+  const resolvedTitle = resolvePlateTitle(projectTitle);
+  const isUnnamed = isUnnamedPlate(projectTitle);
+
   const beginRename = () => {
-    setTitleDraft(projectTitle || 'Untitled');
+    setTitleDraft(plateRenameDraft(projectTitle));
     setEditingTitle(true);
     window.setTimeout(() => titleInputRef.current?.select(), 0);
   };
 
   const commitRename = () => {
-    const next = titleDraft.trim() || 'Untitled';
+    const next = commitPlateTitle(titleDraft);
     setProjectTitle(next);
     setEditingTitle(false);
+    if (next !== resolvedTitle) {
+      notify.success('Plate renamed', next);
+    }
   };
 
   useEffect(() => {
@@ -332,7 +344,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
       />
 
       {/* Brand */}
-      <div className="flex items-center gap-2 pr-2.5 border-r border-[var(--border-subtle)] shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <Link
           to="/"
           title="Home"
@@ -341,45 +353,53 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
         >
           Ps
         </Link>
-        <div className="hidden md:flex flex-col leading-none min-w-0">
-          <span className="font-display font-bold text-[13px] text-[var(--text-primary)] tracking-tight">
-            Photoshop<span className="text-[var(--accent-hot)]">Lite</span>
-          </span>
-          {editingTitle ? (
-            <input
-              ref={titleInputRef}
-              data-tour="tour-project-title"
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename();
-                if (e.key === 'Escape') {
-                  setEditingTitle(false);
-                }
-              }}
-              className="mt-0.5 w-[140px] bg-[var(--bg-app)] border border-[var(--accent)]/50 rounded px-1 py-0.5 text-[10px] font-mono-ui text-[var(--text-primary)] outline-none"
-            />
-          ) : (
-            <button
-              type="button"
-              data-tour="tour-project-title"
-              title="Rename project"
-              aria-label={`Rename project, current title ${projectTitle || 'Untitled'}`}
-              onClick={beginRename}
-              className="group mt-0.5 flex items-center gap-1 max-w-[140px] text-left cursor-pointer"
-            >
-              <span className="text-[9px] font-mono-ui text-[var(--text-faint)] truncate group-hover:text-[var(--accent-hot)]">
-                {projectTitle || 'Untitled'}
-              </span>
-              <Pencil
-                size={9}
-                className="shrink-0 text-[var(--text-faint)] opacity-0 group-hover:opacity-100"
-              />
-            </button>
-          )}
-        </div>
+        <span className="hidden lg:inline font-display font-bold text-[13px] text-[var(--text-primary)] tracking-tight leading-none">
+          Photoshop<span className="text-[var(--accent-hot)]">Lite</span>
+        </span>
       </div>
+
+      <div className="nav-sep" aria-hidden />
+
+      {/* Document name */}
+      {editingTitle ? (
+        <input
+          ref={titleInputRef}
+          data-tour="tour-project-title"
+          value={titleDraft}
+          placeholder="Name this plate…"
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitRename();
+            if (e.key === 'Escape') setEditingTitle(false);
+          }}
+          className="doc-plate-input"
+          aria-label="Plate name"
+          maxLength={80}
+        />
+      ) : (
+        <button
+          type="button"
+          data-tour="tour-project-title"
+          data-unnamed={isUnnamed ? 'true' : 'false'}
+          title="Click to rename"
+          aria-label={
+            isUnnamed
+              ? 'Name this plate — currently untitled'
+              : `Rename plate, current name ${resolvedTitle}`
+          }
+          onClick={beginRename}
+          className="doc-plate-btn"
+        >
+          <span className="doc-plate-btn__tag">Plate</span>
+          <span className="doc-plate-btn__name">
+            {isUnnamed ? 'Name this plate…' : resolvedTitle}
+          </span>
+          <Pencil size={11} strokeWidth={2} animated={false} className="doc-plate-btn__pen" aria-hidden />
+        </button>
+      )}
+
+      <div className="nav-sep" aria-hidden />
 
       {/* Photoshop-style menus */}
       <nav className="flex items-center gap-0.5 shrink-0" aria-label="Application menus">

@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import { GitCompare, X } from 'lucide-react';
+import { GitCompare, X } from 'pulsoicon-react';
 
 interface BeforeAfterSliderProps {
   onClose: () => void;

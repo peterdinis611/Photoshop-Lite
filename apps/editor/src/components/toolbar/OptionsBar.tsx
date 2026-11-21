@@ -1,5 +1,5 @@
 import React from 'react';
-import { Move } from 'lucide-react';
+import { Move } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import type { ToolType } from '../../types/editor';
 import {

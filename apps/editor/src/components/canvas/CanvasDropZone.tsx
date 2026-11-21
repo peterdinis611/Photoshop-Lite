@@ -8,7 +8,7 @@ import {
   Square,
   ClipboardPaste,
   Images,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { findSampleImage, loadSampleImages, type SampleImage } from '../../assets/loadSampleImages';
 import {

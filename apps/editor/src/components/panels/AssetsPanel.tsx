@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FolderArchive,
   Image as ImageIcon,
@@ -6,11 +6,12 @@ import {
   Sparkles,
   Trash2,
   Upload,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { AssetResponseDto, CatalogItem, CatalogKind } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
 import { notify } from '../../utils/notify';
+import { createFastFuse, fuseSearch } from '../../utils/fuzzySearch';
 
 type Tab = 'workspace' | CatalogKind;
 
@@ -42,6 +43,7 @@ export const AssetsPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
   const refreshWorkspace = useCallback(async () => {
     setLoading(true);
@@ -96,15 +98,33 @@ export const AssetsPanel: React.FC = () => {
     if (tab === 'workspace') {
       void refreshWorkspace();
     } else {
-      void refreshCatalog(tab, query);
+      // Load catalog once per tab — Fuse filters locally (except avatars seed on Go)
+      void refreshCatalog(tab, tab === 'avatars' ? query : undefined);
     }
-  }, [tab, refreshWorkspace, refreshCatalog]); // eslint-disable-line react-hooks/exhaustive-deps -- query via Search
+  }, [tab, refreshWorkspace, refreshCatalog]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {
       Object.values(thumbs).forEach((u) => URL.revokeObjectURL(u));
     };
   }, [thumbs]);
+
+  const catalogFuse = useMemo(
+    () =>
+      createFastFuse(catalog, [
+        { name: 'title', weight: 0.6 },
+        { name: 'author', weight: 0.2 },
+        { name: 'license', weight: 0.1 },
+        { name: 'id', weight: 0.1 },
+      ]),
+    [catalog]
+  );
+
+  const visibleCatalog = useMemo(() => {
+    const q = query.trim();
+    if (!q || tab === 'avatars') return catalog;
+    return fuseSearch(catalogFuse, q, 48);
+  }, [catalog, catalogFuse, query, tab]);
 
   const uploadFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
@@ -199,63 +219,76 @@ export const AssetsPanel: React.FC = () => {
 
   const runSearch = () => {
     if (tab === 'workspace') return;
+    // Avatars: seed hits DiceBear API. Others: Fuse already filters; Go refreshes upstream.
     void refreshCatalog(tab, query);
   };
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-toolbar)] px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <FolderArchive size={13} className="text-[var(--accent)]" />
-          <span className="font-display text-[12px] font-bold text-[var(--text-primary)]">
-            Assets
-          </span>
-        </div>
-        {tab === 'workspace' && (
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 text-[10px] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-            onClick={() => fileRef.current?.click()}
-          >
-            <Upload size={11} /> Upload
-          </button>
-        )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) void uploadFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-      </div>
+  const onDropFiles = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (tab !== 'workspace') return;
+    if (e.dataTransfer.files?.length) void uploadFiles(e.dataTransfer.files);
+  };
 
-      <div className="flex gap-1 border-b border-[var(--border-subtle)] px-2 py-1.5">
+  return (
+    <div className="assets-panel flex h-full flex-col">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/svg+xml"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) void uploadFiles(e.target.files);
+          e.target.value = '';
+        }}
+      />
+
+      {/* Source switch — 2×2 so labels never clip in the narrow rail */}
+      <div
+        role="tablist"
+        aria-label="Asset sources"
+        className="assets-panel__tabs grid grid-cols-2 gap-1 border-b border-[var(--border-subtle)] bg-[var(--bg-toolbar)] p-2"
+      >
         {TABS.map(({ id, label, Icon }) => {
           const active = tab === id;
           return (
             <button
               key={id}
               type="button"
+              role="tab"
+              aria-selected={active}
               onClick={() => setTab(id)}
-              className={`inline-flex flex-1 items-center justify-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-1 font-mono-ui text-[9px] uppercase tracking-[0.08em] transition-colors ${
+              className={`assets-panel__tab inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-2 font-mono-ui text-[10px] uppercase tracking-[0.1em] transition-colors ${
                 active
-                  ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
-                  : 'text-[var(--text-faint)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-muted)]'
+                  ? 'border border-[var(--accent)]/45 bg-[var(--accent-dim)] text-[var(--accent)]'
+                  : 'border border-transparent text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Icon size={11} />
-              <span className="truncate">{label}</span>
+              <Icon size={12} aria-hidden />
+              <span>{label}</span>
             </button>
           );
         })}
       </div>
 
+      {tab === 'workspace' && (
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] px-2 py-1.5">
+          <span className="font-mono-ui text-[9px] uppercase tracking-wider text-[var(--text-muted)]">
+            Workspace library
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--accent)]/35 bg-[var(--accent-dim)] px-2.5 py-1 text-[10px] font-medium text-[var(--accent)] hover:border-[var(--accent)]/60"
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload size={11} aria-hidden /> Upload
+          </button>
+        </div>
+      )}
+
       {tab !== 'workspace' && (
-        <div className="flex gap-1 border-b border-[var(--border-subtle)] px-2 py-1.5">
+        <div className="flex gap-1.5 border-b border-[var(--border-subtle)] px-2 py-1.5">
           <input
             type="search"
             value={query}
@@ -268,23 +301,32 @@ export const AssetsPanel: React.FC = () => {
                 ? 'Search wood, metal, fabric…'
                 : tab === 'avatars'
                   ? 'Seed name…'
-                  : 'Page via API · Enter to reload'
+                  : 'Filter · Enter reloads upstream'
             }
-            className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--accent)]"
+            className="min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1.5 text-[11px] text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--accent)]"
           />
           <button
             type="button"
             onClick={runSearch}
-            className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1 font-mono-ui text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--accent)]"
+            className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2.5 py-1.5 font-mono-ui text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
           >
             Go
           </button>
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-2"
+        onDragOver={(e) => {
+          if (tab !== 'workspace') return;
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDropFiles}
+      >
         {loading && (
-          <p className="py-6 text-center font-mono-ui text-[10px] text-[var(--text-faint)]">
+          <p className="py-6 text-center font-mono-ui text-[10px] text-[var(--text-muted)]">
             Loading…
           </p>
         )}
@@ -295,12 +337,51 @@ export const AssetsPanel: React.FC = () => {
         )}
 
         {tab === 'workspace' && !loading && assets.length === 0 && !error && (
-          <p className="px-2 py-8 text-center text-[11px] leading-relaxed text-[var(--text-muted)]">
-            Workspace library is empty. Upload here, or browse free Textures / Plates / Marks.
-          </p>
+          <div
+            className={`assets-panel__empty flex flex-col items-center gap-3 rounded-[var(--radius-md)] border border-dashed px-3 py-7 text-center transition-colors ${
+              dragOver
+                ? 'border-[var(--accent)] bg-[var(--accent-dim)]'
+                : 'border-[var(--border-strong)] bg-[var(--bg-elevated)]/50'
+            }`}
+          >
+            <FolderArchive size={22} className="text-[var(--accent)]" aria-hidden />
+            <div className="space-y-1">
+              <p className="font-display text-[13px] font-semibold text-[var(--text-primary)]">
+                Library is empty
+              </p>
+              <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+                Drop images here, upload from disk, or pull free stock from the tabs above.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--accent)]/50 bg-[var(--accent)] px-3 py-1.5 text-[11px] font-medium text-[var(--bg-app)] hover:brightness-110"
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload size={12} aria-hidden /> Upload files
+            </button>
+            <div className="flex flex-wrap justify-center gap-1.5 pt-1">
+              {(
+                [
+                  { id: 'textures' as const, label: 'Textures' },
+                  { id: 'placeholders' as const, label: 'Plates' },
+                  { id: 'avatars' as const, label: 'Marks' },
+                ] as const
+              ).map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => setTab(chip.id)}
+                  className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-toolbar)] px-2.5 py-1 font-mono-ui text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+                >
+                  Browse {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
-        {tab === 'workspace' && (
+        {tab === 'workspace' && assets.length > 0 && (
           <div className="grid grid-cols-2 gap-2">
             {assets.map((a) => (
               <div
@@ -317,19 +398,19 @@ export const AssetsPanel: React.FC = () => {
                     {thumbs[a.id] ? (
                       <img src={thumbs[a.id]} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full items-center justify-center font-mono-ui text-[9px] text-[var(--text-faint)]">
+                      <div className="flex h-full items-center justify-center font-mono-ui text-[9px] text-[var(--text-muted)]">
                         …
                       </div>
                     )}
                   </div>
                 </button>
                 <div className="flex items-center gap-1 px-1.5 py-1">
-                  <p className="min-w-0 flex-1 truncate text-[10px] text-[var(--text-muted)]">
+                  <p className="min-w-0 flex-1 truncate text-[10px] text-[var(--text-primary)]">
                     {a.fileName}
                   </p>
                   <button
                     type="button"
-                    className="rounded p-0.5 text-[var(--text-faint)] hover:text-[var(--accent-hot)]"
+                    className="rounded p-0.5 text-[var(--text-muted)] hover:text-[var(--accent-hot)]"
                     aria-label={`Delete ${a.fileName}`}
                     disabled={busyId === a.id}
                     onClick={() => void remove(a.id)}
@@ -342,15 +423,20 @@ export const AssetsPanel: React.FC = () => {
           </div>
         )}
 
-        {tab !== 'workspace' && !loading && catalog.length === 0 && !error && (
-          <p className="px-2 py-8 text-center text-[11px] leading-relaxed text-[var(--text-muted)]">
-            Nothing matched. Try another search.
-          </p>
+        {tab !== 'workspace' && !loading && visibleCatalog.length === 0 && !error && (
+          <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--border-strong)] bg-[var(--bg-elevated)]/40 px-3 py-8 text-center">
+            <p className="font-display text-[13px] font-semibold text-[var(--text-primary)]">
+              Nothing matched
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Try another search, or hit Go to reload upstream.
+            </p>
+          </div>
         )}
 
-        {tab !== 'workspace' && (
+        {tab !== 'workspace' && visibleCatalog.length > 0 && (
           <div className="grid grid-cols-2 gap-2">
-            {catalog.map((item) => (
+            {visibleCatalog.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -367,9 +453,9 @@ export const AssetsPanel: React.FC = () => {
                   />
                 </div>
                 <div className="px-1.5 py-1">
-                  <p className="truncate text-[10px] text-[var(--text-muted)]">{item.title}</p>
+                  <p className="truncate text-[10px] text-[var(--text-primary)]">{item.title}</p>
                   {item.author && (
-                    <p className="truncate font-mono-ui text-[8px] text-[var(--text-faint)]">
+                    <p className="truncate font-mono-ui text-[8px] text-[var(--text-muted)]">
                       {item.author}
                       {item.license ? ` · ${item.license}` : ''}
                     </p>
@@ -381,10 +467,10 @@ export const AssetsPanel: React.FC = () => {
         )}
       </div>
 
-      <div className="border-t border-[var(--border-subtle)] px-3 py-1.5 font-mono-ui text-[9px] text-[var(--text-faint)]">
+      <div className="border-t border-[var(--border-subtle)] px-3 py-1.5 font-mono-ui text-[9px] text-[var(--text-muted)]">
         {tab === 'workspace'
           ? `${assets.length} asset${assets.length === 1 ? '' : 's'} · workspace scoped`
-          : `${catalog.length} · ${catalogSource || tab} · via API proxy · click to place`}
+          : `${visibleCatalog.length}/${catalog.length} · ${catalogSource || tab} · click to place`}
       </div>
     </div>
   );

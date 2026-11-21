@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Info, MapPin } from 'lucide-react';
+import { X, Info, MapPin } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 export const ExifModal: React.FC = () => {

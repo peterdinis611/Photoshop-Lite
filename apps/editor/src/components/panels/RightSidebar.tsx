@@ -1,5 +1,5 @@
 import React, { Activity, Suspense, lazy, startTransition, useEffect, useState, ViewTransition } from 'react';
-import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const LayersPanel = lazy(() =>
@@ -116,7 +116,7 @@ export const RightSidebar: React.FC = () => {
   return (
     <aside
       className={`shell-sidebar bg-[var(--bg-panel)] border-l border-[var(--border-subtle)] flex h-full z-40 select-none transition-[width] duration-200 ease-out ${
-        isOpen ? 'w-80' : 'w-11'
+        isOpen ? 'w-[21.5rem]' : 'w-11'
       }`}
       data-testid="right-sidebar"
       data-tour="tour-sidebar"

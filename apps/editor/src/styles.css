@@ -271,6 +271,115 @@
   animation: shell-slide-y 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Nav separators — thin hairline, never accent */
+.nav-sep {
+  width: 1px;
+  height: 1.1rem;
+  flex-shrink: 0;
+  background: var(--border-subtle);
+  margin: 0 0.15rem;
+}
+
+/* Document / plate name — single compact control */
+.doc-plate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: min(240px, 28vw);
+  height: 1.75rem;
+  padding: 0 0.55rem 0 0.5rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.doc-plate-btn:hover,
+.doc-plate-btn:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.doc-plate-btn[data-unnamed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
+  background: var(--accent-dim);
+}
+
+.doc-plate-btn[data-unnamed='true']:hover,
+.doc-plate-btn[data-unnamed='true']:focus-visible {
+  border-color: var(--accent);
+}
+
+.doc-plate-btn__tag {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.doc-plate-btn[data-unnamed='true'] .doc-plate-btn__tag {
+  color: var(--accent);
+}
+
+.doc-plate-btn__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.doc-plate-btn[data-unnamed='true'] .doc-plate-btn__name {
+  color: var(--accent-hot);
+}
+
+.doc-plate-btn__pen {
+  flex-shrink: 0;
+  width: 11px !important;
+  height: 11px !important;
+  color: var(--text-faint);
+  opacity: 0.7;
+}
+
+.doc-plate-btn:hover .doc-plate-btn__pen,
+.doc-plate-btn:focus-visible .doc-plate-btn__pen {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.doc-plate-input {
+  height: 1.75rem;
+  width: min(200px, 28vw);
+  min-width: 8rem;
+  margin: 0;
+  padding: 0 0.55rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+}
+
+.doc-plate-input::placeholder {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
 .shell-options {
   animation: shell-slide-y 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
 }
@@ -380,6 +489,24 @@
     color 0.18s ease,
     box-shadow 0.22s ease,
     transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* PulsoIcon — keep motion crisp inside darkroom chrome */
+.tool-btn svg,
+.dock-btn svg,
+.dock-export svg,
+[role='menuitem'] svg,
+.ui-interactive svg {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-btn svg,
+  .dock-btn svg,
+  [role='menuitem'] svg {
+    animation: none !important;
+  }
 }
 
 .tool-btn:hover:not(.tool-btn-active) {

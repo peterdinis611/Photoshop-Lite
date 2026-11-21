@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDebouncedCallback } from '@tanstack/react-pacer';
-import { X, Search, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { X, Search, Image as ImageIcon, ExternalLink } from 'pulsoicon-react';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { StockPhotoItem, StockSearchResponseDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
+import { createFastFuse, fuseSearch } from '../../utils/fuzzySearch';
 
 const QUICK = ['portrait', 'landscape', 'product', 'city', 'nature', 'abstract'];
+const CACHE_CAP = 240;
 
 export const StockPickerModal: React.FC = () => {
   const isOpen = useEditorStore((s) => s.isStockModalOpen);
@@ -17,6 +19,22 @@ export const StockPickerModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StockSearchResponseDto | null>(null);
   const [placingId, setPlacingId] = useState<string | null>(null);
+  /** Session corpus — Fuse searches this instantly while API is in flight. */
+  const cacheRef = useRef<Map<string, StockPhotoItem>>(new Map());
+  const [cacheTick, setCacheTick] = useState(0);
+
+  const mergeCache = (items: StockPhotoItem[]) => {
+    const map = cacheRef.current;
+    for (const item of items) {
+      map.set(item.id, item);
+    }
+    while (map.size > CACHE_CAP) {
+      const first = map.keys().next().value;
+      if (first == null) break;
+      map.delete(first);
+    }
+    setCacheTick((n) => n + 1);
+  };
 
   const runSearch = useDebouncedCallback(
     (q: string) => {
@@ -24,14 +42,17 @@ export const StockPickerModal: React.FC = () => {
       setError(null);
       aiApiClient
         .searchStock(q, 1)
-        .then((res) => setResult(res))
+        .then((res) => {
+          setResult(res);
+          mergeCache(res.items);
+        })
         .catch((e: unknown) => {
           setResult(null);
           setError(e instanceof Error ? e.message : 'Stock search failed');
         })
         .finally(() => setLoading(false));
     },
-    { wait: 320 }
+    { wait: 380 }
   );
 
   useEffect(() => {
@@ -39,13 +60,41 @@ export const StockPickerModal: React.FC = () => {
     runSearch(query);
   }, [isOpen, query, runSearch]);
 
+  const cachedItems = useMemo(() => {
+    void cacheTick;
+    return Array.from(cacheRef.current.values());
+  }, [cacheTick]);
+
+  const fuse = useMemo(
+    () =>
+      createFastFuse(cachedItems, [
+        { name: 'title', weight: 0.55 },
+        { name: 'author', weight: 0.2 },
+        { name: 'provider', weight: 0.15 },
+        { name: 'license', weight: 0.1 },
+      ]),
+    [cachedItems]
+  );
+
+  const apiQuery = result?.query?.trim().toLowerCase() ?? '';
+  const qNorm = query.trim().toLowerCase();
+
+  /** Instant Fuse hits from session cache; fall back to latest API page. */
+  const displayItems = useMemo(() => {
+    if (!qNorm) return result?.items ?? [];
+    if (qNorm === apiQuery && result?.items.length) return result.items;
+    if (cachedItems.length === 0) return result?.items ?? [];
+    const local = fuseSearch(fuse, query, 48);
+    if (local.length > 0) return local;
+    return result?.items ?? [];
+  }, [qNorm, apiQuery, result, cachedItems.length, fuse, query]);
+
   if (!isOpen) return null;
 
   const place = async (item: StockPhotoItem) => {
     setPlacingId(item.id);
     setError(null);
     try {
-      // Prefer API proxy (Openverse hosts often block canvas CORS)
       let dataUrl: string;
       try {
         const proxied = await aiApiClient.fetchStockImage(item.fullUrl);
@@ -150,26 +199,29 @@ export const StockPickerModal: React.FC = () => {
               </button>
             ))}
           </div>
-          {sourceHints && (
-            <p className="font-mono-ui text-[9px] text-[var(--text-faint)]">{sourceHints}</p>
-          )}
+          <p className="font-mono-ui text-[9px] text-[var(--text-faint)]">
+            {loading ? 'API… · ' : ''}
+            {displayItems.length} shown
+            {cachedItems.length > 0 ? ` · Fuse cache ${cachedItems.length}` : ''}
+            {sourceHints ? ` · ${sourceHints}` : ''}
+          </p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          {loading && (
+          {loading && displayItems.length === 0 && (
             <p className="text-center text-[12px] text-[var(--text-faint)] py-10">Searching…</p>
           )}
-          {error && !loading && (
+          {error && !loading && displayItems.length === 0 && (
             <p className="text-center text-[12px] text-[var(--danger)] py-6">{error}</p>
           )}
-          {!loading && result && result.items.length === 0 && (
+          {!loading && displayItems.length === 0 && !error && (
             <p className="text-center text-[12px] text-[var(--text-faint)] py-10">
               No results — try another query, or set UNSPLASH / PEXELS / PIXABAY keys for more
               sources. Openverse works without a key.
             </p>
           )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-            {(result?.items ?? []).map((item) => (
+            {displayItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -182,6 +234,7 @@ export const StockPickerModal: React.FC = () => {
                   alt=""
                   className="w-full aspect-[4/3] object-cover"
                   loading="lazy"
+                  decoding="async"
                   draggable={false}
                 />
                 <div className="p-2">

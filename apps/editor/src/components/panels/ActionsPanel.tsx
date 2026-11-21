@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Circle, Film, Play, Square, Trash2 } from 'lucide-react';
+import { Circle, Film, Play, Square, Trash2 } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 export const ActionsPanel: React.FC = () => {

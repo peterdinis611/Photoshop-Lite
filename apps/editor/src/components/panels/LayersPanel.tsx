@@ -21,7 +21,7 @@ import {
   Replace,
   SlidersHorizontal,
   Blend,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { BlendMode, EditorLayer } from '../../types/editor';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { usePageMeta } from '../seo/usePageMeta';
 import { SkipLink } from '../a11y/SkipLink';
 import { LiveRegion } from '../a11y/LiveRegion';
+import { useRouteWarmup } from '../hooks/useRouteWarmup';
 import {
   ArrowUpRightIcon,
   BrushIcon,
@@ -11,6 +12,8 @@ import {
   SparklesIcon,
   WandIcon,
 } from './landingIcons';
+
+const warmEditor = () => import('../app/EditorShell');
 
 const CAPABILITIES = [
   {
@@ -109,18 +112,7 @@ export const LandingPage: React.FC = () => {
     reducedMotion.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
-  // Warm the editor chunk after first paint so /editor opens faster
-  useEffect(() => {
-    const prefetch = () => {
-      void import('../app/EditorShell');
-    };
-    const ric = window.requestIdleCallback?.(prefetch, { timeout: 2500 });
-    const t = ric == null ? window.setTimeout(prefetch, 1400) : 0;
-    return () => {
-      if (ric != null) window.cancelIdleCallback?.(ric);
-      if (t) window.clearTimeout(t);
-    };
-  }, []);
+  useRouteWarmup(warmEditor);
 
   // Scroll parallax
   useEffect(() => {
@@ -313,10 +305,10 @@ export const LandingPage: React.FC = () => {
                 id="landing-cta"
                 className="landing__cta"
                 onMouseEnter={() => {
-                  void import('../app/EditorShell');
+                  void warmEditor();
                 }}
                 onFocus={() => {
-                  void import('../app/EditorShell');
+                  void warmEditor();
                 }}
               >
                 <span>Open editor</span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, FilePlus } from 'lucide-react';
+import { X, FilePlus } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const PRESETS = [

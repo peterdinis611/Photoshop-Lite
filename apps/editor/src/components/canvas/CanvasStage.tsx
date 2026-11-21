@@ -13,6 +13,7 @@ import { GradientLayerItem } from './GradientLayerItem';
 import { AdjustmentLayerItem } from './AdjustmentLayerItem';
 import { applyAdjustmentLayers } from './adjustmentComposite';
 import { CanvasRulers } from './CanvasRulers';
+import { CanvasGrid } from './CanvasGrid';
 // Importing the tools index registers every tool handler (pointer logic lives there)
 import {
   useToolDispatch,
@@ -426,30 +427,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
               </React.Fragment>
             );
           })}
-          {/* Grid overlay */}
+          {/* Grid overlay — one Shape, not hundreds of Line nodes */}
           {showGrid && (
-            <>
-              {Array.from({ length: Math.ceil(canvasWidth / 50) + 1 }).map((_, i) => (
-                <Line
-                  key={`gv_${i}`}
-                  points={[i * 50, 0, i * 50, canvasHeight]}
-                  stroke="#374151"
-                  strokeWidth={0.5 / zoom}
-                  dash={[4 / zoom, 4 / zoom]}
-                  listening={false}
-                />
-              ))}
-              {Array.from({ length: Math.ceil(canvasHeight / 50) + 1 }).map((_, i) => (
-                <Line
-                  key={`gh_${i}`}
-                  points={[0, i * 50, canvasWidth, i * 50]}
-                  stroke="#374151"
-                  strokeWidth={0.5 / zoom}
-                  dash={[4 / zoom, 4 / zoom]}
-                  listening={false}
-                />
-              ))}
-            </>
+            <CanvasGrid canvasWidth={canvasWidth} canvasHeight={canvasHeight} zoom={zoom} />
           )}
 
           {/* Guides */}

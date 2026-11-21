@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { History, RotateCcw, X } from 'lucide-react';
+import { History, RotateCcw, X } from 'pulsoicon-react';
 import type { ProjectVersionSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
 import { notify } from '../../utils/notify';

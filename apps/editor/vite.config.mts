@@ -123,8 +123,18 @@ export default defineConfig(() => {
                 test: /node_modules[\\/]driver\.js[\\/](?!.*node_modules)/,
               },
               {
-                name: 'lucide',
-                test: /node_modules[\\/]lucide-react[\\/](?!.*node_modules)/,
+                name: 'pulso-icons',
+                test: /node_modules[\\/](pulsoicon-react|pulsoicon-core)[\\/](?!.*node_modules)/,
+                priority: 15,
+              },
+              {
+                name: 'motion',
+                test: /node_modules[\\/](motion|framer-motion)[\\/](?!.*node_modules)/,
+                priority: 15,
+              },
+              {
+                name: 'fuse',
+                test: /node_modules[\\/]fuse\.js[\\/](?!.*node_modules)/,
               },
             ],
           },

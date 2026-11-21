@@ -23,8 +23,13 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
   const { image: maskElement } = useKonvaImage(
     layer.hasLayerMask ? layer.layerMaskSrc : null
   );
-  const layers = useEditorStore((s) => s.layers);
+  const clipTarget = useEditorStore((s) =>
+    layer.clippingMaskToId
+      ? s.layers.find((l) => l.id === layer.clippingMaskToId)
+      : undefined
+  );
   const activeTool = useEditorStore((s) => s.activeTool);
+  const zoom = useEditorStore((s) => s.zoom);
   const canMove = activeTool === 'select' && !layer.locked;
 
   useEffect(() => {
@@ -58,16 +63,21 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
       };
 
   let clipFunc: ((ctx: Konva.Context) => void) | undefined;
-  if (layer.clippingMaskToId) {
-    const clipTarget = layers.find((l) => l.id === layer.clippingMaskToId);
-    if (clipTarget) {
-      clipFunc = (ctx) => {
-        const lx = clipTarget.x - layer.x;
-        const ly = clipTarget.y - layer.y;
-        ctx.rect(lx, ly, clipTarget.width * clipTarget.scaleX, clipTarget.height * clipTarget.scaleY);
-      };
-    }
+  if (clipTarget) {
+    clipFunc = (ctx) => {
+      const lx = clipTarget.x - layer.x;
+      const ly = clipTarget.y - layer.y;
+      ctx.rect(
+        lx,
+        ly,
+        clipTarget.width * clipTarget.scaleX,
+        clipTarget.height * clipTarget.scaleY
+      );
+    };
   }
+
+  // Soften when zoomed out; crisp nearest when inspecting pixels close-up
+  const imageSmoothingEnabled = zoom < 2.5;
 
   const commonTransformEnd = () => {
     const node = groupRef.current;
@@ -116,6 +126,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
           stroke={styles.stroke}
           strokeWidth={styles.strokeWidth || 0}
           perfectDrawEnabled={false}
+          hitStrokeWidth={0}
+          imageSmoothingEnabled={imageSmoothingEnabled}
           {...shadowProps}
         />
         <KonvaImage
@@ -125,6 +137,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
           globalCompositeOperation="destination-in"
           listening={false}
           perfectDrawEnabled={false}
+          imageSmoothingEnabled={imageSmoothingEnabled}
         />
       </Group>
     );
@@ -140,6 +153,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
         stroke={styles.stroke}
         strokeWidth={styles.strokeWidth || 0}
         perfectDrawEnabled={false}
+        hitStrokeWidth={0}
+        imageSmoothingEnabled={imageSmoothingEnabled}
         {...shadowProps}
       />
     </Group>

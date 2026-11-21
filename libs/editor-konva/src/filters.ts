@@ -118,12 +118,50 @@ export function registerPhotoAdjustFilter(): void {
 
 registerPhotoAdjustFilter();
 
+/** True when PhotoAdjust / levels / curves would change pixels. */
+export function hasPhotoAdjustWork(adj: ImageAdjustments): boolean {
+  return (
+    (adj.exposure ?? 0) !== 0 ||
+    (adj.vibrance ?? 0) !== 0 ||
+    (adj.temperature ?? 0) !== 0 ||
+    (adj.tint ?? 0) !== 0 ||
+    !!adj.sepia ||
+    (adj.sharpness ?? 0) > 0 ||
+    !!adj.levels ||
+    !!adj.curves
+  );
+}
+
+/** True when any Konva filter pipeline is needed. */
+export function hasAnyImageAdjustments(adj: ImageAdjustments): boolean {
+  return (
+    (adj.brightness ?? 0) !== 0 ||
+    (adj.contrast ?? 0) !== 0 ||
+    (adj.hue ?? 0) !== 0 ||
+    (adj.saturation ?? 0) !== 0 ||
+    (adj.blur ?? 0) > 0 ||
+    !!adj.grayscale ||
+    !!adj.invert ||
+    hasPhotoAdjustWork(adj)
+  );
+}
+
 /** Apply ImageAdjustments to a Konva.Image via filters + cache. */
 export function applyImageNodeFilters(
   imageNode: Konva.Image,
   adjustments: ImageAdjustments
 ): void {
   registerPhotoAdjustFilter();
+
+  // Identity adjustments: drop filter cache entirely (huge win while dragging / idle).
+  if (!hasAnyImageAdjustments(adjustments)) {
+    imageNode.filters([]);
+    (imageNode as unknown as { photoAdjustments?: ImageAdjustments }).photoAdjustments =
+      undefined;
+    imageNode.clearCache();
+    return;
+  }
+
   const filters: Konva.Filter[] = [];
 
   if (adjustments.brightness !== 0) {
@@ -152,13 +190,19 @@ export function applyImageNodeFilters(
   if (adjustments.grayscale) filters.push(Konva.Filters.Grayscale);
   if (adjustments.invert) filters.push(Konva.Filters.Invert);
 
-  (imageNode as unknown as { photoAdjustments: ImageAdjustments }).photoAdjustments =
-    adjustments;
-  filters.push(
-    (Konva.Filters as unknown as Record<string, Konva.Filter>).PhotoAdjust
-  );
+  if (hasPhotoAdjustWork(adjustments)) {
+    (imageNode as unknown as { photoAdjustments: ImageAdjustments }).photoAdjustments =
+      adjustments;
+    filters.push(
+      (Konva.Filters as unknown as Record<string, Konva.Filter>).PhotoAdjust
+    );
+  } else {
+    (imageNode as unknown as { photoAdjustments?: ImageAdjustments }).photoAdjustments =
+      undefined;
+  }
 
   imageNode.clearCache();
   imageNode.filters(filters);
-  imageNode.cache({ pixelRatio: Math.min(2, window.devicePixelRatio || 1) });
+  // Cap pixelRatio so filter cache textures stay manageable on retina.
+  imageNode.cache({ pixelRatio: Math.min(1.5, window.devicePixelRatio || 1) });
 }

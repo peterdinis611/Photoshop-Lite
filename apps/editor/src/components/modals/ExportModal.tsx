@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Download, FileImage } from 'lucide-react';
+import { X, Download, FileImage } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { downloadDataUrl, exportDocumentToDataUrl } from '../../utils/exportCanvas';
 import {

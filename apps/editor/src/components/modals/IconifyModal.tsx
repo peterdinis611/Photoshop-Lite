@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, Search, Shapes } from 'lucide-react';
+import { X, Search, Shapes } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 
 type IconHit = { prefix: string; name: string };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { ColorOpt, OptChip, OptHint, SizeOpt } from '../../ui/OptionControls';
 

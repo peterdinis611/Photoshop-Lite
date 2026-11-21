@@ -1,5 +1,5 @@
 import React from 'react';
-import { Frame, Layers, MousePointer2, Ruler } from 'lucide-react';
+import { Frame, Layers, MousePointer2, Ruler } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { LiveRegion } from '../../a11y/LiveRegion';
 

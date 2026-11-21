@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, X, RotateCw, RotateCcw } from 'lucide-react';
+import { Check, X, RotateCw, RotateCcw } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { OptChip, OptLabel, OptSep } from '../../ui/OptionControls';
 

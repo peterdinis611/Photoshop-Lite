@@ -17,7 +17,7 @@ import {
   FolderMinus,
   AlignHorizontalJustifyCenter,
   Layers2,
-} from 'lucide-react';
+} from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
 import { MenuPanel } from './MenuPanel';

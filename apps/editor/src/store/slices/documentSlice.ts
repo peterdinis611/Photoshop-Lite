@@ -77,7 +77,7 @@ export const createDocumentSlice: StateCreator<EditorStore, [], [], DocumentSlic
       pan: { x: 0, y: 0 },
       isDocumentOpen: true,
       isNewCanvasModalOpen: false,
-      projectTitle: 'Untitled',
+      projectTitle: 'Untitled plate',
       cloudProjectId: null,
       activeTool: 'select',
       aiStatus: {

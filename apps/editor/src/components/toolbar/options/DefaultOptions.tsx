@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlipHorizontal, FlipVertical, AlignCenter } from 'lucide-react';
+import { FlipHorizontal, FlipVertical, AlignCenter } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { ColorOpt, OptChip, OptHint, OptSep, SizeOpt } from '../../ui/OptionControls';
 

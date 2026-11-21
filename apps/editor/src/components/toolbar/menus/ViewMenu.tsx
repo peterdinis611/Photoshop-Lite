@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ruler, Plus, Trash, Keyboard, Compass } from 'lucide-react';
+import { Ruler, Plus, Trash, Keyboard, Compass } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
 import { MenuPanel } from './MenuPanel';

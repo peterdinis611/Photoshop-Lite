@@ -17,7 +17,7 @@ function icon({ size = 24, ...props }: IconProps) {
   };
 }
 
-/** Tiny inline icons so landing/status stay off the lucide chunk. */
+/** Tiny inline icons — landing stays off pulsoicon/motion (first-paint budget). */
 export function ArrowUpRightIcon(props: IconProps) {
   return (
     <svg {...icon(props)}>

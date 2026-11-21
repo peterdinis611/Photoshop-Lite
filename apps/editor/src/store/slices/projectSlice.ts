@@ -25,7 +25,7 @@ export interface ProjectSlice {
 export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice> = (set, get) => ({
   lastExif: null,
 
-  projectTitle: 'Untitled',
+  projectTitle: 'Untitled plate',
 
   cloudProjectId: null,
 
@@ -78,7 +78,7 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
   saveProject: () => {
     const { projectTitle, canvasWidth, canvasHeight, backgroundColor, layers } = get();
     const project = buildProjectFile({
-      title: projectTitle || 'Untitled',
+      title: projectTitle || 'Untitled plate',
       canvasWidth,
       canvasHeight,
       backgroundColor,
@@ -89,7 +89,7 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
 
   loadProject: (project: ProjectFileData) => {
     set({
-      projectTitle: project.title || 'Untitled',
+      projectTitle: project.title || 'Untitled plate',
       canvasWidth: project.canvasWidth,
       canvasHeight: project.canvasHeight,
       backgroundColor: project.backgroundColor,
@@ -117,7 +117,7 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
     const { projectTitle, canvasWidth, canvasHeight, backgroundColor, layers, cloudProjectId } =
       get();
     const dto = {
-      title: projectTitle || 'Untitled',
+      title: projectTitle || 'Untitled plate',
       canvasWidth,
       canvasHeight,
       backgroundColor,

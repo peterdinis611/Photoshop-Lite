@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react';
+import {
+  loadKonvaImage,
+  peekKonvaImage,
+  releaseKonvaImage,
+} from './imageCache';
 
 export type KonvaImageStatus = 'loading' | 'loaded' | 'failed';
 
@@ -11,14 +16,18 @@ export interface UseKonvaImageResult {
 
 /**
  * CORS-safe HTMLImageElement loader for react-konva `<Image />`.
- * Replaces duplicated `new Image()` + useState patterns.
+ * Shares a process-wide decoded-image cache so remounts / dual consumers
+ * (mask + layer, before/after) do not re-decode the same URL.
  */
 export function useKonvaImage(
   src: string | null | undefined,
   crossOrigin: string | null = 'anonymous'
 ): UseKonvaImageResult {
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [status, setStatus] = useState<KonvaImageStatus>('loading');
+  const warm = peekKonvaImage(src, crossOrigin);
+  const [image, setImage] = useState<HTMLImageElement | null>(warm);
+  const [status, setStatus] = useState<KonvaImageStatus>(
+    !src ? 'failed' : warm ? 'loaded' : 'loading'
+  );
 
   useEffect(() => {
     if (!src) {
@@ -28,27 +37,26 @@ export function useKonvaImage(
     }
 
     let cancelled = false;
-    const img = new window.Image();
-    if (crossOrigin) img.crossOrigin = crossOrigin;
-
-    setStatus('loading');
-
-    img.onload = () => {
-      if (cancelled) return;
-      setImage(img);
+    const peeked = peekKonvaImage(src, crossOrigin);
+    if (peeked) {
+      setImage(peeked);
       setStatus('loaded');
-    };
-    img.onerror = () => {
-      if (cancelled) return;
-      setImage(null);
-      setStatus('failed');
-    };
-    img.src = src;
+    } else {
+      setStatus('loading');
+    }
+
+    void loadKonvaImage(src, crossOrigin).then((img) => {
+      if (cancelled) {
+        releaseKonvaImage(src, crossOrigin);
+        return;
+      }
+      setImage(img);
+      setStatus(img ? 'loaded' : 'failed');
+    });
 
     return () => {
       cancelled = true;
-      img.onload = null;
-      img.onerror = null;
+      releaseKonvaImage(src, crossOrigin);
     };
   }, [src, crossOrigin]);
 

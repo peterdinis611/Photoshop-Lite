@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { FontPicker } from '../../ui/FontPicker';
 import { loadGoogleFont } from '../../../utils/googleFonts';
