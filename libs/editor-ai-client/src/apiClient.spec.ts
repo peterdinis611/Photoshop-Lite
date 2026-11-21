@@ -1,24 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@photoshop-lite/editor-core';
 import { AiApiClient } from './apiClient';
+import { ClientHttpCache } from './httpCache';
 import { WORKSPACE_HEADER } from './workspaceId';
 
+function jsonResponse(body: unknown, init: { ok?: boolean; status?: number; cacheControl?: string } = {}) {
+  const status = init.status ?? (init.ok === false ? 400 : 200);
+  return {
+    ok: init.ok ?? (status >= 200 && status < 300),
+    status,
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === 'cache-control' ? init.cacheControl ?? null : null,
+    },
+    json: async () => body,
+  };
+}
+
 describe('AiApiClient', () => {
-  const client = new AiApiClient('/api', () => 'workspace_person_a_01');
+  let cache: ClientHttpCache;
+  let client: AiApiClient;
 
   beforeEach(() => {
+    cache = new ClientHttpCache();
+    client = new AiApiClient('/api', () => 'workspace_person_a_01', cache);
     vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
+    cache.clear();
     vi.unstubAllGlobals();
   });
 
   it('posts JSON and returns payload', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true, predictionId: 'p1' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ success: true, predictionId: 'p1' })
+    );
 
     const result = await client.revive({ imageBase64: 'data:image/png;base64,x' });
     expect(result.predictionId).toBe('p1');
@@ -35,10 +52,9 @@ describe('AiApiClient', () => {
   });
 
   it('sends workspace header on GET project list', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => [],
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse([], { cacheControl: 'private, no-store' })
+    );
     await client.listProjects();
     expect(fetch).toHaveBeenCalledWith(
       '/api/projects',
@@ -49,12 +65,51 @@ describe('AiApiClient', () => {
     );
   });
 
-  it('throws AppError on HTTP failure', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: false,
-      status: 400,
-      json: async () => ({ error: 'bad request' }),
+  it('caches catalog GET and serves second call from cache', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        { kind: 'textures', items: [{ id: '1' }], source: 'polyhaven' },
+        { cacheControl: 'public, max-age=1800, stale-while-revalidate=60' }
+      )
+    );
+    const a = await client.listCatalog('textures');
+    const b = await client.listCatalog('textures');
+    expect(a).toEqual(b);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries once on 429 then succeeds', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: 'Too many requests', details: { retryAfter: 0 } },
+          { ok: false, status: 429 }
+        )
+      )
+      .mockResolvedValueOnce(jsonResponse({ items: [], source: 'fallback' }));
+
+    const result = await client.listFonts();
+    expect(result.source).toBe('fallback');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws RATE_LIMITED after exhausted 429 retry', async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      jsonResponse({ error: 'slow down', details: { retryAfter: 0 } }, { ok: false, status: 429 })
+    );
+    await expect(client.listFonts()).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      status: 429,
     });
+  });
+
+  it('throws AppError on HTTP failure', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ error: 'bad request' }, { ok: false, status: 400 })
+    );
 
     await expect(client.cleanup({ imageBase64: 'x' })).rejects.toBeInstanceOf(AppError);
     await expect(client.cleanup({ imageBase64: 'x' })).rejects.toMatchObject({
@@ -71,17 +126,13 @@ describe('AiApiClient', () => {
   it('pollUntilComplete resolves on succeeded image', async () => {
     const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ status: 'starting' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      .mockResolvedValueOnce(jsonResponse({ status: 'starting' }))
+      .mockResolvedValueOnce(
+        jsonResponse({
           status: 'succeeded',
           imageBase64: 'data:image/png;base64,ok',
-        }),
-      });
+        })
+      );
 
     const progress: string[] = [];
     const result = await client.pollUntilComplete(
@@ -98,10 +149,9 @@ describe('AiApiClient', () => {
   });
 
   it('pollUntilComplete throws on failed job', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: 'failed', error: 'boom' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ status: 'failed', error: 'boom' })
+    );
 
     await expect(
       client.pollUntilComplete({ predictionId: 'p1' }, { intervalMs: 1, maxAttempts: 2 })
@@ -109,10 +159,9 @@ describe('AiApiClient', () => {
   });
 
   it('pollUntilComplete times out', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: 'processing' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ status: 'processing' })
+    );
 
     await expect(
       client.pollUntilComplete({ predictionId: 'p1' }, { intervalMs: 1, maxAttempts: 2 })
@@ -120,20 +169,18 @@ describe('AiApiClient', () => {
   });
 
   it('builds fonts query string', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [], source: 'fallback' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ items: [], source: 'fallback' })
+    );
 
     await client.listFonts('Syne');
     expect(fetch).toHaveBeenCalledWith('/api/fonts?q=Syne', expect.any(Object));
   });
 
   it('lists free catalog with kind + query', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ kind: 'textures', items: [], source: 'polyhaven' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ kind: 'textures', items: [], source: 'polyhaven' })
+    );
 
     await client.listCatalog('textures', { q: 'wood', page: 2 });
     expect(fetch).toHaveBeenCalledWith(
@@ -150,14 +197,13 @@ describe('AiApiClient', () => {
   });
 
   it('fetchCatalogImage proxies via stock fetch', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({
         dataUrl: 'data:image/png;base64,aa',
         contentType: 'image/png',
         byteLength: 2,
-      }),
-    });
+      })
+    );
 
     const result = await client.fetchCatalogImage('https://picsum.photos/id/1/100');
     expect(result.dataUrl).toContain('data:image/png');
@@ -168,19 +214,17 @@ describe('AiApiClient', () => {
   });
 
   it('requests palette harmony with seed', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ colors: ['#d4923a'], source: 'fallback' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ colors: ['#d4923a'], source: 'fallback' })
+    );
     await client.paletteHarmony('#d4923a');
     expect(fetch).toHaveBeenCalledWith('/api/palette/harmony?seed=d4923a', expect.any(Object));
   });
 
   it('searches stock with encoded query + page', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ items: [], query: 'portrait', providers: [], sources: {} }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ items: [], query: 'portrait', providers: [], sources: {} })
+    );
     await client.searchStock('portrait light', 2);
     expect(fetch).toHaveBeenCalledWith(
       '/api/stock/search?q=portrait%20light&page=2',
@@ -189,10 +233,9 @@ describe('AiApiClient', () => {
   });
 
   it('lists avatars catalog kind', async () => {
-    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      ok: true,
-      json: async () => ({ kind: 'avatars', items: [], source: 'dicebear' }),
-    });
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      jsonResponse({ kind: 'avatars', items: [], source: 'dicebear' })
+    );
     await client.listCatalog('avatars', { q: 'lab' });
     expect(fetch).toHaveBeenCalledWith(
       '/api/catalog?kind=avatars&q=lab',

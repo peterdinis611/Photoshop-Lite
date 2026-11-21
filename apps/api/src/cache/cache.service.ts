@@ -8,6 +8,8 @@ export class CacheService implements OnModuleDestroy {
   private readonly logger = new Logger(CacheService.name);
   private readonly cache = createCache({ ttl: DEFAULT_TTL_MS });
   private readonly knownKeys = new Set<string>();
+  /** Single-flight: concurrent wrap() for the same key share one factory call. */
+  private readonly inflight = new Map<string, Promise<unknown>>();
 
   async get<T>(key: string): Promise<T | undefined> {
     const value = await this.cache.get<T>(key);
@@ -41,13 +43,30 @@ export class CacheService implements OnModuleDestroy {
   ): Promise<T> {
     const hit = await this.get<T>(key);
     if (hit !== undefined) return hit;
-    const value = await factory();
-    await this.set(key, value, ttlMs);
-    return value;
+
+    const pending = this.inflight.get(key) as Promise<T> | undefined;
+    if (pending) return pending;
+
+    const run = (async () => {
+      try {
+        // Re-check after joining the flight window (another caller may have filled).
+        const again = await this.get<T>(key);
+        if (again !== undefined) return again;
+        const value = await factory();
+        await this.set(key, value, ttlMs);
+        return value;
+      } finally {
+        this.inflight.delete(key);
+      }
+    })();
+
+    this.inflight.set(key, run);
+    return run;
   }
 
   async clear(): Promise<void> {
     this.knownKeys.clear();
+    this.inflight.clear();
     await this.cache.clear();
   }
 
@@ -68,5 +87,10 @@ export const CacheKeys = {
   stockQuery: (provider: string, q: string, page: number) =>
     `stock:${provider}:q:${q}:p:${page}`,
   stockFetch: (url: string) => `stock:fetch:${url}`,
+  catalog: (kind: string, q: string, page: number) =>
+    `catalog:${kind}:v2:${q || '_'}:${page}`,
+  paletteHarmony: (seed: string) => `palette:harmony:v2:${seed}`,
+  geoReverse: (lat: number, lon: number) =>
+    `geo:rev:${lat.toFixed(5)},${lon.toFixed(5)}`,
   workspacePrefix: (workspaceId: string) => `ws:${workspaceId}:`,
 };

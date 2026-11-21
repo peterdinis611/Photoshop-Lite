@@ -1,10 +1,9 @@
 export type CachedImageStatus = 'loading' | 'loaded' | 'failed';
 
-export interface CachedImageEntry {
+interface CachedImageEntry {
   image: HTMLImageElement | null;
   status: CachedImageStatus;
   promise: Promise<HTMLImageElement | null>;
-  refs: number;
 }
 
 const cache = new Map<string, CachedImageEntry>();
@@ -24,8 +23,9 @@ export function loadKonvaImage(
   const key = cacheKey(src, crossOrigin);
   const existing = cache.get(key);
   if (existing) {
-    existing.refs += 1;
-    return existing.promise;
+    // Allow retry after a failed load
+    if (existing.status !== 'failed') return existing.promise;
+    cache.delete(key);
   }
 
   let resolve!: (img: HTMLImageElement | null) => void;
@@ -37,7 +37,6 @@ export function loadKonvaImage(
     image: null,
     status: 'loading',
     promise,
-    refs: 1,
   };
   cache.set(key, entry);
 
@@ -53,15 +52,14 @@ export function loadKonvaImage(
     entry.image = null;
     entry.status = 'failed';
     resolve(null);
-    // Don't keep failed entries forever — allow retry on next request
-    if (entry.refs <= 0) cache.delete(key);
+    cache.delete(key);
   };
   img.src = src;
 
   return promise;
 }
 
-/** Peek a warm decoded image without bumping refs (sync). */
+/** Peek a warm decoded image without loading (sync). */
 export function peekKonvaImage(
   src: string | null | undefined,
   crossOrigin: string | null = 'anonymous'
@@ -70,19 +68,15 @@ export function peekKonvaImage(
   return cache.get(cacheKey(src, crossOrigin))?.image ?? null;
 }
 
-/** Release one consumer; entry stays warm until purged or failed. */
+/** @deprecated Kept for API stability — cache is process-warm; no-op. */
 export function releaseKonvaImage(
-  src: string | null | undefined,
-  crossOrigin: string | null = 'anonymous'
+  _src?: string | null,
+  _crossOrigin?: string | null
 ): void {
-  if (!src) return;
-  const key = cacheKey(src, crossOrigin);
-  const entry = cache.get(key);
-  if (!entry) return;
-  entry.refs = Math.max(0, entry.refs - 1);
+  /* intentional no-op: decoded images stay warm for the session */
 }
 
-/** Test / memory pressure helper. */
+/** Test / project-switch helper. */
 export function clearKonvaImageCache(): void {
   cache.clear();
 }

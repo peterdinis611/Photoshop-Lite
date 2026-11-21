@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  loadKonvaImage,
-  peekKonvaImage,
-  releaseKonvaImage,
-} from './imageCache';
+import { loadKonvaImage, peekKonvaImage } from './imageCache';
 
 export type KonvaImageStatus = 'loading' | 'loaded' | 'failed';
 
@@ -41,22 +37,18 @@ export function useKonvaImage(
     if (peeked) {
       setImage(peeked);
       setStatus('loaded');
-    } else {
-      setStatus('loading');
+      return;
     }
 
+    setStatus('loading');
     void loadKonvaImage(src, crossOrigin).then((img) => {
-      if (cancelled) {
-        releaseKonvaImage(src, crossOrigin);
-        return;
-      }
+      if (cancelled) return;
       setImage(img);
       setStatus(img ? 'loaded' : 'failed');
     });
 
     return () => {
       cancelled = true;
-      releaseKonvaImage(src, crossOrigin);
     };
   }, [src, crossOrigin]);
 

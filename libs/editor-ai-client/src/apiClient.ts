@@ -23,17 +23,48 @@ import type {
   CatalogKind,
   CatalogListResponseDto,
 } from '@photoshop-lite/shared-types';
+import {
+  ClientHttpCache,
+  defaultTtlForPath,
+  parseCacheControl,
+  sharedHttpCache,
+} from './httpCache';
 import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
 const DEFAULT_BASE = '/api';
+const MAX_429_RETRY_MS = 4_000;
 
 export type WorkspaceIdProvider = () => string | null | undefined;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function readRetryAfterMs(response: Response, payload: unknown): number {
+  const header = response.headers?.get?.('Retry-After');
+  if (header) {
+    const asNum = Number(header);
+    if (Number.isFinite(asNum) && asNum >= 0) return Math.min(asNum * 1000, MAX_429_RETRY_MS);
+  }
+  if (payload && typeof payload === 'object') {
+    const details = (payload as { details?: { retryAfter?: unknown } }).details;
+    const sec = details?.retryAfter;
+    if (typeof sec === 'number' && sec > 0) return Math.min(sec * 1000, MAX_429_RETRY_MS);
+  }
+  return 750;
+}
 
 export class AiApiClient {
   constructor(
     private readonly baseUrl: string = DEFAULT_BASE,
-    private readonly getWorkspaceId: WorkspaceIdProvider = () => getOrCreateWorkspaceId()
+    private readonly getWorkspaceId: WorkspaceIdProvider = () => getOrCreateWorkspaceId(),
+    private readonly httpCache: ClientHttpCache = sharedHttpCache
   ) {}
+
+  /** Drop client GET cache (tests / workspace switch). */
+  clearHttpCache(): void {
+    this.httpCache.clear();
+  }
 
   private buildHeaders(hasBody: boolean): Record<string, string> {
     const headers: Record<string, string> = {};
@@ -43,10 +74,60 @@ export class AiApiClient {
     return headers;
   }
 
+  private invalidateAfterMutation(path: string): void {
+    if (path.startsWith('/assets')) this.httpCache.invalidatePath('/assets');
+    if (path.startsWith('/projects')) this.httpCache.invalidatePath('/projects');
+  }
+
   private async request<T>(
     path: string,
     body?: unknown,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST'
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST',
+    options: { skipCache?: boolean; _retried429?: boolean } = {}
+  ): Promise<T> {
+    const workspaceId = this.getWorkspaceId()?.trim() || null;
+    const cacheKey = this.httpCache.key(workspaceId, method, path);
+    const cacheable = method === 'GET' && !options.skipCache;
+
+    if (cacheable) {
+      const peek = this.httpCache.peek<T>(cacheKey);
+      if (peek.state === 'fresh' && peek.value !== undefined) {
+        return peek.value;
+      }
+      if (peek.state === 'stale' && peek.value !== undefined) {
+        // Stale-while-revalidate: return stale, refresh in background.
+        void this.httpCache.singleFlight(cacheKey, () =>
+          this.fetchAndCache<T>(path, method, body, cacheKey, true)
+        );
+        return peek.value;
+      }
+    }
+
+    if (cacheable) {
+      return this.httpCache.singleFlight(cacheKey, () =>
+        this.fetchAndCache<T>(path, method, body, cacheKey, false)
+      );
+    }
+
+    return this.fetchRaw<T>(path, method, body, options);
+  }
+
+  private async fetchAndCache<T>(
+    path: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    body: unknown,
+    _cacheKey: string,
+    background: boolean
+  ): Promise<T> {
+    // fetchRaw applies Cache-Control / path-default TTLs (skips no-store).
+    return this.fetchRaw<T>(path, method, body, { background });
+  }
+
+  private async fetchRaw<T>(
+    path: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    body: unknown,
+    options: { skipCache?: boolean; _retried429?: boolean; background?: boolean } = {}
   ): Promise<T> {
     let response: Response;
     try {
@@ -69,6 +150,24 @@ export class AiApiClient {
       payload = null;
     }
 
+    if (response.status === 429) {
+      const waitMs = readRetryAfterMs(response, payload);
+      if (!options._retried429) {
+        await sleep(waitMs);
+        return this.fetchRaw<T>(path, method, body, { ...options, _retried429: true });
+      }
+      throw new AppError(
+        payload && typeof payload === 'object' && 'error' in payload
+          ? String((payload as { error: unknown }).error)
+          : 'Too many requests',
+        {
+          code: 'RATE_LIMITED',
+          status: 429,
+          details: { retryAfterMs: waitMs, ...(payload as object) },
+        }
+      );
+    }
+
     if (!response.ok) {
       const message =
         payload && typeof payload === 'object' && 'error' in payload
@@ -82,6 +181,20 @@ export class AiApiClient {
         status: response.status,
         details: payload,
       });
+    }
+
+    if (method === 'GET') {
+      const cc = parseCacheControl(response.headers?.get?.('Cache-Control') ?? null);
+      if (!cc.noStore) {
+        const workspaceId = this.getWorkspaceId()?.trim() || null;
+        const cacheKey = this.httpCache.key(workspaceId, method, path);
+        this.httpCache.set(cacheKey, payload, {
+          maxAgeMs: cc.maxAgeMs ?? defaultTtlForPath(path),
+          staleWhileRevalidateMs: cc.swrMs ?? defaultTtlForPath(path),
+        });
+      }
+    } else {
+      this.invalidateAfterMutation(path);
     }
 
     return payload as T;
@@ -100,7 +213,9 @@ export class AiApiClient {
   }
 
   predictionStatus(dto: PredictionPollRequestDto): Promise<PredictionPollResponseDto> {
-    return this.request<PredictionPollResponseDto>('/ai/prediction-status', dto);
+    return this.request<PredictionPollResponseDto>('/ai/prediction-status', dto, 'POST', {
+      skipCache: true,
+    });
   }
 
   cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
@@ -248,6 +363,12 @@ export class AiApiClient {
       throw new AppError(getErrorMessage(e, 'Network error fetching asset'), {
         code: 'NETWORK',
         cause: e,
+      });
+    }
+    if (response.status === 429) {
+      throw new AppError('Too many requests fetching asset', {
+        code: 'RATE_LIMITED',
+        status: 429,
       });
     }
     if (!response.ok) {

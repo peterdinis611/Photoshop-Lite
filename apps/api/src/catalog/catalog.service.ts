@@ -4,7 +4,7 @@ import type {
   CatalogKind,
   CatalogListResponseDto,
 } from '@photoshop-lite/shared-types';
-import { CacheService } from '../cache/cache.service';
+import { CacheKeys, CacheService } from '../cache/cache.service';
 
 const TTL_MS = 1000 * 60 * 60; // 1h
 
@@ -26,7 +26,7 @@ export class CatalogService {
   async list(kind: CatalogKind, query?: string, page = 1): Promise<CatalogListResponseDto> {
     const q = (query || '').trim().toLowerCase();
     const pageSafe = Math.max(1, Math.min(20, page));
-    const key = `catalog:${kind}:v2:${q || '_'}:${pageSafe}`;
+    const key = CacheKeys.catalog(kind, q, pageSafe);
     const raw = await this.cache.wrap(key, () => this.fetchKind(kind, q, pageSafe), TTL_MS);
     return this.withProxiedThumbs(raw);
   }

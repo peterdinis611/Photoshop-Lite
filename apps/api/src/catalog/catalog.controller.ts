@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import type { CatalogKind, CatalogListResponseDto } from '@photoshop-lite/shared-types';
 import { CacheControl } from '../common/cache-control';
+import { ThrottlePresets } from '../common/throttle.config';
 import { StockService } from '../stock/stock.service';
 import { CatalogService } from './catalog.service';
 
@@ -16,7 +17,7 @@ export class CatalogController {
   ) {}
 
   @Get()
-  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @Throttle(ThrottlePresets.catalog)
   @CacheControl('public, max-age=1800, stale-while-revalidate=86400')
   list(
     @Query('kind') kindRaw?: string,
@@ -33,7 +34,7 @@ export class CatalogController {
    * so the editor never talks to CDNs directly (thumbs + place preview).
    */
   @Get('media')
-  @Throttle({ stock: { limit: 120, ttl: 60_000 } })
+  @Throttle(ThrottlePresets.catalogMedia)
   @CacheControl('public, max-age=86400, stale-while-revalidate=604800')
   async media(@Query('url') url: string | undefined, @Res() res: Response): Promise<void> {
     const { buffer, contentType } = await this.stock.fetchImageBinary(url || '');

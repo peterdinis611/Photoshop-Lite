@@ -1,10 +1,20 @@
 export {
   registerPhotoAdjustFilter,
   applyImageNodeFilters,
+  hasAnyImageAdjustments,
+  hasPhotoAdjustWork,
 } from './filters';
 
 export { useKonvaImage } from './useKonvaImage';
 export type { KonvaImageStatus, UseKonvaImageResult } from './useKonvaImage';
+
+export {
+  loadKonvaImage,
+  peekKonvaImage,
+  releaseKonvaImage,
+  clearKonvaImageCache,
+  konvaImageCacheSize,
+} from './imageCache';
 
 export {
   KonvaStageProvider,

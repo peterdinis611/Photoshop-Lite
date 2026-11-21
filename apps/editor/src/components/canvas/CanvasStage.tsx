@@ -320,6 +320,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             shadowBlur={25}
             shadowOffset={{ x: 0, y: 10 }}
             shadowOpacity={0.65}
+            listening={pointerPolicy.contentListening || activeTool === 'select'}
+            perfectDrawEnabled={false}
+            hitStrokeWidth={0}
           />
 
           {/* Document Layers (rendered in array order: bottom to top) */}

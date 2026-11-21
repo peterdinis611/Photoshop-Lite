@@ -9,7 +9,8 @@ export type ErrorCode =
   | 'TIMEOUT'
   | 'UNSUPPORTED'
   | 'INTERNAL'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'RATE_LIMITED';
 
 export class AppError extends Error {
   readonly code: ErrorCode;

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import type { GeocodeResponseDto } from '@photoshop-lite/shared-types';
-import { CacheService } from '../cache/cache.service';
+import { CacheKeys, CacheService } from '../cache/cache.service';
 
 const GEO_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 
@@ -18,8 +18,11 @@ export class GeoService {
       throw new BadRequestException('Coordinates out of range');
     }
 
-    const key = `geo:rev:${lat.toFixed(5)},${lon.toFixed(5)}`;
-    return this.cache.wrap(key, () => this.fetchNominatim(lat, lon), GEO_TTL_MS);
+    return this.cache.wrap(
+      CacheKeys.geoReverse(lat, lon),
+      () => this.fetchNominatim(lat, lon),
+      GEO_TTL_MS
+    );
   }
 
   private async fetchNominatim(lat: number, lon: number): Promise<GeocodeResponseDto> {

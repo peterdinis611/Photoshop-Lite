@@ -6,8 +6,22 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import type { ApiErrorResponse } from '@photoshop-lite/shared-types';
+
+function retryAfterSeconds(exception: HttpException): number {
+  const body = exception.getResponse();
+  if (body && typeof body === 'object') {
+    const obj = body as Record<string, unknown>;
+    if (typeof obj.retryAfter === 'number' && obj.retryAfter > 0) {
+      return Math.ceil(obj.retryAfter);
+    }
+  }
+  // Nest Throttler default window — surface a sane client backoff hint
+  const ttlMs = Number(process.env.THROTTLE_TTL_MS) || 60_000;
+  return Math.max(1, Math.ceil(ttlMs / 1000));
+}
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -22,8 +36,29 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let message = 'Internal server error';
     let code = 'INTERNAL';
     let details: unknown;
+    let retryAfter: number | undefined;
 
-    if (exception instanceof HttpException) {
+    if (exception instanceof ThrottlerException || (exception instanceof HttpException && exception.getStatus() === 429)) {
+      status = HttpStatus.TOO_MANY_REQUESTS;
+      message =
+        exception instanceof HttpException
+          ? typeof exception.getResponse() === 'string'
+            ? String(exception.getResponse())
+            : 'Too many requests'
+          : 'Too many requests';
+      if (exception instanceof HttpException && typeof exception.getResponse() === 'object') {
+        const obj = exception.getResponse() as Record<string, unknown>;
+        if (typeof obj.message === 'string') message = obj.message;
+      }
+      code = 'RATE_LIMITED';
+      retryAfter = retryAfterSeconds(
+        exception instanceof HttpException
+          ? exception
+          : new HttpException('Too many requests', HttpStatus.TOO_MANY_REQUESTS)
+      );
+      response.setHeader('Retry-After', String(retryAfter));
+      response.setHeader('X-RateLimit-Policy', 'bucketed');
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
       if (typeof body === 'string') {
@@ -57,8 +92,27 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       code,
       path: request.url,
       timestamp: new Date().toISOString(),
-      details: process.env.NODE_ENV === 'production' ? undefined : details,
+      details:
+        process.env.NODE_ENV === 'production'
+          ? retryAfter !== undefined
+            ? { retryAfter }
+            : undefined
+          : details !== undefined
+            ? details
+            : retryAfter !== undefined
+              ? { retryAfter }
+              : undefined,
     };
+
+    // Always include retryAfter in details for 429 so clients can back off.
+    if (retryAfter !== undefined) {
+      payload.details = {
+        ...(typeof payload.details === 'object' && payload.details
+          ? (payload.details as object)
+          : {}),
+        retryAfter,
+      };
+    }
 
     response.status(status).json(payload);
   }

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { PaletteHarmonyResponseDto } from '@photoshop-lite/shared-types';
-import { CacheService } from '../cache/cache.service';
+import { CacheKeys, CacheService } from '../cache/cache.service';
 
 const TTL_MS = 1000 * 60 * 60; // 1h
 
@@ -14,8 +14,11 @@ export class PaletteService {
 
   async harmony(seedHex?: string): Promise<PaletteHarmonyResponseDto> {
     const seed = (seedHex || 'd4923a').replace(/^#/, '').toLowerCase();
-    const key = `palette:harmony:v2:${seed}`;
-    return this.cache.wrap(key, () => this.resolveHarmony(seed), TTL_MS);
+    return this.cache.wrap(
+      CacheKeys.paletteHarmony(seed),
+      () => this.resolveHarmony(seed),
+      TTL_MS
+    );
   }
 
   private async resolveHarmony(seed: string): Promise<PaletteHarmonyResponseDto> {

@@ -4,12 +4,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GlobalExceptionFilter } from './global-exception.filter';
 import { BadRequestException, HttpStatus, Logger } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import type { ArgumentsHost } from '@nestjs/common';
 
 function mockHost() {
   const json = vi.fn();
   const status = vi.fn().mockReturnValue({ json });
-  const response = { status };
+  const setHeader = vi.fn();
+  const response = { status, setHeader };
   const request = { url: '/api/ai/upscale' };
   const host = {
     switchToHttp: () => ({
@@ -17,7 +19,7 @@ function mockHost() {
       getRequest: () => request,
     }),
   } as unknown as ArgumentsHost;
-  return { host, status, json };
+  return { host, status, json, setHeader };
 }
 
 describe('GlobalExceptionFilter', () => {
@@ -47,6 +49,21 @@ describe('GlobalExceptionFilter', () => {
         statusCode: 500,
         error: 'boom',
         code: 'INTERNAL',
+      })
+    );
+  });
+
+  it('maps ThrottlerException to 429 RATE_LIMITED with Retry-After', () => {
+    const filter = new GlobalExceptionFilter();
+    const { host, status, json, setHeader } = mockHost();
+    filter.catch(new ThrottlerException('Too Many Requests'), host);
+    expect(status).toHaveBeenCalledWith(HttpStatus.TOO_MANY_REQUESTS);
+    expect(setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 429,
+        code: 'RATE_LIMITED',
+        details: expect.objectContaining({ retryAfter: expect.any(Number) }),
       })
     );
   });

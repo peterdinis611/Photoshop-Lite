@@ -33,6 +33,24 @@ describe('CacheService', () => {
     expect(calls).toBe(1);
   });
 
+  it('wrap single-flights concurrent misses', async () => {
+    let calls = 0;
+    const factory = async () => {
+      calls += 1;
+      await new Promise((r) => setTimeout(r, 30));
+      return 'shared';
+    };
+    const [a, b, c] = await Promise.all([
+      cache.wrap('flight', factory, 5_000),
+      cache.wrap('flight', factory, 5_000),
+      cache.wrap('flight', factory, 5_000),
+    ]);
+    expect(a).toBe('shared');
+    expect(b).toBe('shared');
+    expect(c).toBe('shared');
+    expect(calls).toBe(1);
+  });
+
   it('invalidatePrefix only clears matching workspace keys', async () => {
     await cache.set(CacheKeys.projectList('ws_a'), [1], 5_000);
     await cache.set(CacheKeys.projectList('ws_b'), [2], 5_000);

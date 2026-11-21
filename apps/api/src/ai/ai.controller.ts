@@ -12,9 +12,10 @@ import type {
   AiJobResponseDto,
 } from '@photoshop-lite/shared-types';
 import { CacheControl } from '../common/cache-control';
+import { ThrottlePresets } from '../common/throttle.config';
 
 @Controller('ai')
-@Throttle({ ai: { limit: 20, ttl: 60_000 } })
+@Throttle(ThrottlePresets.ai)
 @CacheControl('no-store')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
