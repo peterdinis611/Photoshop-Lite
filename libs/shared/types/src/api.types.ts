@@ -149,6 +149,8 @@ export interface ProjectVersionSummaryDto {
   id: string;
   savedAt: string;
   title: string;
+  /** Snapshot reason: create | before-update | before-restore | … */
+  reason?: string;
 }
 
 // ─── Assets ──────────────────────────────────────────────────────

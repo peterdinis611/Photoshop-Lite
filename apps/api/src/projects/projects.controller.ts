@@ -45,4 +45,20 @@ export class ProjectsController {
   versions(@Param('id') id: string): Promise<ProjectVersionSummaryDto[]> {
     return this.projects.listVersions(id);
   }
+
+  @Get(':id/versions/:versionId')
+  getVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string
+  ): Promise<ProjectDetailDto> {
+    return this.projects.getVersion(id, versionId);
+  }
+
+  @Post(':id/versions/:versionId/restore')
+  restoreVersion(
+    @Param('id') id: string,
+    @Param('versionId') versionId: string
+  ): Promise<ProjectDetailDto> {
+    return this.projects.restoreVersion(id, versionId);
+  }
 }

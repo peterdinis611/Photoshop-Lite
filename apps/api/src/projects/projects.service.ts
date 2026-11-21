@@ -12,6 +12,7 @@ import type {
   ProjectVersionSummaryDto,
 } from '@photoshop-lite/shared-types';
 import { ensureDir, newId, projectsRoot } from '../common/data-paths';
+import { assertSafeId, resolveUnderRoot } from '../common/safe-id';
 import { requireWorkspaceId } from '../common/workspace';
 import { CacheKeys, CacheService } from '../cache/cache.service';
 
@@ -33,7 +34,8 @@ export class ProjectsService {
   constructor(private readonly cache: CacheService) {}
 
   private projectDir(id: string): string {
-    return path.join(projectsRoot(), id);
+    const safe = assertSafeId(id, 'project id');
+    return resolveUnderRoot(projectsRoot(), safe);
   }
 
   private projectFile(id: string): string {
@@ -42,6 +44,11 @@ export class ProjectsService {
 
   private versionsDir(id: string): string {
     return path.join(this.projectDir(id), 'versions');
+  }
+
+  private versionFile(projectId: string, versionId: string): string {
+    const safeVersion = assertSafeId(versionId, 'version id');
+    return resolveUnderRoot(this.versionsDir(projectId), `${safeVersion}.json`);
   }
 
   private readProject(id: string): StoredProject {
@@ -145,7 +152,7 @@ export class ProjectsService {
 
     const workspaceId = requireWorkspaceId();
     const now = new Date().toISOString();
-    const id = dto.id?.trim() || newId('proj');
+    const id = assertSafeId(dto.id?.trim() || newId('proj'), 'project id');
     if (fs.existsSync(this.projectFile(id))) {
       throw new BadRequestException({
         error: `Project id ${id} already exists in this workspace`,
@@ -222,17 +229,61 @@ export class ProjectsService {
           .map((f) => {
             const raw = JSON.parse(
               fs.readFileSync(path.join(dir, f), 'utf8')
-            ) as StoredProject & { versionId?: string };
+            ) as StoredProject & { versionId?: string; reason?: string };
+            const versionId = f.replace(/\.json$/, '');
+            const reason =
+              raw.reason ||
+              (versionId.includes('_') ? versionId.slice(versionId.indexOf('_') + 1) : undefined);
             return {
-              id: f.replace(/\.json$/, ''),
+              id: versionId,
               savedAt: raw.savedAt || raw.updatedAt,
               title: raw.title,
+              reason,
             };
           })
           .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
       },
       30_000
     );
+  }
+
+  async getVersion(id: string, versionId: string): Promise<ProjectDetailDto> {
+    this.readProject(id);
+    const file = this.versionFile(id, versionId);
+    if (!fs.existsSync(file)) {
+      throw new NotFoundException({
+        error: `Version ${versionId} not found`,
+        code: 'NOT_FOUND',
+      });
+    }
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as StoredProject;
+    return this.toDetail({ ...raw, id });
+  }
+
+  async restoreVersion(id: string, versionId: string): Promise<ProjectDetailDto> {
+    const workspaceId = requireWorkspaceId();
+    const current = this.readProject(id);
+    const file = this.versionFile(id, versionId);
+    if (!fs.existsSync(file)) {
+      throw new NotFoundException({
+        error: `Version ${versionId} not found`,
+        code: 'NOT_FOUND',
+      });
+    }
+    const snapshot = JSON.parse(fs.readFileSync(file, 'utf8')) as StoredProject;
+    const now = new Date().toISOString();
+    this.snapshot(current, 'before-restore');
+    const restored: StoredProject = {
+      ...snapshot,
+      id,
+      workspaceId,
+      updatedAt: now,
+      savedAt: now,
+      createdAt: current.createdAt,
+    };
+    this.writeProject(restored);
+    await this.bustWorkspaceProjectCache(workspaceId, id);
+    return this.toDetail(restored);
   }
 
   private snapshot(project: StoredProject, reason: string): void {

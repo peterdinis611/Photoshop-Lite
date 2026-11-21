@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
 import { assetsRoot, ensureDir, newId } from '../common/data-paths';
+import { assertSafeId, resolveUnderRoot } from '../common/safe-id';
 import { requireWorkspaceId } from '../common/workspace';
 import { CacheKeys, CacheService } from '../cache/cache.service';
 
@@ -85,12 +86,22 @@ export class AssetsService {
     if (buffer.length === 0) {
       throw new BadRequestException({ error: 'Empty asset payload', code: 'VALIDATION' });
     }
+    if (buffer.length > 40 * 1024 * 1024) {
+      throw new BadRequestException({ error: 'Asset exceeds 40MB limit', code: 'VALIDATION' });
+    }
+    if (mimeType.toLowerCase().includes('svg')) {
+      throw new BadRequestException({
+        error: 'SVG uploads are not allowed on the API origin',
+        code: 'VALIDATION',
+      });
+    }
 
     const id = newId('asset');
     const ext = this.extFromMime(mimeType);
-    const fileName = dto.fileName?.trim() || `upload.${ext}`;
+    const rawName = (dto.fileName?.trim() || `upload.${ext}`).replace(/[\r\n"]/g, '');
+    const fileName = rawName.slice(0, 180) || `upload.${ext}`;
     const storedName = `${id}.${ext}`;
-    const filePath = path.join(assetsRoot(), storedName);
+    const filePath = resolveUnderRoot(assetsRoot(), storedName);
     fs.writeFileSync(filePath, buffer);
 
     const entry: AssetIndexEntry = {
@@ -122,18 +133,35 @@ export class AssetsService {
 
   getFile(id: string): { stream: StreamableFile; mimeType: string; fileName: string } {
     const workspaceId = requireWorkspaceId();
-    const entry = this.readIndex().find((e) => e.id === id);
+    const safeId = assertSafeId(id, 'asset id');
+    const entry = this.readIndex().find((e) => e.id === safeId);
     if (!entry || (entry.workspaceId && entry.workspaceId !== workspaceId)) {
       throw new NotFoundException({ error: `Asset ${id} not found`, code: 'NOT_FOUND' });
     }
-    const filePath = path.join(assetsRoot(), entry.storedName);
+    const filePath = resolveUnderRoot(assetsRoot(), entry.storedName);
     if (!fs.existsSync(filePath)) {
       throw new NotFoundException({ error: `Asset file missing`, code: 'NOT_FOUND' });
     }
+    const safeFileName = entry.fileName.replace(/[\r\n"]/g, '');
     const stream = new StreamableFile(fs.createReadStream(filePath), {
       type: entry.mimeType,
-      disposition: `inline; filename="${entry.fileName}"`,
+      disposition: `attachment; filename="${safeFileName}"`,
     });
-    return { stream, mimeType: entry.mimeType, fileName: entry.fileName };
+    return { stream, mimeType: entry.mimeType, fileName: safeFileName };
+  }
+
+  async remove(id: string): Promise<{ success: boolean }> {
+    const workspaceId = requireWorkspaceId();
+    const safeId = assertSafeId(id, 'asset id');
+    const index = this.readIndex();
+    const entry = index.find((e) => e.id === safeId);
+    if (!entry || (entry.workspaceId && entry.workspaceId !== workspaceId)) {
+      throw new NotFoundException({ error: `Asset ${id} not found`, code: 'NOT_FOUND' });
+    }
+    const filePath = resolveUnderRoot(assetsRoot(), entry.storedName);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    this.writeIndex(index.filter((e) => e.id !== safeId));
+    await this.cache.del(CacheKeys.assetList(workspaceId));
+    return { success: true };
   }
 }

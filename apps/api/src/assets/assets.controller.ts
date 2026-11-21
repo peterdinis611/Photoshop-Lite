@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { AssetsService } from './assets.service';
 import type { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
@@ -19,12 +19,18 @@ export class AssetsController {
     return this.assets.upload(body);
   }
 
+  @Delete(':id')
+  remove(@Param('id') id: string): Promise<{ success: boolean }> {
+    return this.assets.remove(id);
+  }
+
   @Get(':id')
   @CacheControl('private, max-age=86400')
   get(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
     const { stream, mimeType } = this.assets.getFile(id);
     res.setHeader('Content-Type', mimeType);
     res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     return stream;
   }
 }
