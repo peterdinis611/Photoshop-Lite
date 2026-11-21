@@ -128,4 +128,51 @@ describe('AiApiClient', () => {
     await client.listFonts('Syne');
     expect(fetch).toHaveBeenCalledWith('/api/fonts?q=Syne', expect.any(Object));
   });
+
+  it('lists free catalog with kind + query', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ kind: 'textures', items: [], source: 'polyhaven' }),
+    });
+
+    await client.listCatalog('textures', { q: 'wood', page: 2 });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/catalog?kind=textures&q=wood&page=2',
+      expect.objectContaining({ method: 'GET' })
+    );
+  });
+
+  it('builds catalog media proxy URL and passes through API paths', () => {
+    expect(client.catalogMediaUrl('https://cdn.polyhaven.com/a.png')).toBe(
+      '/api/catalog/media?url=https%3A%2F%2Fcdn.polyhaven.com%2Fa.png'
+    );
+    expect(client.catalogMediaUrl('/api/catalog/media?url=x')).toBe('/api/catalog/media?url=x');
+  });
+
+  it('fetchCatalogImage proxies via stock fetch', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        dataUrl: 'data:image/png;base64,aa',
+        contentType: 'image/png',
+        byteLength: 2,
+      }),
+    });
+
+    const result = await client.fetchCatalogImage('https://picsum.photos/id/1/100');
+    expect(result.dataUrl).toContain('data:image/png');
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/stock/fetch?url='),
+      expect.any(Object)
+    );
+  });
+
+  it('requests palette harmony with seed', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ colors: ['#d4923a'], source: 'fallback' }),
+    });
+    await client.paletteHarmony('#d4923a');
+    expect(fetch).toHaveBeenCalledWith('/api/palette/harmony?seed=d4923a', expect.any(Object));
+  });
 });
