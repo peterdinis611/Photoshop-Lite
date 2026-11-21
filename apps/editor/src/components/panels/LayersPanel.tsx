@@ -164,6 +164,8 @@ export const LayersPanel: React.FC = () => {
         return <SlidersHorizontal size={11} className="text-[var(--accent-hot)]" />;
       case 'gradient':
         return <Blend size={11} className="text-[var(--ink-blue)]" />;
+      case 'group':
+        return <Layers size={11} className="text-[var(--accent-hot)]" />;
       default:
         return <ImageIcon size={11} />;
     }
@@ -288,6 +290,7 @@ export const LayersPanel: React.FC = () => {
           reversedLayers.map(({ layer, originalIndex }) => {
             const isSelected = layer.id === selectedLayerId;
             const isClippedLayer = !!layer.clippingMaskToId;
+            const inGroup = !!layer.parentGroupId && layer.type !== 'group';
 
             return (
               <div
@@ -297,7 +300,9 @@ export const LayersPanel: React.FC = () => {
                   isSelected
                     ? 'bg-[var(--accent-dim)] border-[var(--accent)]/55 text-[var(--text-primary)]'
                     : 'bg-[var(--bg-elevated)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]'
-                } ${isClippedLayer ? 'ml-3 border-l-2 border-l-[var(--accent)]' : ''}`}
+                } ${isClippedLayer || inGroup ? 'ml-3 border-l-2 border-l-[var(--accent)]' : ''} ${
+                  layer.type === 'group' ? 'border-dashed' : ''
+                }`}
               >
                 <div className="flex items-center gap-2 overflow-hidden flex-1 mr-1.5 min-w-0">
                   <button

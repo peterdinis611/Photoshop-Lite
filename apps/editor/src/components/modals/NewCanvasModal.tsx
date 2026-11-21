@@ -3,9 +3,13 @@ import { X, FilePlus } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const PRESETS = [
-  { name: 'Instagram Square', width: 1080, height: 1080, desc: '1:1 ratio' },
+  { name: 'Instagram Square', width: 1080, height: 1080, desc: '1:1 social' },
   { name: 'Instagram Story / Reel', width: 1080, height: 1920, desc: '9:16 vertical' },
+  { name: 'TikTok / Shorts', width: 1080, height: 1920, desc: '9:16 vertical' },
   { name: 'YouTube Thumbnail', width: 1280, height: 720, desc: '16:9 HD' },
+  { name: 'X / Twitter Post', width: 1600, height: 900, desc: '16:9 feed' },
+  { name: 'LinkedIn Cover', width: 1584, height: 396, desc: 'banner' },
+  { name: 'A4 Print @150dpi', width: 1240, height: 1754, desc: 'print' },
   { name: 'Full HD Landscape', width: 1920, height: 1080, desc: '1080p display' },
   { name: 'Portrait Photo', width: 1200, height: 1500, desc: '4:5 ratio' },
   { name: 'Banner / Header', width: 1500, height: 500, desc: '3:1 wide' },

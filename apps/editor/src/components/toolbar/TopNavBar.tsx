@@ -21,10 +21,11 @@ import {
 } from 'lucide-react';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
-import { SAMPLE_IMAGES } from '../../assets/sampleImages';
+import { findSampleImage } from '../../assets/loadSampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import { importPsdFile } from '../../utils/psdImport';
+import { notify } from '../../utils/notify';
 import {
   AnimatedMenu,
   MenuItem as Item,
@@ -191,8 +192,12 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     if (!file) return;
     try {
       loadProject(await readProjectFile(file));
+      notify.success('Project opened', file.name);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to open project');
+      notify.error(
+        'Could not open project',
+        err instanceof Error ? err.message : 'Invalid project file'
+      );
     }
     e.target.value = '';
     close();
@@ -229,8 +234,12 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
         future: [],
       });
       onFitToScreen();
+      notify.success('PSD imported', `${psd.layers.length} layers · ${psd.width}×${psd.height}`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to open PSD');
+      notify.error(
+        'Could not open PSD',
+        err instanceof Error ? err.message : 'Import failed'
+      );
     }
   };
 
@@ -244,10 +253,11 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
   };
 
   const handleLoadSample = (sampleId: string) => {
-    const sample = SAMPLE_IMAGES.find((s) => s.id === sampleId);
-    if (!sample) return;
-    addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
-    close();
+    void findSampleImage(sampleId).then((sample) => {
+      if (!sample) return;
+      addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
+      close();
+    });
   };
   const renderMenu = (id: (typeof MENU_BUTTONS)[number]['id']) => {
     switch (id) {

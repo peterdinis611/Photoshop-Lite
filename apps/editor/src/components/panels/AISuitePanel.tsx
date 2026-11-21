@@ -137,11 +137,12 @@ export const AISuitePanel: React.FC = () => {
     let cancelled = false;
     void aiApiClient
       .getHealth()
-      .then((h) => {
+      .then(() => {
         if (cancelled) return;
+        // Public /health no longer advertises which keys exist — assume API may serve cloud jobs.
         setServerReachable(true);
-        setServerReplicate(Boolean(h.replicateConfigured));
-        setServerHuggingFace(Boolean(h.huggingfaceConfigured));
+        setServerReplicate(true);
+        setServerHuggingFace(true);
       })
       .catch(() => {
         if (cancelled) return;

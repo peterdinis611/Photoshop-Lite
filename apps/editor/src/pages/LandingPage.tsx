@@ -1,16 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowUpRight,
-  Brush,
-  Crop,
-  Scissors,
-  Sparkles,
-  Wand2,
-} from 'lucide-react';
 import { usePageMeta } from '../seo/usePageMeta';
 import { SkipLink } from '../a11y/SkipLink';
 import { LiveRegion } from '../a11y/LiveRegion';
+import {
+  ArrowUpRightIcon,
+  BrushIcon,
+  CropIcon,
+  ScissorsIcon,
+  SparklesIcon,
+  WandIcon,
+} from './landingIcons';
 
 const CAPABILITIES = [
   {
@@ -60,11 +60,11 @@ function plateOffset(i: number, front: number): number {
 }
 
 const ORBIT_TOOLS = [
-  { id: 'brush', label: 'Brush', Icon: Brush, angle: 18 },
-  { id: 'crop', label: 'Crop', Icon: Crop, angle: 95 },
-  { id: 'wand', label: 'Wand', Icon: Wand2, angle: 168 },
-  { id: 'cut', label: 'Cutout', Icon: Scissors, angle: 248 },
-  { id: 'lab', label: 'Lab', Icon: Sparkles, angle: 312 },
+  { id: 'brush', label: 'Brush', Icon: BrushIcon, angle: 18 },
+  { id: 'crop', label: 'Crop', Icon: CropIcon, angle: 95 },
+  { id: 'wand', label: 'Wand', Icon: WandIcon, angle: 168 },
+  { id: 'cut', label: 'Cutout', Icon: ScissorsIcon, angle: 248 },
+  { id: 'lab', label: 'Lab', Icon: SparklesIcon, angle: 312 },
 ] as const;
 
 const FILM_FRAMES = ['NEG·01', 'NEG·02', 'NEG·03', 'NEG·04', 'NEG·05', 'NEG·06', 'NEG·07', 'NEG·08'];
@@ -107,6 +107,19 @@ export const LandingPage: React.FC = () => {
 
   useEffect(() => {
     reducedMotion.current = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }, []);
+
+  // Warm the editor chunk after first paint so /editor opens faster
+  useEffect(() => {
+    const prefetch = () => {
+      void import('../app/EditorShell');
+    };
+    const ric = window.requestIdleCallback?.(prefetch, { timeout: 2500 });
+    const t = ric == null ? window.setTimeout(prefetch, 1400) : 0;
+    return () => {
+      if (ric != null) window.cancelIdleCallback?.(ric);
+      if (t) window.clearTimeout(t);
+    };
   }, []);
 
   // Scroll parallax
@@ -295,9 +308,19 @@ export const LandingPage: React.FC = () => {
               plates, Enter to fan, orbit tools to preview.
             </p>
             <div className="landing__lede-row">
-              <Link to="/editor" id="landing-cta" className="landing__cta">
+              <Link
+                to="/editor"
+                id="landing-cta"
+                className="landing__cta"
+                onMouseEnter={() => {
+                  void import('../app/EditorShell');
+                }}
+                onFocus={() => {
+                  void import('../app/EditorShell');
+                }}
+              >
                 <span>Open editor</span>
-                <ArrowUpRight size={18} strokeWidth={2.4} aria-hidden />
+                <ArrowUpRightIcon size={18} strokeWidth={2.4} />
               </Link>
               <label className="landing__dial font-mono-ui">
                 <span>EXP {Math.round(exposure * 100)}</span>
@@ -536,7 +559,7 @@ export const LandingPage: React.FC = () => {
         <div className="landing__outro">
           <Link to="/editor" className="landing__cta landing__cta--ghost">
             <span>Open editor</span>
-            <ArrowUpRight size={18} strokeWidth={2.4} />
+            <ArrowUpRightIcon size={18} strokeWidth={2.4} />
           </Link>
           <span className="landing__legal font-mono-ui">PhotoshopLite · local-first</span>
         </div>

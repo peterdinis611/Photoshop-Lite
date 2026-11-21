@@ -10,7 +10,7 @@ import {
   Images,
 } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
-import { SAMPLE_IMAGES } from '../../assets/sampleImages';
+import { findSampleImage, loadSampleImages, type SampleImage } from '../../assets/loadSampleImages';
 import {
   collectImageFiles,
   dragEventHasFiles,
@@ -48,8 +48,14 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState<LoadImageProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [samples, setSamples] = useState<SampleImage[]>([]);
   // Blank New Document keeps 0 layers but must hide this overlay
   const isEmpty = !isDocumentOpen && layersCount === 0;
+
+  useEffect(() => {
+    if (!isEmpty) return;
+    void loadSampleImages().then(setSamples);
+  }, [isEmpty]);
 
   const importFiles = useCallback(
     async (files: File[]) => {
@@ -176,10 +182,11 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   };
 
   const loadSample = (id: string) => {
-    const sample = SAMPLE_IMAGES.find((s) => s.id === id);
-    if (!sample) return;
-    addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
-    window.setTimeout(() => onImagesAdded?.(), 140);
+    void findSampleImage(id).then((sample) => {
+      if (!sample) return;
+      addImageLayer(sample.dataUrl, sample.name, sample.width, sample.height);
+      window.setTimeout(() => onImagesAdded?.(), 140);
+    });
   };
 
   const showEmpty = isEmpty && !isDragging && !isImporting;
@@ -299,7 +306,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
             </div>
 
             <div className="drop-samples">
-              {SAMPLE_IMAGES.map((s) => (
+              {samples.map((s) => (
                 <button
                   key={s.id}
                   type="button"

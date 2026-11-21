@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { ImageLayer, AIStatus } from '../../types/editor';
 import { DEFAULT_ADJUSTMENTS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, bakeRelightPixels, bakePortraitPixels, bakeClarityPixels, bakeColorMatchPixels, computeOutpaintLayout, expandImageWithEdgeFill, buildOutpaintBorderMask, rasterizeImageToSize, selectionToMaskDataUrl, type ReviveMode, type CleanupMode, type RelightMode, type PortraitMode, type ClarityMode, type OutpaintPreset } from '@photoshop-lite/editor-core';
-import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
+import { aiApiClient, executeBackgroundRemoval } from '@photoshop-lite/editor-ai-client';
 import type { AiJobKind, AiStylePreset, AiRelightPreset } from '@photoshop-lite/shared-types';
 import { derivativeName, rasterMaskToLayerMask } from '../helpers';
 
@@ -1042,6 +1042,15 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
       segment: 'Segmentation',
       caption: 'Caption',
     };
+
+    get().recordActionStep('cloud-job', actionLabel[kind], {
+      kind,
+      intensity: options.intensity,
+      prompt: options.prompt,
+      style: options.style,
+      relight: options.relight,
+      applyAsMask: options.applyAsMask,
+    });
 
     set({
       aiStatus: {

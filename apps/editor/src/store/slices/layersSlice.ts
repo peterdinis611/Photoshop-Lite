@@ -756,6 +756,8 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
       scale: 1,
       transparentBackground: backgroundColor === 'transparent',
       backgroundColor: backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
+      canvasWidth,
+      canvasHeight,
     });
     get().commitHistory('Flatten Image');
     const flat: ImageLayer = {

@@ -179,7 +179,7 @@ describe('AiEngineService routing', () => {
           ok: true,
           json: async () => ({
             status: 'succeeded',
-            output: 'https://cdn.example.com/out.png',
+            output: 'https://replicate.delivery/pbxt/out.png',
           }),
         })
         .mockResolvedValueOnce({
@@ -192,7 +192,7 @@ describe('AiEngineService routing', () => {
     const poll = await engine.pollPrediction({ predictionId: 'pred_img' });
     expect(poll.status).toBe('succeeded');
     expect(poll.imageBase64).toMatch(/^data:image\/png;base64,/);
-    expect(poll.outputUrl).toBe('https://cdn.example.com/out.png');
+    expect(poll.outputUrl).toBe('https://replicate.delivery/pbxt/out.png');
   });
 
   it('pollPrediction surfaces failed status', async () => {

@@ -1,5 +1,3 @@
-import { initializeCanvas, readPsd, type Layer } from 'ag-psd';
-
 export interface PsdImportedLayer {
   name: string;
   /** PNG data URL of the layer's pixels */
@@ -25,8 +23,13 @@ export interface PsdImportResult {
 
 let canvasReady = false;
 
-function ensureCanvasFactory(): void {
+async function loadAgPsd() {
+  return import('ag-psd');
+}
+
+async function ensureCanvasFactory(): Promise<void> {
   if (canvasReady) return;
+  const { initializeCanvas } = await loadAgPsd();
   canvasReady = true;
   initializeCanvas(
     (width, height) => {
@@ -46,7 +49,7 @@ function titleFromFile(file: File): string {
 
 /** Walks the layer tree (bottom → top), flattening groups and inheriting hidden state. */
 function collectLayers(
-  nodes: Layer[] | undefined,
+  nodes: import('ag-psd').Layer[] | undefined,
   parentVisible: boolean,
   out: PsdImportedLayer[]
 ): void {
@@ -75,23 +78,23 @@ function collectLayers(
   });
 }
 
-function tryRead(buffer: ArrayBuffer, layersWanted: boolean) {
-  return readPsd(buffer, {
-    skipLayerImageData: !layersWanted,
-    skipCompositeImageData: false,
-    skipThumbnail: true,
-    skipLinkedFilesData: true,
-  });
-}
-
 /**
  * Imports a .psd file. Tries to decode each layer's pixels; if that fails or
  * yields nothing, falls back to the flattened composite image.
  */
 export async function importPsdFile(file: File): Promise<PsdImportResult> {
-  ensureCanvasFactory();
+  const { readPsd } = await loadAgPsd();
+  await ensureCanvasFactory();
   const buffer = await file.arrayBuffer();
   const title = titleFromFile(file);
+
+  const tryRead = (layersWanted: boolean) =>
+    readPsd(buffer, {
+      skipLayerImageData: !layersWanted,
+      skipCompositeImageData: false,
+      skipThumbnail: true,
+      skipLinkedFilesData: true,
+    });
 
   let width = 0;
   let height = 0;
@@ -99,7 +102,7 @@ export async function importPsdFile(file: File): Promise<PsdImportResult> {
   let compositeCanvas: HTMLCanvasElement | undefined;
 
   try {
-    const psd = tryRead(buffer, true);
+    const psd = tryRead(true);
     width = psd.width;
     height = psd.height;
     compositeCanvas = psd.canvas;
@@ -114,7 +117,7 @@ export async function importPsdFile(file: File): Promise<PsdImportResult> {
 
   if (!compositeCanvas) {
     try {
-      const psd = tryRead(buffer, false);
+      const psd = tryRead(false);
       width = psd.width;
       height = psd.height;
       compositeCanvas = psd.canvas;

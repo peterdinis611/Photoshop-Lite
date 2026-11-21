@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { EditorAction, EditorActionStep } from '../../types/editor';
 import type { ClassicFilterKind, ReviveMode, CleanupMode } from '@photoshop-lite/editor-core';
+import type { AiJobKind, AiRelightPreset, AiStylePreset } from '@photoshop-lite/shared-types';
 import { makeId, isActionPlaying, setActionPlaying } from '../helpers';
 
 export interface ActionsSlice {
@@ -93,6 +94,15 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
               (payload.kind as ClassicFilterKind | undefined) ?? 'gaussian',
               payload.params as Record<string, number> | undefined
             );
+            break;
+          case 'cloud-job':
+            await get().runCloudAiJob(layerId, (payload.kind as AiJobKind) || 'cleanup', {
+              intensity: payload.intensity as number | undefined,
+              prompt: payload.prompt as string | undefined,
+              style: payload.style as AiStylePreset | undefined,
+              relight: payload.relight as AiRelightPreset | undefined,
+              applyAsMask: payload.applyAsMask as boolean | undefined,
+            });
             break;
           case 'compress':
             await get().compressSelectedImage(

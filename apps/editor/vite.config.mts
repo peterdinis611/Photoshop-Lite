@@ -87,9 +87,50 @@ export default defineConfig(() => {
       outDir: './dist',
       emptyOutDir: true,
       reportCompressedSize: true,
+      cssCodeSplit: true,
+      target: 'es2022',
+      modulePreload: { polyfill: false },
       commonjsOptions: {
         transformMixedEsModules: true,
       },
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            // Match only the package itself — not nested deps under
+            // e.g. react-konva/node_modules/react (that wrongly pulled React into konva-vendor).
+            groups: [
+              {
+                name: 'react-vendor',
+                test: /node_modules[\\/](react|react-dom|scheduler)[\\/](?!.*node_modules)/,
+                priority: 30,
+              },
+              {
+                name: 'konva-vendor',
+                test: /node_modules[\\/](konva|react-konva)[\\/](?!.*node_modules)/,
+                priority: 20,
+              },
+              {
+                name: 'router-vendor',
+                test: /node_modules[\\/](react-router|react-router-dom|@remix-run)[\\/](?!.*node_modules)/,
+                priority: 20,
+              },
+              {
+                name: 'ag-psd',
+                test: /node_modules[\\/]ag-psd[\\/](?!.*node_modules)/,
+              },
+              {
+                name: 'driver',
+                test: /node_modules[\\/]driver\.js[\\/](?!.*node_modules)/,
+              },
+              {
+                name: 'lucide',
+                test: /node_modules[\\/]lucide-react[\\/](?!.*node_modules)/,
+              },
+            ],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 900,
     },
     test: {
       name: '@photoshop-lite/editor',

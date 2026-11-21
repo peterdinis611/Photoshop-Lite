@@ -483,7 +483,9 @@ export class AiEngineService {
     const host = parsed.hostname.toLowerCase();
     const allowed =
       host === 'api.replicate.com' ||
+      host === 'replicate.delivery' ||
       host.endsWith('.replicate.delivery') ||
+      host === 'replicate.com' ||
       host.endsWith('.replicate.com') ||
       host.endsWith('.hf.co') ||
       host.endsWith('.huggingface.co');

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Aperture } from 'lucide-react';
+import { ApertureIcon } from './landingIcons';
 
 interface StatusPageShellProps {
   code: string;
@@ -34,7 +34,7 @@ export const StatusPageShell: React.FC<StatusPageShellProps> = ({
       <div className="status-page__glow" aria-hidden />
 
       <header className="status-page__brand">
-        <Aperture size={18} strokeWidth={2.2} />
+        <ApertureIcon size={18} strokeWidth={2.2} />
         <span>PhotoshopLite</span>
       </header>
 

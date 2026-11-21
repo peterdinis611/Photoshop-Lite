@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FilePlus,
   FolderOpen,
@@ -16,7 +16,9 @@ import {
 } from 'lucide-react';
 import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../../store/editorStore';
-import { SAMPLE_IMAGES } from '../../../assets/sampleImages';
+import { loadSampleImages, type SampleImage } from '../../../assets/loadSampleImages';
+import { downloadPsdBlob, exportPsdPartial } from '../../../utils/psdExport';
+import { notify } from '../../../utils/notify';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
 import { MenuPanel } from './MenuPanel';
 
@@ -50,8 +52,17 @@ export const FileMenu: React.FC<FileMenuProps> = ({
     loadProjectFromCloud,
     shareCloudProjectLink,
     cloudProjectId,
+    projectTitle,
+    canvasWidth,
+    canvasHeight,
+    layers,
     addImageLayer,
   } = useEditorStore();
+
+  const [samples, setSamples] = useState<SampleImage[]>([]);
+  useEffect(() => {
+    void loadSampleImages().then(setSamples);
+  }, []);
 
   const pasteFromClipboard = async () => {
     try {
@@ -117,15 +128,26 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       >
         <Pencil size={13} /> Rename Project…
       </Item>
-      <Item onClick={() => { saveProject(); onClose(); }} hint="⌘S">
+      <Item
+        onClick={() => {
+          saveProject();
+          notify.success('Project saved');
+          onClose();
+        }}
+        hint="⌘S"
+      >
         <Save size={13} /> Save Project
       </Item>
       <Item
         onClick={async () => {
           try {
             await saveProjectToCloud();
-          } catch {
-            /* toast via aiStatus */
+            notify.success('Saved to cloud');
+          } catch (err) {
+            notify.error(
+              'Cloud save failed',
+              err instanceof Error ? err.message : 'Is the API running?'
+            );
           }
           onClose();
         }}
@@ -149,9 +171,13 @@ export const FileMenu: React.FC<FileMenuProps> = ({
           if (link) {
             try {
               await navigator.clipboard.writeText(link);
+              notify.success('Share link copied');
             } catch {
               window.prompt('Copy share link', link);
+              notify.info('Copy the share link', link);
             }
+          } else {
+            notify.error('No cloud project', 'Save to Cloud first');
           }
           onClose();
         }}
@@ -159,7 +185,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
         <Link2 size={13} /> Copy Share Link
       </Item>
       <div className="px-3 pb-1 text-[10px] leading-snug text-[var(--text-faint)]">
-        Needs the API running · status appears bottom-right
+        Needs the API running · toasts appear bottom-right
       </div>
       <Sep />
       <Label>Cloud projects</Label>
@@ -174,8 +200,12 @@ export const FileMenu: React.FC<FileMenuProps> = ({
             onClick={async () => {
               try {
                 await loadProjectFromCloud(p.id);
-              } catch {
-                /* toast */
+                notify.success('Opened from cloud', p.title);
+              } catch (err) {
+                notify.error(
+                  'Could not open cloud project',
+                  err instanceof Error ? err.message : p.title
+                );
               }
               onClose();
             }}
@@ -186,7 +216,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       )}
       <Sep />
       <Label>Samples</Label>
-      {SAMPLE_IMAGES.map((s) => (
+      {samples.map((s) => (
         <Item key={s.id} onClick={() => onLoadSample(s.id)}>
           <ImageIcon size={13} /> {s.name}
         </Item>
@@ -194,6 +224,25 @@ export const FileMenu: React.FC<FileMenuProps> = ({
       <Sep />
       <Item onClick={() => { setExportModalOpen(true); onClose(); }} hint="⌘E">
         <Download size={13} /> Export As…
+      </Item>
+      <Item
+        disabled={!layers.some((l) => l.type === 'image')}
+        onClick={async () => {
+          try {
+            const blob = await exportPsdPartial({
+              title: projectTitle || 'Untitled',
+              width: canvasWidth,
+              height: canvasHeight,
+              layers,
+            });
+            downloadPsdBlob(blob, `${(projectTitle || 'artwork').replace(/\s+/g, '-')}.psd`);
+          } catch {
+            /* ignore */
+          }
+          onClose();
+        }}
+      >
+        <FileImage size={13} /> Export PSD (images)…
       </Item>
     </MenuPanel>
   );

@@ -299,6 +299,81 @@
   animation: toast-drop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ── Sonner (darkroom plate toasts) ── */
+[data-sonner-toaster] {
+  --normal-bg: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  --normal-border: var(--border-strong);
+  --normal-text: var(--text-primary);
+  --success-bg: color-mix(in srgb, #0d2818 88%, transparent);
+  --success-border: color-mix(in srgb, var(--success) 45%, transparent);
+  --success-text: #d8f5e6;
+  --error-bg: color-mix(in srgb, #2a1010 90%, transparent);
+  --error-border: color-mix(in srgb, var(--danger) 50%, transparent);
+  --error-text: #f5d0d0;
+  font-family: var(--font-body);
+  z-index: 12000 !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast].pl-toast {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 12px 14px;
+  gap: 10px;
+}
+
+[data-sonner-toaster] [data-sonner-toast].pl-toast--loading {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 94%, var(--accent) 6%);
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-title].pl-toast__title,
+[data-sonner-toaster] [data-sonner-toast] .pl-toast__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-description].pl-toast__desc,
+[data-sonner-toaster] [data-sonner-toast] .pl-toast__desc {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted) !important;
+  opacity: 1;
+  line-height: 1.35;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-close-button].pl-toast__close,
+[data-sonner-toaster] [data-sonner-toast] .pl-toast__close {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  left: auto;
+  right: -6px;
+  top: -6px;
+  transform: none;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-close-button].pl-toast__close:hover,
+[data-sonner-toaster] [data-sonner-toast] .pl-toast__close:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-icon] {
+  margin-right: 2px;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-type='loading'] [data-icon] {
+  color: var(--accent);
+}
+
 .tool-btn {
   transition:
     background-color 0.18s ease,

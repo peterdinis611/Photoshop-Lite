@@ -1,18 +1,6 @@
-import React, { useEffect, useEffectEvent, ViewTransition } from 'react';
-import {
-  Scissors,
-  AlertCircle,
-  CheckCircle,
-  X,
-  Loader2,
-  SunMedium,
-  Eraser,
-  ScanFace,
-  Paintbrush,
-  Sparkles,
-  Cloud,
-} from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
+import { notify } from '../../utils/notify';
 
 const ACTION_LABELS: Record<string, string> = {
   'remove-bg': 'Cutout',
@@ -33,131 +21,57 @@ const ACTION_LABELS: Record<string, string> = {
   caption: 'Caption',
 };
 
-export const FloatingAIStatusToast: React.FC = () => {
-  const { aiStatus, setAIStatus } = useEditorStore();
-
-  const clearToast = useEffectEvent(() => {
-    setAIStatus({ statusText: '', error: undefined });
-  });
+/**
+ * Bridges store `aiStatus` into Sonner — one toast id so progress → done/error animates in place.
+ */
+export function FloatingAIStatusToast() {
+  const aiStatus = useEditorStore((s) => s.aiStatus);
+  const setAIStatus = useEditorStore((s) => s.setAIStatus);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!aiStatus.isProcessing && (aiStatus.statusText || aiStatus.error)) {
-      const timer = setTimeout(() => clearToast(), 4500);
-      return () => clearTimeout(timer);
+    if (clearTimer.current) {
+      clearTimeout(clearTimer.current);
+      clearTimer.current = null;
     }
-    return undefined;
-  }, [aiStatus.isProcessing, aiStatus.statusText, aiStatus.error]);
 
-  if (!aiStatus.isProcessing && !aiStatus.statusText && !aiStatus.error) {
-    return null;
-  }
+    const label =
+      (aiStatus.action && ACTION_LABELS[aiStatus.action]) || 'Neural Lab';
+    const idle = !aiStatus.isProcessing && !aiStatus.statusText && !aiStatus.error;
 
-  const isError = Boolean(aiStatus.error);
-  const isComplete = !aiStatus.isProcessing && Boolean(aiStatus.statusText) && !isError;
-
-  const actionIcon = () => {
-    switch (aiStatus.action) {
-      case 'remove-bg':
-        return <Scissors size={18} className="text-[var(--ink-blue)] animate-bounce" />;
-      case 'revive':
-        return <SunMedium size={18} className="text-[var(--accent-hot)] animate-pulse" />;
-      case 'cleanup':
-        return <Eraser size={18} className="text-[var(--ink-blue)] animate-pulse" />;
-      case 'face-restore':
-      case 'portrait-polish':
-        return <ScanFace size={18} className="text-[var(--accent)] animate-pulse" />;
-      case 'inpaint':
-      case 'object-remove':
-        return <Paintbrush size={18} className="text-[var(--accent-hot)] animate-pulse" />;
-      case 'style':
-      case 'relight':
-      case 'clarity':
-      case 'color-match':
-      case 'outpaint':
-      case 'batch':
-      case 'segment':
-      case 'caption':
-        return <Sparkles size={18} className="text-[var(--accent)] animate-pulse" />;
-      case 'upscale':
-        return <Cloud size={18} className="text-[var(--accent)] animate-pulse" />;
-      default:
-        return <Loader2 size={18} className="text-[var(--accent)] animate-spin" />;
+    if (idle) {
+      notify.ai.dismiss();
+    } else if (aiStatus.error) {
+      notify.ai.error('Failed', aiStatus.error);
+      clearTimer.current = setTimeout(() => {
+        setAIStatus({ statusText: '', error: undefined });
+      }, 4500);
+    } else if (aiStatus.isProcessing) {
+      const detail = aiStatus.statusText
+        ? `${aiStatus.statusText} · ${aiStatus.progress}%`
+        : `${aiStatus.progress}%`;
+      notify.ai.loading(label, detail);
+    } else if (aiStatus.statusText) {
+      notify.ai.success('Done', aiStatus.statusText);
+      clearTimer.current = setTimeout(() => {
+        setAIStatus({ statusText: '', error: undefined });
+      }, 4500);
     }
-  };
 
-  const liveMessage = isError
-    ? `AI failed: ${aiStatus.error}`
-    : isComplete
-      ? `AI done: ${aiStatus.statusText}`
-      : `${(aiStatus.action && ACTION_LABELS[aiStatus.action]) || 'Processing'}: ${aiStatus.statusText || 'Working'} ${aiStatus.isProcessing ? `${aiStatus.progress} percent` : ''}`;
+    return () => {
+      if (clearTimer.current) {
+        clearTimeout(clearTimer.current);
+        clearTimer.current = null;
+      }
+    };
+  }, [
+    aiStatus.isProcessing,
+    aiStatus.statusText,
+    aiStatus.error,
+    aiStatus.progress,
+    aiStatus.action,
+    setAIStatus,
+  ]);
 
-  return (
-    <ViewTransition name="ai-status-toast" enter="auto" exit="auto" update="auto">
-      <div
-        className="toast-motion fixed top-16 left-1/2 z-50 pointer-events-auto"
-        role="status"
-        aria-live={isError ? 'assertive' : 'polite'}
-        aria-atomic="true"
-      >
-        <div
-          className={`px-4 py-2.5 rounded-[var(--radius-md)] border backdrop-blur-md flex items-center gap-3 min-w-[280px] max-w-md ${
-            isError
-              ? 'bg-red-950/90 border-[var(--danger)]/60 text-red-200'
-              : isComplete
-                ? 'bg-emerald-950/90 border-[var(--success)]/50 text-emerald-100'
-                : 'bg-[var(--bg-panel)]/95 border-[var(--accent)]/50 text-[var(--text-primary)]'
-          }`}
-        >
-          <span className="sr-only">{liveMessage}</span>
-          <div className="shrink-0">
-            {isError ? (
-              <AlertCircle size={18} className="text-[var(--danger)]" />
-            ) : isComplete ? (
-              <CheckCircle size={18} className="text-[var(--success)]" />
-            ) : (
-              actionIcon()
-            )}
-          </div>
-
-          <div className="flex-1 overflow-hidden">
-            <div className="flex items-center justify-between text-xs font-display font-bold">
-              <span className="truncate">
-                {isError
-                  ? 'Failed'
-                  : isComplete
-                    ? 'Done'
-                    : (aiStatus.action && ACTION_LABELS[aiStatus.action]) || 'Processing'}
-              </span>
-              {aiStatus.isProcessing && (
-                <span className="text-[10px] font-mono-ui text-[var(--text-faint)] ml-2">
-                  {aiStatus.progress}%
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
-              {aiStatus.error || aiStatus.statusText || 'Working…'}
-            </p>
-
-            {aiStatus.isProcessing && (
-              <div className="w-full bg-[var(--bg-app)] h-1 rounded-full overflow-hidden mt-1.5">
-                <div
-                  className="progress-shimmer h-full transition-all duration-300"
-                  style={{ width: `${Math.max(5, aiStatus.progress)}%` }}
-                />
-              </div>
-            )}
-          </div>
-
-          <button
-            type="button"
-            aria-label="Dismiss AI status"
-            onClick={() => setAIStatus({ isProcessing: false, statusText: '', error: undefined })}
-            className="shrink-0 p-1 hover:bg-white/10 rounded-[var(--radius-sm)] cursor-pointer text-[var(--text-faint)] hover:text-[var(--text-primary)]"
-          >
-            <X size={14} aria-hidden />
-          </button>
-        </div>
-      </div>
-    </ViewTransition>
-  );
-};
+  return null;
+}

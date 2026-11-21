@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { History, RotateCcw, X } from 'lucide-react';
 import type { ProjectVersionSummaryDto } from '@photoshop-lite/shared-types';
 import { useEditorStore } from '../../store/editorStore';
+import { notify } from '../../utils/notify';
 
 export const VersionHistoryModal: React.FC = () => {
   const isOpen = useEditorStore((s) => s.isVersionHistoryModalOpen);
@@ -36,9 +37,13 @@ export const VersionHistoryModal: React.FC = () => {
     setRestoringId(versionId);
     try {
       await restoreCloudProjectVersion(cloudProjectId, versionId);
+      notify.success('Revision restored');
       setOpen(false);
-    } catch {
-      /* toast via aiStatus */
+    } catch (err) {
+      notify.error(
+        'Restore failed',
+        err instanceof Error ? err.message : 'Could not load that revision'
+      );
     } finally {
       setRestoringId(null);
     }

@@ -1,10 +1,14 @@
 import React, { useEffect, useEffectEvent, useRef } from 'react';
-import { driver, type Driver } from 'driver.js';
-import 'driver.js/dist/driver.css';
+import type { Driver } from 'driver.js';
 import { useEditorStore } from '../../store/editorStore';
 import { ONBOARDING_STEPS, markOnboardingComplete } from './onboardingSteps';
 
-function buildDriver(onDone: () => void): Driver {
+async function buildDriver(onDone: () => void): Promise<Driver> {
+  const [{ driver }, _css] = await Promise.all([
+    import('driver.js'),
+    import('driver.js/dist/driver.css'),
+  ]);
+
   return driver({
     animate: true,
     allowClose: true,
@@ -91,7 +95,7 @@ function buildDriver(onDone: () => void): Driver {
   });
 }
 
-/** Product tour powered by driver.js */
+/** Product tour powered by driver.js (loaded on demand). */
 export const OnboardingTour: React.FC = () => {
   const open = useEditorStore((s) => s.isOnboardingOpen);
   const setOpen = useEditorStore((s) => s.setOnboardingOpen);
@@ -108,13 +112,22 @@ export const OnboardingTour: React.FC = () => {
       return;
     }
 
-    const d = buildDriver(() => finish());
-    driverRef.current = d;
-    // Small delay so layout/data-tour targets are painted
-    const t = window.setTimeout(() => d.drive(), 120);
+    let cancelled = false;
+    let t = 0;
+
+    void buildDriver(() => finish()).then((d) => {
+      if (cancelled) {
+        d.destroy();
+        return;
+      }
+      driverRef.current = d;
+      t = window.setTimeout(() => d.drive(), 120);
+    });
+
     return () => {
+      cancelled = true;
       window.clearTimeout(t);
-      d.destroy();
+      driverRef.current?.destroy();
       driverRef.current = null;
     };
   }, [open]);
