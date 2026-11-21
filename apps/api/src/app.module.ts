@@ -11,6 +11,7 @@ import { CacheModule } from './cache/cache.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { GeoModule } from './geo/geo.module';
 import { PaletteModule } from './palette/palette.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { CacheControlInterceptor } from './common/cache-control';
 import { buildThrottlerOptions } from './common/throttle.config';
 
@@ -27,6 +28,7 @@ import { buildThrottlerOptions } from './common/throttle.config';
     StockModule,
     GeoModule,
     PaletteModule,
+    CatalogModule,
   ],
   controllers: [],
   providers: [

@@ -224,8 +224,32 @@ export interface GeocodeResponseDto {
   raw?: string;
 }
 
-/** Colormind / harmony palette (5 hex colors). */
+/** Colormind / The Color API / harmony palette (5 hex colors). */
 export interface PaletteHarmonyResponseDto {
   colors: string[];
-  source: 'colormind' | 'fallback';
+  source: 'colormind' | 'thecolorapi' | 'fallback';
+}
+
+// ─── Free catalog (textures / placeholders / avatars) ────────────
+
+export type CatalogKind = 'textures' | 'placeholders' | 'avatars';
+
+export interface CatalogItem {
+  id: string;
+  kind: CatalogKind;
+  title: string;
+  author?: string;
+  thumbUrl: string;
+  fullUrl: string;
+  width?: number;
+  height?: number;
+  license?: string;
+  tags?: string[];
+}
+
+export interface CatalogListResponseDto {
+  kind: CatalogKind;
+  items: CatalogItem[];
+  query?: string;
+  source: string;
 }

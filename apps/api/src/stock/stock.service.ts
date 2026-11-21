@@ -35,6 +35,14 @@ const FETCH_HOST_ALLOW = [
   'cdn.pixabay.com',
   'images.rawpixel.com',
   'openverse.org',
+  // Free catalog (Poly Haven / Picsum / DiceBear)
+  'cdn.polyhaven.com',
+  'dl.polyhaven.com',
+  'api.polyhaven.com',
+  'picsum.photos',
+  'fastly.picsum.photos',
+  'i.picsum.photos',
+  'api.dicebear.com',
 ];
 
 @Injectable()
@@ -76,7 +84,7 @@ export class StockService {
     return { items, query: q, providers, sources };
   }
 
-  async fetchImage(rawUrl: string): Promise<StockFetchResponseDto> {
+  assertAllowedImageUrl(rawUrl: string): URL {
     let parsed: URL;
     try {
       parsed = new URL(rawUrl);
@@ -93,12 +101,20 @@ export class StockService {
       host.endsWith('.pexels.com') ||
       host.endsWith('.staticflickr.com') ||
       host.endsWith('.wikimedia.org') ||
-      host.endsWith('.openverse.org');
+      host.endsWith('.openverse.org') ||
+      host.endsWith('.polyhaven.com') ||
+      host.endsWith('.picsum.photos') ||
+      host.endsWith('.dicebear.com');
     if (!allowed) {
       throw new BadRequestException(`Host not allowed for stock fetch: ${host}`);
     }
+    return parsed;
+  }
 
-    const cacheKey = CacheKeys.stockFetch(parsed.toString());
+  /** Binary proxy for img src / catalog thumbs (allowlisted hosts only). */
+  async fetchImageBinary(rawUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const parsed = this.assertAllowedImageUrl(rawUrl);
+    const cacheKey = CacheKeys.stockFetch(`bin:${parsed.toString()}`);
     return this.cache.wrap(
       cacheKey,
       async () => {
@@ -118,18 +134,23 @@ export class StockService {
         if (!contentType.startsWith('image/')) {
           throw new BadRequestException(`Not an image (${contentType})`);
         }
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.byteLength > FETCH_MAX_BYTES) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (buffer.byteLength > FETCH_MAX_BYTES) {
           throw new BadRequestException('Image too large to proxy');
         }
-        return {
-          dataUrl: `data:${contentType};base64,${buf.toString('base64')}`,
-          contentType,
-          byteLength: buf.byteLength,
-        };
+        return { buffer, contentType };
       },
       STOCK_FETCH_TTL_MS
     );
+  }
+
+  async fetchImage(rawUrl: string): Promise<StockFetchResponseDto> {
+    const { buffer, contentType } = await this.fetchImageBinary(rawUrl);
+    return {
+      dataUrl: `data:${contentType};base64,${buffer.toString('base64')}`,
+      contentType,
+      byteLength: buffer.byteLength,
+    };
   }
 
   private async searchProvider(

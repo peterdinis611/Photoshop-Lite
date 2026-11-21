@@ -26,6 +26,9 @@ export type {
   StockFetchResponseDto,
   GeocodeResponseDto,
   PaletteHarmonyResponseDto,
+  CatalogKind,
+  CatalogItem,
+  CatalogListResponseDto,
 } from './api.types';
 export type * from './editor.types';
 export {

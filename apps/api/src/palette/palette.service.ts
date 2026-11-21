@@ -14,11 +14,21 @@ export class PaletteService {
 
   async harmony(seedHex?: string): Promise<PaletteHarmonyResponseDto> {
     const seed = (seedHex || 'd4923a').replace(/^#/, '').toLowerCase();
-    const key = `palette:harmony:${seed}`;
-    return this.cache.wrap(key, () => this.fetchColormind(seed), TTL_MS);
+    const key = `palette:harmony:v2:${seed}`;
+    return this.cache.wrap(key, () => this.resolveHarmony(seed), TTL_MS);
   }
 
-  private async fetchColormind(seed: string): Promise<PaletteHarmonyResponseDto> {
+  private async resolveHarmony(seed: string): Promise<PaletteHarmonyResponseDto> {
+    const fromColormind = await this.fetchColormind(seed);
+    if (fromColormind) return fromColormind;
+
+    const fromColorApi = await this.fetchTheColorApi(seed);
+    if (fromColorApi) return fromColorApi;
+
+    return { colors: FALLBACK, source: 'fallback' };
+  }
+
+  private async fetchColormind(seed: string): Promise<PaletteHarmonyResponseDto | null> {
     try {
       const rgb = hexToRgb(seed) ?? [212, 146, 58];
       const res = await fetch('http://colormind.io/api/', {
@@ -42,7 +52,36 @@ export class PaletteService {
         `Colormind failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-    return { colors: FALLBACK, source: 'fallback' };
+    return null;
+  }
+
+  /** Free HTTPS fallback — The Color API scheme endpoint (no key). */
+  private async fetchTheColorApi(seed: string): Promise<PaletteHarmonyResponseDto | null> {
+    try {
+      const hex = (hexToRgb(seed) ? seed : 'd4923a').toUpperCase();
+      const url =
+        `https://www.thecolorapi.com/scheme?hex=${encodeURIComponent(hex)}` +
+        `&mode=analogic&count=5`;
+      const res = await fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'PhotoshopLite/1.0' },
+      });
+      if (!res.ok) throw new Error(`TheColorAPI HTTP ${res.status}`);
+      const data = (await res.json()) as {
+        colors?: Array<{ hex?: { value?: string } }>;
+      };
+      const colors = (data.colors ?? [])
+        .map((c) => c.hex?.value)
+        .filter((v): v is string => Boolean(v))
+        .map((v) => v.toLowerCase());
+      if (colors.length >= 3) {
+        return { colors, source: 'thecolorapi' };
+      }
+    } catch (err) {
+      this.logger.warn(
+        `The Color API failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+    return null;
   }
 }
 

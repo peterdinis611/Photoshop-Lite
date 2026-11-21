@@ -20,6 +20,8 @@ import type {
   StockSearchResponseDto,
   GeocodeResponseDto,
   PaletteHarmonyResponseDto,
+  CatalogKind,
+  CatalogListResponseDto,
 } from '@photoshop-lite/shared-types';
 import { getOrCreateWorkspaceId, WORKSPACE_HEADER } from './workspaceId';
 
@@ -295,6 +297,37 @@ export class AiApiClient {
       ? `?seed=${encodeURIComponent(seedHex.replace(/^#/, ''))}`
       : '';
     return this.request<PaletteHarmonyResponseDto>(`/palette/harmony${q}`, undefined, 'GET');
+  }
+
+  /** Free catalog: Poly Haven textures, Picsum plates, DiceBear avatars. */
+  listCatalog(
+    kind: CatalogKind,
+    opts?: { q?: string; page?: number }
+  ): Promise<CatalogListResponseDto> {
+    const params = new URLSearchParams({ kind });
+    if (opts?.q?.trim()) params.set('q', opts.q.trim());
+    if (opts?.page && opts.page > 1) params.set('page', String(opts.page));
+    return this.request<CatalogListResponseDto>(
+      `/catalog?${params.toString()}`,
+      undefined,
+      'GET'
+    );
+  }
+
+  /**
+   * Same-origin media proxy URL for catalog thumbs.
+   * Prefer item.thumbUrl from listCatalog (already rewritten by API).
+   */
+  catalogMediaUrl(upstreamUrl: string): string {
+    if (upstreamUrl.startsWith('/api/') || upstreamUrl.startsWith('data:')) {
+      return upstreamUrl;
+    }
+    return `${this.baseUrl}/catalog/media?url=${encodeURIComponent(upstreamUrl)}`;
+  }
+
+  /** Place catalog item via backend stock proxy → data URL. */
+  fetchCatalogImage(upstreamUrl: string): Promise<StockFetchResponseDto> {
+    return this.fetchStockImage(upstreamUrl);
   }
 }
 
