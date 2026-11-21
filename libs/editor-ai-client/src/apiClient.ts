@@ -204,6 +204,22 @@ export class AiApiClient {
     );
   }
 
+  getProjectVersion(id: string, versionId: string): Promise<ProjectDetailDto> {
+    return this.request<ProjectDetailDto>(
+      `/projects/${id}/versions/${encodeURIComponent(versionId)}`,
+      undefined,
+      'GET'
+    );
+  }
+
+  restoreProjectVersion(id: string, versionId: string): Promise<ProjectDetailDto> {
+    return this.request<ProjectDetailDto>(
+      `/projects/${id}/versions/${encodeURIComponent(versionId)}/restore`,
+      undefined,
+      'POST'
+    );
+  }
+
   // ── Assets ─────────────────────────────────────────────────────
 
   uploadAsset(dto: AssetUploadDto): Promise<AssetResponseDto> {
@@ -212,6 +228,31 @@ export class AiApiClient {
 
   listAssets(): Promise<AssetResponseDto[]> {
     return this.request<AssetResponseDto[]>('/assets', undefined, 'GET');
+  }
+
+  deleteAsset(id: string): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(`/assets/${id}`, undefined, 'DELETE');
+  }
+
+  /** Binary GET with workspace header → object URL (revoke when done). */
+  async fetchAssetObjectUrl(id: string): Promise<string> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/assets/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: this.buildHeaders(false),
+      });
+    } catch (e: unknown) {
+      throw new AppError(getErrorMessage(e, 'Network error fetching asset'), {
+        code: 'NETWORK',
+        cause: e,
+      });
+    }
+    if (!response.ok) {
+      throw new AppError(`Asset fetch failed (${response.status})`, { code: 'UPSTREAM' });
+    }
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
   }
 
   // ── Fonts ──────────────────────────────────────────────────────

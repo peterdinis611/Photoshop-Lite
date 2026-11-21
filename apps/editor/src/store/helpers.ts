@@ -118,6 +118,34 @@ export async function selectionMaskToLayerMask(
   return canvas.toDataURL('image/png');
 }
 
+/** Cloud segment / cutout mask → layer-local alpha mask (stretch to layer bounds). */
+export async function rasterMaskToLayerMask(
+  maskDataUrl: string,
+  layer: ImageLayer
+): Promise<string> {
+  const img = await loadImageElement(maskDataUrl);
+  const w = Math.max(1, Math.round(layer.width));
+  const h = Math.max(1, Math.round(layer.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Failed to create mask canvas');
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const lum = Math.round(0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]);
+    const alpha = px[i + 3] < 250 ? px[i + 3] : lum;
+    px[i] = 255;
+    px[i + 1] = 255;
+    px[i + 2] = 255;
+    px[i + 3] = alpha;
+  }
+  ctx.putImageData(data, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
 /** True while playAction runs, so replayed steps are not re-recorded. */
 let isPlayingAction = false;
 

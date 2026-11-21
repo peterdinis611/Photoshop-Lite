@@ -323,6 +323,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
           {/* Document Layers (rendered in array order: bottom to top) */}
           {renderLayers.map((layer) => {
+            if (layer.type === 'group') return null;
             const isSelected = layer.id === selectedLayerId;
 
             if (layer.type === 'image') {

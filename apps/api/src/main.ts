@@ -16,15 +16,21 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.useGlobalFilters(new GlobalExceptionFilter());
 
+  const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:4200')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: '*',
+    origin: corsOrigins.length === 1 && corsOrigins[0] === '*' ? true : corsOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
 
-  // Large cloud project / asset payloads (multi‑MP images as base64)
-  app.use(express.json({ limit: '120mb' }));
-  app.use(express.urlencoded({ limit: '120mb', extended: true }));
+  // Cloud project / asset payloads (base64) — capped to reduce DoS surface
+  const bodyLimit = process.env.JSON_BODY_LIMIT || '40mb';
+  app.use(express.json({ limit: bodyLimit }));
+  app.use(express.urlencoded({ limit: bodyLimit, extended: true }));
 
   const PORT = process.env.PORT || 3001;
   await app.listen(PORT);

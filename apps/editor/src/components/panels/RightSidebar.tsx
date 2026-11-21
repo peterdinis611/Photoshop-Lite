@@ -1,5 +1,5 @@
 import React, { Activity, Suspense, lazy, startTransition, useEffect, useState, ViewTransition } from 'react';
-import { Layers, Sliders, Sparkles, Palette, History, Film, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useEditorStore } from '../../store/editorStore';
 
 const LayersPanel = lazy(() =>
@@ -20,8 +20,11 @@ const HistoryPanel = lazy(() =>
 const ActionsPanel = lazy(() =>
   import('./ActionsPanel').then((m) => ({ default: m.ActionsPanel }))
 );
+const AssetsPanel = lazy(() =>
+  import('./AssetsPanel').then((m) => ({ default: m.AssetsPanel }))
+);
 
-type TabType = 'layers' | 'adjustments' | 'ai' | 'styles' | 'history' | 'actions';
+type TabType = 'layers' | 'adjustments' | 'ai' | 'styles' | 'history' | 'actions' | 'assets';
 
 const STORAGE_KEY = 'px_sidebar_open';
 
@@ -36,6 +39,7 @@ const PANELS: { id: TabType; label: string; node: React.ReactNode }[] = [
   { id: 'styles', label: 'Style', node: <StylesPanel /> },
   { id: 'history', label: 'History', node: <HistoryPanel /> },
   { id: 'actions', label: 'Actions', node: <ActionsPanel /> },
+  { id: 'assets', label: 'Assets', node: <AssetsPanel /> },
 ];
 
 function readOpenPreference(): boolean {
@@ -79,6 +83,7 @@ export const RightSidebar: React.FC = () => {
       icon: <Film size={15} />,
       badge: isRecordingAction,
     },
+    { id: 'assets', label: 'Assets', icon: <FolderArchive size={15} /> },
   ];
 
   const openToTab = (id: TabType) => {

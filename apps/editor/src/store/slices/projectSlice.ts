@@ -3,7 +3,7 @@ import type { EditorStore } from '../types';
 import type { ProjectFileData } from '../../types/editor';
 import { getErrorMessage, buildProjectFile, downloadProjectFile, extractImageExif, type ImageExifSummary } from '@photoshop-lite/editor-core';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
-import type { ProjectSummaryDto } from '@photoshop-lite/shared-types';
+import type { ProjectSummaryDto, ProjectVersionSummaryDto } from '@photoshop-lite/shared-types';
 
 export interface ProjectSlice {
   lastExif: ImageExifSummary | null;
@@ -17,6 +17,9 @@ export interface ProjectSlice {
   saveProjectToCloud: () => Promise<ProjectSummaryDto>;
   listCloudProjects: () => Promise<ProjectSummaryDto[]>;
   loadProjectFromCloud: (id: string) => Promise<void>;
+  listCloudProjectVersions: (id?: string) => Promise<ProjectVersionSummaryDto[]>;
+  restoreCloudProjectVersion: (projectId: string, versionId: string) => Promise<void>;
+  shareCloudProjectLink: () => string | null;
 }
 
 export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice> = (set, get) => ({
@@ -205,5 +208,64 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
       });
       throw e;
     }
+  },
+
+  listCloudProjectVersions: (id) => {
+    const projectId = id || get().cloudProjectId;
+    if (!projectId) return Promise.resolve([]);
+    return aiApiClient.listProjectVersions(projectId);
+  },
+
+  restoreCloudProjectVersion: async (projectId, versionId) => {
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 35,
+        statusText: 'Restoring cloud revision…',
+      },
+    });
+    try {
+      const detail = await aiApiClient.restoreProjectVersion(projectId, versionId);
+      get().loadProject({
+        version: '1.0',
+        title: detail.title,
+        canvasWidth: detail.canvasWidth,
+        canvasHeight: detail.canvasHeight,
+        backgroundColor: detail.backgroundColor,
+        layers: detail.layers as ProjectFileData['layers'],
+        savedAt: detail.savedAt,
+      });
+      set({
+        cloudProjectId: detail.id,
+        projectTitle: detail.title,
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: `Restored · ${detail.title}`,
+        },
+      });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Restore failed'),
+        },
+      });
+      throw e;
+    }
+  },
+
+  shareCloudProjectLink: () => {
+    const id = get().cloudProjectId;
+    if (!id || typeof window === 'undefined') return null;
+    const url = new URL(window.location.href);
+    url.pathname = '/editor';
+    url.searchParams.set('cloud', id);
+    return url.toString();
   },
 });

@@ -4,7 +4,7 @@ import type { ImageLayer, AIStatus } from '../../types/editor';
 import { DEFAULT_ADJUSTMENTS, clientSideSuperResolution, deepClone, getErrorMessage, bakeRevivePixels, computeReviveAdjustments, bakeCleanupPixels, bakeRelightPixels, bakePortraitPixels, bakeClarityPixels, bakeColorMatchPixels, computeOutpaintLayout, expandImageWithEdgeFill, buildOutpaintBorderMask, rasterizeImageToSize, selectionToMaskDataUrl, type ReviveMode, type CleanupMode, type RelightMode, type PortraitMode, type ClarityMode, type OutpaintPreset } from '@photoshop-lite/editor-core';
 import { executeBackgroundRemoval, aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { AiJobKind, AiStylePreset, AiRelightPreset } from '@photoshop-lite/shared-types';
-import { derivativeName } from '../helpers';
+import { derivativeName, rasterMaskToLayerMask } from '../helpers';
 
 export interface AISlice {
   aiStatus: AIStatus;
@@ -70,6 +70,8 @@ export interface AISlice {
       style?: AiStylePreset;
       relight?: AiRelightPreset;
       maskBase64?: string;
+      /** Segment: apply result as non-destructive layer mask instead of a new layer */
+      applyAsMask?: boolean;
     }
   ) => Promise<void>;
   setAIStatus: (status: Partial<AIStatus>) => void;
@@ -1199,6 +1201,22 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
 
       if (!resultSrc) {
         throw new Error('Cloud job returned no image');
+      }
+
+      if (kind === 'segment' && options.applyAsMask !== false) {
+        const layerMaskSrc = await rasterMaskToLayerMask(resultSrc, layer);
+        get().commitHistory('Segment Mask');
+        get().updateLayer(id, { hasLayerMask: true, layerMaskSrc });
+        set({
+          activeTool: 'refineBrush',
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: 'Segment applied as layer mask — refine edges',
+          },
+        });
+        return;
       }
 
       get().commitHistory(actionLabel[kind]);

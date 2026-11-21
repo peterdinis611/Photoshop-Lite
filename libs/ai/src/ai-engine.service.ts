@@ -373,16 +373,7 @@ export class AiEngineService {
       throw new Error('No Replicate API token provided');
     }
 
-    const statusUrl =
-      dto.statusUrl ||
-      (dto.predictionId
-        ? `https://api.replicate.com/v1/predictions/${dto.predictionId}`
-        : null);
-
-    if (!statusUrl) {
-      throw new Error('Missing predictionId or statusUrl');
-    }
-
+    const statusUrl = this.resolveReplicatePollUrl(dto);
     const response = await fetch(statusUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -451,7 +442,58 @@ export class AiEngineService {
     return this.downloadAsBase64(outputUrl);
   }
 
+  /** Only poll Replicate prediction URLs — never forward Bearer to arbitrary hosts. */
+  private resolveReplicatePollUrl(dto: PredictionPollRequestDto): string {
+    const PREDICTION_ID_RE = /^[a-zA-Z0-9_-]{8,128}$/;
+    if (dto.predictionId) {
+      if (!PREDICTION_ID_RE.test(dto.predictionId)) {
+        throw new Error('Invalid predictionId');
+      }
+      return `https://api.replicate.com/v1/predictions/${dto.predictionId}`;
+    }
+    if (dto.statusUrl) {
+      let parsed: URL;
+      try {
+        parsed = new URL(dto.statusUrl);
+      } catch {
+        throw new Error('Invalid statusUrl');
+      }
+      if (
+        parsed.protocol !== 'https:' ||
+        parsed.hostname !== 'api.replicate.com' ||
+        !parsed.pathname.startsWith('/v1/predictions/')
+      ) {
+        throw new Error('statusUrl must be an https://api.replicate.com/v1/predictions/… URL');
+      }
+      return parsed.toString();
+    }
+    throw new Error('Missing predictionId or statusUrl');
+  }
+
+  private assertAllowedDownloadUrl(outputUrl: string): void {
+    let parsed: URL;
+    try {
+      parsed = new URL(outputUrl);
+    } catch {
+      throw new Error('Invalid output URL');
+    }
+    if (parsed.protocol !== 'https:') {
+      throw new Error('Only https result downloads are allowed');
+    }
+    const host = parsed.hostname.toLowerCase();
+    const allowed =
+      host === 'api.replicate.com' ||
+      host.endsWith('.replicate.delivery') ||
+      host.endsWith('.replicate.com') ||
+      host.endsWith('.hf.co') ||
+      host.endsWith('.huggingface.co');
+    if (!allowed) {
+      throw new Error(`Refusing to download from host: ${host}`);
+    }
+  }
+
   private async downloadAsBase64(outputUrl: string): Promise<PredictionPollResponseDto> {
+    this.assertAllowedDownloadUrl(outputUrl);
     const imageRes = await fetch(outputUrl);
     if (!imageRes.ok) {
       throw new Error('Failed to download result from Replicate');

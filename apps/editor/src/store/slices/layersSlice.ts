@@ -1,9 +1,10 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
-import type { EditorLayer, ImageLayer, TextLayer, ShapeLayer, DrawingLayer, PathLayer, PathAnchor, ShapeType, BlendMode, AdjustmentLayer, AdjustmentLayerKind, GradientLayer } from '../../types/editor';
+import type { EditorLayer, ImageLayer, TextLayer, ShapeLayer, DrawingLayer, PathLayer, PathAnchor, ShapeType, BlendMode, AdjustmentLayer, AdjustmentLayerKind, GradientLayer, GroupLayer } from '../../types/editor';
 import { normalizeAnchors, pathBounds } from '../../utils/pathHelpers';
 import { DEFAULT_ADJUSTMENTS, deepClone, DEFAULT_CURVES, DEFAULT_LEVELS, createLinearGradientDataUrl, createRadialGradientDataUrl } from '@photoshop-lite/editor-core';
-import { uniqueLayerName, makeId, ADJUSTMENT_LABELS, flattenPathLayer } from '../helpers';
+import { exportDocumentToDataUrl } from '@photoshop-lite/editor-konva';
+import { uniqueLayerName, makeId, ADJUSTMENT_LABELS, flattenPathLayer, loadImageElement } from '../helpers';
 
 export interface LayersSlice {
   layers: EditorLayer[];
@@ -35,6 +36,12 @@ export interface LayersSlice {
   addPathLayer: (anchors: PathAnchor[], closed?: boolean) => void;
   addDrawingStroke: (layerId: string, stroke: { points: number[]; color: string; size: number; opacity: number; isEraser: boolean }) => void;
   nudgeSelectedLayer: (dx: number, dy: number) => void;
+  mergeDownLayer: (id?: string) => Promise<void>;
+  flattenVisibleLayers: () => Promise<void>;
+  createGroupFromSelection: (ids?: string[]) => void;
+  ungroupLayer: (id?: string) => void;
+  toggleGroupExpanded: (id: string) => void;
+  alignSelectedLayers: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
 }
 
 export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> = (set, get) => ({
@@ -669,6 +676,214 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
       layers: [...state.layers, layer],
       selectedLayerId: layer.id,
       isDocumentOpen: true,
+    }));
+  },
+
+  mergeDownLayer: async (id) => {
+    const { layers, selectedLayerId, canvasWidth, canvasHeight } = get();
+    const targetId = id || selectedLayerId;
+    if (!targetId) return;
+    const idx = layers.findIndex((l) => l.id === targetId);
+    if (idx <= 0) return;
+    const upper = layers[idx];
+    const lower = layers[idx - 1];
+    if (upper.type === 'group' || lower.type === 'group') return;
+    if (upper.type !== 'image' || lower.type !== 'image') {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: 'Merge Down currently supports image layers only',
+        },
+      });
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const drawImageLayer = async (layer: ImageLayer) => {
+      const img = await loadImageElement(layer.src);
+      ctx.save();
+      ctx.globalAlpha = layer.opacity;
+      ctx.translate(layer.x + (layer.width * layer.scaleX) / 2, layer.y + (layer.height * layer.scaleY) / 2);
+      ctx.rotate((layer.rotation * Math.PI) / 180);
+      ctx.scale(layer.scaleX, layer.scaleY);
+      ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+      ctx.restore();
+    };
+
+    await drawImageLayer(lower);
+    await drawImageLayer(upper);
+    const mergedSrc = canvas.toDataURL('image/png');
+
+    get().commitHistory('Merge Down');
+    const merged: ImageLayer = {
+      ...deepClone(lower),
+      id: makeId('merge'),
+      name: uniqueLayerName(`${lower.name} + ${upper.name}`, layers),
+      src: mergedSrc,
+      originalSrc: mergedSrc,
+      x: 0,
+      y: 0,
+      width: canvasWidth,
+      height: canvasHeight,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      hasLayerMask: false,
+      layerMaskSrc: undefined,
+    };
+
+    set((state) => {
+      const next = [...state.layers];
+      next.splice(idx - 1, 2, merged);
+      return { layers: next, selectedLayerId: merged.id };
+    });
+  },
+
+  flattenVisibleLayers: async () => {
+    const { canvasWidth, canvasHeight, backgroundColor, layers } = get();
+    if (layers.length === 0) return;
+    const dataUrl = await exportDocumentToDataUrl({
+      format: 'png',
+      quality: 1,
+      scale: 1,
+      transparentBackground: backgroundColor === 'transparent',
+      backgroundColor: backgroundColor === 'transparent' ? 'transparent' : backgroundColor,
+    });
+    get().commitHistory('Flatten Image');
+    const flat: ImageLayer = {
+      id: makeId('flat'),
+      name: 'Flattened',
+      type: 'image',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
+      x: 0,
+      y: 0,
+      width: canvasWidth,
+      height: canvasHeight,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      src: dataUrl,
+      originalSrc: dataUrl,
+      adjustments: { ...DEFAULT_ADJUSTMENTS },
+    };
+    set({ layers: [flat], selectedLayerId: flat.id });
+  },
+
+  createGroupFromSelection: (ids) => {
+    const { layers, selectedLayerId } = get();
+    const targetIds = ids?.length ? ids : selectedLayerId ? [selectedLayerId] : [];
+    if (targetIds.length === 0) return;
+    const members = layers.filter((l) => targetIds.includes(l.id) && l.type !== 'group');
+    if (members.length === 0) return;
+
+    get().commitHistory('Group Layers');
+    const groupId = makeId('group');
+    const group: GroupLayer = {
+      id: groupId,
+      name: uniqueLayerName('Group', layers),
+      type: 'group',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      expanded: true,
+      childIds: members.map((m) => m.id),
+    };
+
+    set((state) => ({
+      layers: [
+        ...state.layers.map((l) =>
+          targetIds.includes(l.id) ? { ...l, parentGroupId: groupId } : l
+        ),
+        group,
+      ],
+      selectedLayerId: groupId,
+    }));
+  },
+
+  ungroupLayer: (id) => {
+    const { layers, selectedLayerId } = get();
+    const groupId = id || selectedLayerId;
+    if (!groupId) return;
+    const group = layers.find((l) => l.id === groupId);
+    if (!group || group.type !== 'group') return;
+
+    get().commitHistory('Ungroup');
+    set((state) => ({
+      layers: state.layers
+        .filter((l) => l.id !== groupId)
+        .map((l) =>
+          l.parentGroupId === groupId ? { ...l, parentGroupId: null } : l
+        ),
+      selectedLayerId: group.childIds[0] || null,
+    }));
+  },
+
+  toggleGroupExpanded: (id) => {
+    set((state) => ({
+      layers: state.layers.map((l) =>
+        l.id === id && l.type === 'group' ? { ...l, expanded: !l.expanded } : l
+      ),
+    }));
+  },
+
+  alignSelectedLayers: (mode) => {
+    const { layers, selectedLayerId } = get();
+    if (!selectedLayerId) return;
+    const selected = layers.find((l) => l.id === selectedLayerId);
+    if (!selected || selected.type === 'group') return;
+    const siblings = layers.filter(
+      (l) =>
+        l.type !== 'group' &&
+        (l.parentGroupId || null) === (selected.parentGroupId || null)
+    );
+    if (siblings.length < 2) return;
+
+    const ref = selected;
+    get().commitHistory(`Align ${mode}`);
+    set((state) => ({
+      layers: state.layers.map((l) => {
+        if (l.id === ref.id || l.type === 'group') return l;
+        if ((l.parentGroupId || null) !== (ref.parentGroupId || null)) return l;
+        const w = l.width * (l.scaleX || 1);
+        const h = l.height * (l.scaleY || 1);
+        const rw = ref.width * (ref.scaleX || 1);
+        const rh = ref.height * (ref.scaleY || 1);
+        switch (mode) {
+          case 'left':
+            return { ...l, x: ref.x };
+          case 'center':
+            return { ...l, x: ref.x + rw / 2 - w / 2 };
+          case 'right':
+            return { ...l, x: ref.x + rw - w };
+          case 'top':
+            return { ...l, y: ref.y };
+          case 'middle':
+            return { ...l, y: ref.y + rh / 2 - h / 2 };
+          case 'bottom':
+            return { ...l, y: ref.y + rh - h };
+          default:
+            return l;
+        }
+      }),
     }));
   },
 });

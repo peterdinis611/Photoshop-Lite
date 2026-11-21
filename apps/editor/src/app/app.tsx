@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { useCallback, useEffect, useRef } from 'react';
+import { Routes, Route, useSearchParams } from 'react-router-dom';
 import { HotkeysProvider } from '@tanstack/react-hotkeys';
 import { PacerProvider } from '@tanstack/react-pacer';
 import { useEditorStore } from '../store/editorStore';
@@ -17,6 +17,7 @@ import { ImageSizeModal } from '../components/modals/ImageSizeModal';
 import { StockPickerModal } from '../components/modals/StockPickerModal';
 import { ExifModal } from '../components/modals/ExifModal';
 import { IconifyModal } from '../components/modals/IconifyModal';
+import { VersionHistoryModal } from '../components/modals/VersionHistoryModal';
 import { OnboardingTour } from '../components/onboarding/OnboardingTour';
 import { useAutoStartOnboarding } from '../components/onboarding/useAutoStartOnboarding';
 import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
@@ -35,6 +36,18 @@ function EditorShell() {
   const layers = useEditorStore((s) => s.layers);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const activeTool = useEditorStore((s) => s.activeTool);
+  const loadProjectFromCloud = useEditorStore((s) => s.loadProjectFromCloud);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const cloudId = searchParams.get('cloud');
+    if (!cloudId) return;
+    void loadProjectFromCloud(cloudId).finally(() => {
+      const next = new URLSearchParams(searchParams);
+      next.delete('cloud');
+      setSearchParams(next, { replace: true });
+    });
+  }, [searchParams, setSearchParams, loadProjectFromCloud]);
 
   usePageMeta({
     title: 'Editor — PhotoshopLite',
@@ -102,6 +115,7 @@ function EditorShell() {
       <StockPickerModal />
       <ExifModal />
       <IconifyModal />
+      <VersionHistoryModal />
       <ShortcutsModal />
       <OnboardingTour />
       <FloatingAIStatusToast />

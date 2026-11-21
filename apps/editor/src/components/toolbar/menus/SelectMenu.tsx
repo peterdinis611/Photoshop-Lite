@@ -75,8 +75,14 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({ onClose }) => {
       <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('contract', 10)}>
         Contract… <span className="text-[var(--text-faint)]">10 px</span>
       </Item>
-      <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 8)}>
-        Feather… <span className="text-[var(--text-faint)]">8 px</span>
+      <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 4)}>
+        Feather… <span className="text-[var(--text-faint)]">4 px</span>
+      </Item>
+      <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 12)}>
+        Feather… <span className="text-[var(--text-faint)]">12 px</span>
+      </Item>
+      <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 24)}>
+        Feather… <span className="text-[var(--text-faint)]">24 px</span>
       </Item>
       <Sep />
       <Label>Path</Label>

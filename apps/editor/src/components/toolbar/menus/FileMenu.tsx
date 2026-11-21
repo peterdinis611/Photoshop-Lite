@@ -8,6 +8,8 @@ import {
   Pencil,
   Save,
   Cloud,
+  History,
+  Link2,
   Image as ImageIcon,
   Download,
   Shapes,
@@ -42,9 +44,12 @@ export const FileMenu: React.FC<FileMenuProps> = ({
     setStockModalOpen,
     setIconifyModalOpen,
     setExportModalOpen,
+    setVersionHistoryModalOpen,
     saveProject,
     saveProjectToCloud,
     loadProjectFromCloud,
+    shareCloudProjectLink,
+    cloudProjectId,
     addImageLayer,
   } = useEditorStore();
 
@@ -127,6 +132,31 @@ export const FileMenu: React.FC<FileMenuProps> = ({
         hint="⌘⇧S"
       >
         <Cloud size={13} /> Save to Cloud
+      </Item>
+      <Item
+        disabled={!cloudProjectId}
+        onClick={() => {
+          setVersionHistoryModalOpen(true);
+          onClose();
+        }}
+      >
+        <History size={13} /> Cloud Revisions…
+      </Item>
+      <Item
+        disabled={!cloudProjectId}
+        onClick={async () => {
+          const link = shareCloudProjectLink();
+          if (link) {
+            try {
+              await navigator.clipboard.writeText(link);
+            } catch {
+              window.prompt('Copy share link', link);
+            }
+          }
+          onClose();
+        }}
+      >
+        <Link2 size={13} /> Copy Share Link
       </Item>
       <div className="px-3 pb-1 text-[10px] leading-snug text-[var(--text-faint)]">
         Needs the API running · status appears bottom-right

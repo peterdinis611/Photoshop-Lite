@@ -136,6 +136,8 @@ export interface BaseLayer {
   clippingMaskToId?: string; // clips this layer to the shape/text below it
   hasLayerMask?: boolean; // non-destructive layer mask
   layerMaskSrc?: string; // black/white alpha mask data URL
+  /** When set, layer is nested under a group in the flat stack. */
+  parentGroupId?: string | null;
 }
 
 export interface ImageLayer extends BaseLayer {
@@ -238,6 +240,13 @@ export interface GradientLayer extends BaseLayer {
   end: { x: number; y: number };
 }
 
+/** Folder node in the flat layer stack — children reference via parentGroupId. */
+export interface GroupLayer extends BaseLayer {
+  type: 'group';
+  expanded?: boolean;
+  childIds: string[];
+}
+
 export type EditorLayer =
   | ImageLayer
   | TextLayer
@@ -245,7 +254,8 @@ export type EditorLayer =
   | DrawingLayer
   | PathLayer
   | AdjustmentLayer
-  | GradientLayer;
+  | GradientLayer
+  | GroupLayer;
 
 export interface PenSettings {
   stroke: string;

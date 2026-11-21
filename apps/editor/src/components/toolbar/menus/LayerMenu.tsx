@@ -13,6 +13,10 @@ import {
   Layers as LayersIcon,
   Replace,
   Frame,
+  FolderPlus,
+  FolderMinus,
+  AlignHorizontalJustifyCenter,
+  Layers2,
 } from 'lucide-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
@@ -47,10 +51,16 @@ export const LayerMenu: React.FC<LayerMenuProps> = ({ onClose, onReplaceSmartObj
     convertSelectedToSmartObject,
     addArtboard,
     artboards,
+    mergeDownLayer,
+    flattenVisibleLayers,
+    createGroupFromSelection,
+    ungroupLayer,
+    alignSelectedLayers,
   } = useEditorStore();
   const { layers, selectedLayerId, selectedLayer, isImageSelected } = useMenuActions(onClose);
 
   const isSmartObject = selectedLayer?.type === 'image' && !!selectedLayer.smartObject;
+  const isGroup = selectedLayer?.type === 'group';
   const selectedIndex = layers.findIndex((l) => l.id === selectedLayerId);
 
   const moveLayer = (dir: 'up' | 'down') => {
@@ -94,6 +104,53 @@ export const LayerMenu: React.FC<LayerMenuProps> = ({ onClose, onReplaceSmartObj
       </Item>
       <Item disabled={selectedIndex <= 0} onClick={() => moveLayer('down')}>
         <ArrowDown size={13} /> Send Backward
+      </Item>
+      <Sep />
+      <Label>Arrange</Label>
+      <Item
+        disabled={!selectedLayerId || isGroup}
+        onClick={() => {
+          createGroupFromSelection();
+          onClose();
+        }}
+      >
+        <FolderPlus size={13} /> Group Layers
+      </Item>
+      <Item
+        disabled={!isGroup}
+        onClick={() => {
+          ungroupLayer();
+          onClose();
+        }}
+      >
+        <FolderMinus size={13} /> Ungroup
+      </Item>
+      <Item
+        disabled={selectedIndex <= 0 || !isImageSelected}
+        onClick={() => {
+          void mergeDownLayer();
+          onClose();
+        }}
+      >
+        <Layers2 size={13} /> Merge Down
+      </Item>
+      <Item
+        disabled={layers.length === 0}
+        onClick={() => {
+          void flattenVisibleLayers();
+          onClose();
+        }}
+      >
+        <LayersIcon size={13} /> Flatten Image
+      </Item>
+      <Item
+        disabled={!selectedLayerId || isGroup}
+        onClick={() => {
+          alignSelectedLayers('center');
+          onClose();
+        }}
+      >
+        <AlignHorizontalJustifyCenter size={13} /> Align Center
       </Item>
       <Sep />
       <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) toggleLayerVisibility(selectedLayerId); onClose(); }}>
