@@ -4,10 +4,18 @@ import { useEditorStore } from '../../../store/editorStore';
 import { ColorOpt, OptChip, OptHint, SizeOpt } from '../../ui/OptionControls';
 
 interface BrushOptionsProps {
-  tool: 'brush' | 'eraser' | 'clone' | 'spotHealing' | 'fill' | 'blur' | 'refineBrush';
+  tool:
+    | 'brush'
+    | 'eraser'
+    | 'clone'
+    | 'spotHealing'
+    | 'fill'
+    | 'blur'
+    | 'refineBrush'
+    | 'historyBrush';
 }
 
-/** Brush / eraser / clone / spot healing, plus the paint-bucket, blur and refine-edge brushes. */
+/** Brush / eraser / clone / spot healing, plus paint-bucket, blur, refine-edge, history brush. */
 export const BrushOptions: React.FC<BrushOptionsProps> = ({ tool }) => {
   const brushSettings = useEditorStore((s) => s.brushSettings);
   const updateBrushSettings = useEditorStore((s) => s.updateBrushSettings);

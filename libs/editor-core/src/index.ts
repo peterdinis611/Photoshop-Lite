@@ -67,6 +67,9 @@ export {
 export { floodFillImage } from './floodFill';
 export { applyBlurSpotToImage } from './blurSpot';
 
+export { colorRangeSelect, fillImageRect, colorDist } from './colorRange';
+export type { ColorRangeOptions, ColorRangeResult, ColorRangeSample } from './colorRange';
+
 export {
   DEFAULT_CURVES,
   DEFAULT_LEVELS,

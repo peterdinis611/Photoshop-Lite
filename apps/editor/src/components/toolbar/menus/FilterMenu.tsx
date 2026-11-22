@@ -56,7 +56,10 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ onClose }) => {
         <Waves size={13} /> Liquify…
       </Item>
       <Sep />
-      <Label>Classic</Label>
+      <Label>Classic / Smart Filters</Label>
+      <p className="px-2.5 pb-1 text-[10px] text-[var(--text-faint)] leading-snug">
+        On smart objects, filters stay non-destructive and re-bake from the linked source.
+      </p>
       <Item disabled={busyOrNotImage} onClick={() => runClassicFilter('gaussian', { radius: 2 })}>
         Gaussian Blur…
       </Item>

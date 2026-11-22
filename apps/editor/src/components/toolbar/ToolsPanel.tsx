@@ -39,6 +39,7 @@ import {
   BoxSelect,
   Waves,
   Move3d,
+  RotateCcw,
 } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { ToolType, ShapeType } from '../../types/editor';
@@ -244,6 +245,12 @@ export const ToolsPanel: React.FC = () => {
             label: 'Edge Refinement',
             shortcut: 'Shift+R',
             icon: <Sparkles size={17} />,
+          },
+          {
+            id: 'historyBrush',
+            label: 'History Brush',
+            shortcut: 'Y',
+            icon: <RotateCcw size={17} />,
           },
         ],
       },

@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
-import { Group, Image as KonvaImage } from 'react-konva';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Group, Image as KonvaImage, Rect } from 'react-konva';
 import Konva from 'konva';
 import { applyImageNodeFilters, useKonvaImage } from '@photoshop-lite/editor-konva';
 import { ImageLayer } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
+import { layerShadowProps, patternOverlayStyle } from '../../utils/layerStyleProps';
 
 interface ImageLayerItemProps {
   layer: ImageLayer;
@@ -44,23 +45,22 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
   }
 
   const styles = layer.styles || {};
-  const useGlow = (styles.outerGlowBlur || 0) > 0;
-  const shadowProps = useGlow
-    ? {
-        shadowColor: styles.outerGlowColor || '#e8a84a',
-        shadowBlur: styles.outerGlowBlur || 0,
-        shadowOffset: { x: 0, y: 0 },
-        shadowOpacity: 0.85,
-      }
-    : {
-        shadowColor: styles.shadowColor,
-        shadowBlur: styles.shadowBlur || 0,
-        shadowOffset: {
-          x: styles.shadowOffsetX || 0,
-          y: styles.shadowOffsetY || 0,
-        },
-        shadowOpacity: styles.shadowOpacity || 0,
-      };
+  const shadowProps = layerShadowProps(styles);
+  const pattern = patternOverlayStyle(styles);
+  const patternFill = useMemo(() => {
+    if (!pattern) return null;
+    const cell = pattern.scale;
+    const c = document.createElement('canvas');
+    c.width = cell;
+    c.height = cell;
+    const ctx = c.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = pattern.color;
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(0, 0, cell / 2, cell / 2);
+    ctx.fillRect(cell / 2, cell / 2, cell / 2, cell / 2);
+    return c;
+  }, [pattern]);
 
   let clipFunc: ((ctx: Konva.Context) => void) | undefined;
   if (clipTarget) {
@@ -115,6 +115,18 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     onTransformEnd: commonTransformEnd,
   };
 
+  const overlay =
+    pattern && patternFill ? (
+      <Rect
+        width={layer.width}
+        height={layer.height}
+        fillPatternImage={patternFill as unknown as HTMLImageElement}
+        fillPatternRepeat="repeat"
+        opacity={pattern.opacity}
+        listening={false}
+      />
+    ) : null;
+
   if (layer.hasLayerMask && maskElement) {
     return (
       <Group {...groupProps}>
@@ -130,6 +142,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
           imageSmoothingEnabled={imageSmoothingEnabled}
           {...shadowProps}
         />
+        {overlay}
         <KonvaImage
           image={maskElement}
           width={layer.width}
@@ -157,6 +170,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
         imageSmoothingEnabled={imageSmoothingEnabled}
         {...shadowProps}
       />
+      {overlay}
     </Group>
   );
 });

@@ -389,6 +389,137 @@ export const StylesPanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+        <span className="font-semibold text-[var(--text-faint)] uppercase tracking-wider text-[10px]">
+          Inner shadow
+        </span>
+        <div className="flex items-center justify-between">
+          <span>Color</span>
+          <input
+            type="color"
+            value={styles.innerShadowColor || '#000000'}
+            onChange={(e) => updateStyle('innerShadowColor', e.target.value)}
+            className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Blur</span>
+          <input
+            type="range"
+            min="0"
+            max="40"
+            value={styles.innerShadowBlur || 0}
+            onChange={(e) => updateStyle('innerShadowBlur', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={styles.innerShadowOpacity || 0}
+            onChange={(e) => updateStyle('innerShadowOpacity', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+        <span className="font-semibold text-[var(--text-faint)] uppercase tracking-wider text-[10px]">
+          Bevel
+        </span>
+        <div className="flex items-center justify-between">
+          <span>Depth</span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={styles.bevelDepth || 0}
+            onChange={(e) => updateStyle('bevelDepth', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Softness</span>
+          <input
+            type="range"
+            min="0"
+            max="40"
+            value={styles.bevelSoftness || 0}
+            onChange={(e) => updateStyle('bevelSoftness', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
+        <span className="font-semibold text-[var(--text-faint)] uppercase tracking-wider text-[10px]">
+          Satin
+        </span>
+        <div className="flex items-center justify-between">
+          <span>Color</span>
+          <input
+            type="color"
+            value={styles.satinColor || '#ffffff'}
+            onChange={(e) => updateStyle('satinColor', e.target.value)}
+            className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={styles.satinOpacity || 0}
+            onChange={(e) => updateStyle('satinOpacity', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5 pt-2 border-t border-[var(--border-subtle)] pb-4">
+        <span className="font-semibold text-[var(--text-faint)] uppercase tracking-wider text-[10px]">
+          Pattern overlay
+        </span>
+        <div className="flex items-center justify-between">
+          <span>Color</span>
+          <input
+            type="color"
+            value={styles.patternOverlayColor || '#d4923a'}
+            onChange={(e) => updateStyle('patternOverlayColor', e.target.value)}
+            className="w-5 h-5 rounded border border-[var(--border-subtle)] cursor-pointer bg-transparent"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Opacity</span>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={styles.patternOverlayOpacity || 0}
+            onChange={(e) => updateStyle('patternOverlayOpacity', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <span>Scale</span>
+          <input
+            type="range"
+            min="4"
+            max="64"
+            value={styles.patternOverlayScale || 12}
+            onChange={(e) => updateStyle('patternOverlayScale', Number(e.target.value))}
+            className="w-28 cursor-pointer"
+          />
+        </div>
+      </div>
     </div>
   );
 };

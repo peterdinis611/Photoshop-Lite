@@ -24,6 +24,26 @@ export const CropOptions: React.FC = () => {
 
   return (
     <div className="flex items-center gap-2">
+      <OptLabel>Mode</OptLabel>
+      <OptChip
+        active={(cropSettings.mode || 'rect') === 'rect'}
+        onClick={() => setCropSettings({ mode: 'rect' })}
+      >
+        Rect
+      </OptChip>
+      <OptChip
+        active={cropSettings.mode === 'perspective'}
+        onClick={() => {
+          setCropSettings({ mode: 'perspective' });
+          // Perspective crop → Transform perspective handles
+          const store = useEditorStore.getState();
+          store.setActiveTool('transform');
+          store.setTransformMode('perspective');
+        }}
+      >
+        Perspective
+      </OptChip>
+      <OptSep />
       <OptLabel>Ratio</OptLabel>
       {CROP_RATIOS.map((ratio) => (
         <OptChip

@@ -3,6 +3,7 @@ import { Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
 import { TextLayer } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
+import { layerShadowProps } from '../../utils/layerStyleProps';
 
 interface TextLayerItemProps {
   layer: TextLayer;
@@ -85,7 +86,13 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
   };
 
   const styles = layer.styles || {};
-  const useGlow = (styles.outerGlowBlur || 0) > 0;
+  const shadowProps = layerShadowProps(styles);
+  const trackingExtra = ((layer.tracking ?? 0) / 1000) * layer.fontSize;
+  const bend = (layer.warpBend ?? 0) / 100;
+  const warp = layer.warpStyle && layer.warpStyle !== 'none';
+  // Lightweight warp approx: skew / scale rather than full mesh
+  const skewX = warp ? bend * (layer.warpStyle === 'flag' || layer.warpStyle === 'wave' ? 18 : 8) : 0;
+  const skewY = warp ? bend * (layer.warpStyle === 'arc' || layer.warpStyle === 'arch' ? 12 : 4) : 0;
 
   return (
     <KonvaText
@@ -99,9 +106,11 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
         layer.fontSize * layer.lineHeight,
         layer.height || layer.fontSize * layer.lineHeight
       )}
-      scaleX={layer.scaleX}
-      scaleY={layer.scaleY}
-      rotation={layer.rotation}
+      scaleX={layer.scaleX * (warp && layer.warpStyle === 'inflate' ? 1 + Math.abs(bend) * 0.15 : 1)}
+      scaleY={layer.scaleY * (warp && layer.warpStyle === 'squeeze' ? 1 - Math.abs(bend) * 0.2 : 1)}
+      rotation={layer.rotation + (warp && layer.warpStyle === 'twist' ? bend * 12 : 0)}
+      skewX={skewX}
+      skewY={skewY}
       opacity={layer.opacity}
       fontFamily={layer.fontFamily}
       fontSize={layer.fontSize}
@@ -110,7 +119,7 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       fill={layer.fill}
       stroke={layer.stroke}
       strokeWidth={layer.strokeWidth || 0}
-      letterSpacing={layer.letterSpacing}
+      letterSpacing={layer.letterSpacing + trackingExtra}
       lineHeight={layer.lineHeight}
       textDecoration={layer.textDecoration}
       draggable={canMove}
@@ -118,14 +127,7 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       globalCompositeOperation={layer.blendMode}
       // Hit the whole box, not just glyph pixels — Move needs a solid drag target
       hitStrokeWidth={Math.max(12, layer.fontSize)}
-      shadowColor={useGlow ? styles.outerGlowColor || '#e8a84a' : styles.shadowColor}
-      shadowBlur={useGlow ? styles.outerGlowBlur || 0 : styles.shadowBlur || 0}
-      shadowOffset={
-        useGlow
-          ? { x: 0, y: 0 }
-          : { x: styles.shadowOffsetX || 0, y: styles.shadowOffsetY || 0 }
-      }
-      shadowOpacity={useGlow ? 0.85 : styles.shadowOpacity || 0}
+      {...shadowProps}
       onClick={canMove ? onSelect : undefined}
       onTap={canMove ? onSelect : undefined}
       onDblClick={canMove || activeTool === 'text' ? handleDblClick : undefined}

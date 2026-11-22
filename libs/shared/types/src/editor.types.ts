@@ -27,7 +27,8 @@ export type ToolType =
   | 'healing'
   | 'patch'
   | 'liquify'
-  | 'transform';
+  | 'transform'
+  | 'historyBrush';
 
 export type ShapeType =
   | 'rectangle'
@@ -116,7 +117,45 @@ export interface LayerStyles {
   shadowOpacity?: number;
   outerGlowColor?: string;
   outerGlowBlur?: number;
+  /** Photoshop-style FX toggles / extras (browser approximations). */
+  innerShadowColor?: string;
+  innerShadowBlur?: number;
+  innerShadowOffsetX?: number;
+  innerShadowOffsetY?: number;
+  innerShadowOpacity?: number;
+  bevelDepth?: number; // 0–100
+  bevelSoftness?: number; // 0–40
+  bevelHighlight?: string;
+  bevelShadow?: string;
+  satinColor?: string;
+  satinOpacity?: number; // 0–1
+  satinBlur?: number;
+  patternOverlayColor?: string;
+  patternOverlayOpacity?: number; // 0–1
+  patternOverlayScale?: number; // 4–64 px cell
 }
+
+/** Non-destructive classic filter entry on a smart object. */
+export interface SmartFilter {
+  id: string;
+  kind: 'gaussian' | 'unsharp' | 'noise' | 'sharpen';
+  enabled: boolean;
+  params?: Record<string, number>;
+}
+
+export type TextWarpStyle =
+  | 'none'
+  | 'arc'
+  | 'arch'
+  | 'bulge'
+  | 'flag'
+  | 'wave'
+  | 'fish'
+  | 'rise'
+  | 'fisheye'
+  | 'inflate'
+  | 'squeeze'
+  | 'twist';
 
 export interface BaseLayer {
   id: string;
@@ -149,6 +188,8 @@ export interface ImageLayer extends BaseLayer {
   maskDataUrl?: string; // transparent mask after bg removal or refine
   smartObject?: boolean;
   smartObjectSrc?: string; // linked original
+  /** Smart Filters stack — re-baked from smartObjectSrc / originalSrc */
+  smartFilters?: SmartFilter[];
 }
 
 /** Bodymovin / Lottie animation layer (JSON or unpacked .lottie). */
@@ -178,9 +219,14 @@ export interface TextLayer extends BaseLayer {
   textDecoration: 'none' | 'underline' | 'line-through';
   align: 'left' | 'center' | 'right' | 'justify';
   letterSpacing: number;
+  /** Extra tracking in 1/1000 em (Photoshop-like); applied on top of letterSpacing. */
+  tracking?: number;
   lineHeight: number;
   stroke?: string;
   strokeWidth?: number;
+  warpStyle?: TextWarpStyle;
+  /** Warp bend −100…100 */
+  warpBend?: number;
 }
 
 export interface ShapeLayer extends BaseLayer {
@@ -298,9 +344,12 @@ export interface TextSettings {
   fontStyle: 'normal' | 'bold' | 'italic' | 'bold italic';
   align: 'left' | 'center' | 'right' | 'justify';
   letterSpacing: number;
+  tracking?: number;
   lineHeight: number;
   stroke: string;
   strokeWidth: number;
+  warpStyle?: TextWarpStyle;
+  warpBend?: number;
 }
 
 export interface BrushSettings {
@@ -402,9 +451,12 @@ export const DEFAULT_TEXT_SETTINGS: TextSettings = {
   fontStyle: 'bold',
   align: 'center',
   letterSpacing: 0,
+  tracking: 0,
   lineHeight: 1.2,
   stroke: 'transparent',
   strokeWidth: 0,
+  warpStyle: 'none',
+  warpBend: 0,
 };
 
 export interface CropSettings {
@@ -415,6 +467,8 @@ export interface CropSettings {
   width: number;
   height: number;
   rotation: number;
+  /** Axis-aligned crop vs keystone (perspective) crop */
+  mode?: 'rect' | 'perspective';
 }
 
 export interface HistorySnapshot {

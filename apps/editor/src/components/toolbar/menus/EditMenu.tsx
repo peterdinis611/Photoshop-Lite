@@ -12,6 +12,7 @@ import {
   Settings,
   Keyboard,
   Compass,
+  PaintBucket,
 } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
@@ -37,6 +38,8 @@ export const EditMenu: React.FC<EditMenuProps> = ({ onClose }) => {
     setSettingsModalOpen,
     setShortcutsModalOpen,
     setOnboardingOpen,
+    setFillModalOpen,
+    marqueeSelection,
   } = useEditorStore();
   const { selectedLayer, selectedLayerId, flip } = useMenuActions(onClose);
 
@@ -76,6 +79,17 @@ export const EditMenu: React.FC<EditMenuProps> = ({ onClose }) => {
       </Item>
       <Item disabled={!selectedLayerId} danger onClick={() => { if (selectedLayerId) removeLayer(selectedLayerId); onClose(); }} hint="Del">
         <Trash2 size={13} /> Delete
+      </Item>
+      <Sep />
+      <Item
+        disabled={!selectedLayerId || !marqueeSelection}
+        onClick={() => {
+          setFillModalOpen(true);
+          onClose();
+        }}
+        hint="⇧F5"
+      >
+        <PaintBucket size={13} /> Fill…
       </Item>
       <Sep />
       <Item disabled={!selectedLayer} onClick={() => flip('h')}>

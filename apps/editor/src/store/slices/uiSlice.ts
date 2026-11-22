@@ -14,6 +14,9 @@ export interface UISlice {
   isExifModalOpen: boolean;
   isIconifyModalOpen: boolean;
   isVersionHistoryModalOpen: boolean;
+  isFillModalOpen: boolean;
+  isColorRangeModalOpen: boolean;
+  isSelectAndMaskModalOpen: boolean;
   setExportModalOpen: (open: boolean) => void;
   setSettingsModalOpen: (open: boolean) => void;
   setNewCanvasModalOpen: (open: boolean) => void;
@@ -24,6 +27,9 @@ export interface UISlice {
   setExifModalOpen: (open: boolean) => void;
   setIconifyModalOpen: (open: boolean) => void;
   setVersionHistoryModalOpen: (open: boolean) => void;
+  setFillModalOpen: (open: boolean) => void;
+  setColorRangeModalOpen: (open: boolean) => void;
+  setSelectAndMaskModalOpen: (open: boolean) => void;
   setBeforeAfterOpen: (open: boolean) => void;
   setSecondaryColor: (color: string) => void;
   swapBrushColors: () => void;
@@ -42,6 +48,12 @@ export const createUISlice: StateCreator<EditorStore, [], [], UISlice> = (set, g
   isIconifyModalOpen: false,
 
   isVersionHistoryModalOpen: false,
+
+  isFillModalOpen: false,
+
+  isColorRangeModalOpen: false,
+
+  isSelectAndMaskModalOpen: false,
 
   isShortcutsModalOpen: false,
 
@@ -74,6 +86,12 @@ export const createUISlice: StateCreator<EditorStore, [], [], UISlice> = (set, g
   setIconifyModalOpen: (open) => set({ isIconifyModalOpen: open }),
 
   setVersionHistoryModalOpen: (open) => set({ isVersionHistoryModalOpen: open }),
+
+  setFillModalOpen: (open) => set({ isFillModalOpen: open }),
+
+  setColorRangeModalOpen: (open) => set({ isColorRangeModalOpen: open }),
+
+  setSelectAndMaskModalOpen: (open) => set({ isSelectAndMaskModalOpen: open }),
 
   setBeforeAfterOpen: (open) => set({ isBeforeAfterOpen: open }),
 

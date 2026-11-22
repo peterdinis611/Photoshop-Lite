@@ -56,6 +56,7 @@ const CROSSHAIR_TOOLS = new Set<string>([
   'text',
   'shape',
   'pen',
+  'historyBrush',
 ]);
 
 const CONTENT_HIT_TOOLS = new Set<string>(['select']);

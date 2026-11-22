@@ -132,13 +132,13 @@ export const TextOptions: React.FC = () => {
       </div>
 
       <div className="flex shrink-0 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
-        {(['left', 'center', 'right'] as const).map((a) => (
+        {(['left', 'center', 'right', 'justify'] as const).map((a) => (
           <button
             key={a}
             type="button"
             title={`Align ${a}`}
             onClick={() => apply('align', a)}
-            className={`p-1 rounded cursor-pointer ${
+            className={`p-1 rounded cursor-pointer text-[10px] px-1.5 ${
               align === a ? 'bg-[var(--accent)] text-[#1a1208]' : 'text-[var(--text-muted)]'
             }`}
           >
@@ -146,8 +146,10 @@ export const TextOptions: React.FC = () => {
               <AlignLeft size={12} />
             ) : a === 'center' ? (
               <AlignCenter size={12} />
-            ) : (
+            ) : a === 'right' ? (
               <AlignRight size={12} />
+            ) : (
+              'J'
             )}
           </button>
         ))}
@@ -184,6 +186,50 @@ export const TextOptions: React.FC = () => {
         widthClass="w-9"
         onCommit={(v) => apply('letterSpacing', v)}
       />
+      {isText && (
+        <>
+          <OptSep />
+          <OptHint>Warp</OptHint>
+          <select
+            value={selectedLayer.warpStyle || 'none'}
+            onChange={(e) =>
+              updateLayer(selectedLayer.id, {
+                warpStyle: e.target.value as typeof selectedLayer.warpStyle,
+              })
+            }
+            className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--text-primary)] max-w-[5.5rem]"
+          >
+            {(
+              [
+                'none',
+                'arc',
+                'arch',
+                'bulge',
+                'flag',
+                'wave',
+                'rise',
+                'inflate',
+                'squeeze',
+                'twist',
+              ] as const
+            ).map((w) => (
+              <option key={w} value={w}>
+                {w}
+              </option>
+            ))}
+          </select>
+          {(selectedLayer.warpStyle || 'none') !== 'none' && (
+            <NumOpt
+              label="Bend"
+              value={selectedLayer.warpBend ?? 0}
+              min={-100}
+              max={100}
+              widthClass="w-10"
+              onCommit={(v) => updateLayer(selectedLayer.id, { warpBend: v })}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 };

@@ -19,6 +19,8 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({ onClose }) => {
     modifyMarqueeSelection,
     pathToSelection,
     strokePathAsDrawing,
+    setColorRangeModalOpen,
+    setSelectAndMaskModalOpen,
   } = useEditorStore();
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
@@ -83,6 +85,26 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({ onClose }) => {
       </Item>
       <Item disabled={!marqueeSelection} onClick={() => runSelectionModify('feather', 24)}>
         Feather… <span className="text-[var(--text-faint)]">24 px</span>
+      </Item>
+      <Sep />
+      <Label>Advanced</Label>
+      <Item
+        disabled={selectedLayer?.type !== 'image'}
+        onClick={() => {
+          setColorRangeModalOpen(true);
+          onClose();
+        }}
+      >
+        Color Range…
+      </Item>
+      <Item
+        disabled={!marqueeSelection}
+        onClick={() => {
+          setSelectAndMaskModalOpen(true);
+          onClose();
+        }}
+      >
+        Select and Mask…
       </Item>
       <Sep />
       <Label>Path</Label>

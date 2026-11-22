@@ -11,6 +11,12 @@ export interface AdjustmentsSlice {
     kind: ClassicFilterKind,
     params?: Record<string, number>
   ) => Promise<void>;
+  /** Add a Smart Filter on a smart object (re-bakes from linked source). */
+  addSmartFilterOnSelected: (
+    kind: ClassicFilterKind,
+    params?: Record<string, number>
+  ) => Promise<void>;
+  rebakeSmartFilters: (layerId: string) => Promise<void>;
   /** Stores curves live in adjustments.curves; pass { bake: true } to bake into pixels instead. */
   applyCurvesToSelected: (curves: CurvesAdjustment, options?: { bake?: boolean }) => Promise<void>;
   /** Stores levels live in adjustments.levels; pass { bake: true } to bake into pixels instead. */
@@ -315,6 +321,12 @@ export const createAdjustmentsSlice: StateCreator<EditorStore, [], [], Adjustmen
     const layer = get().layers.find((l) => l.id === get().selectedLayerId);
     if (!layer || layer.type !== 'image') return;
 
+    // Smart objects keep a filter stack instead of destructive bake
+    if (layer.smartObject) {
+      await get().addSmartFilterOnSelected(kind, params);
+      return;
+    }
+
     get().recordActionStep('classic-filter', `Filter · ${kind}`, { kind, params });
     set({
       aiStatus: {
@@ -348,6 +360,67 @@ export const createAdjustmentsSlice: StateCreator<EditorStore, [], [], Adjustmen
           progress: 0,
           statusText: '',
           error: getErrorMessage(e, 'Filter failed'),
+        },
+      });
+    }
+  },
+
+  addSmartFilterOnSelected: async (kind, params) => {
+    const layer = get().layers.find((l) => l.id === get().selectedLayerId);
+    if (!layer || layer.type !== 'image') return;
+    if (!layer.smartObject) {
+      get().convertSelectedToSmartObject();
+    }
+    const id = `sf_${Date.now().toString(36)}`;
+    get().commitHistory(`Smart Filter · ${kind}`);
+    set((state) => ({
+      layers: state.layers.map((l) => {
+        if (l.id !== layer.id || l.type !== 'image') return l;
+        const stack = [...(l.smartFilters || []), { id, kind, enabled: true, params }];
+        return { ...l, smartFilters: stack, smartObject: true };
+      }),
+    }));
+    await get().rebakeSmartFilters(layer.id);
+  },
+
+  rebakeSmartFilters: async (layerId) => {
+    const layer = get().layers.find((l) => l.id === layerId);
+    if (!layer || layer.type !== 'image') return;
+    const base = layer.smartObjectSrc || layer.originalSrc || layer.src;
+    const stack = (layer.smartFilters || []).filter((f) => f.enabled);
+    set({
+      aiStatus: {
+        isProcessing: true,
+        action: null,
+        progress: 40,
+        statusText: 'Rebaking smart filters…',
+        error: undefined,
+      },
+    });
+    try {
+      let src = base;
+      for (const f of stack) {
+        src = await bakeClassicFilter(src, f.kind, f.params);
+      }
+      set((state) => ({
+        layers: state.layers.map((l) =>
+          l.id === layerId && l.type === 'image' ? { ...l, src } : l
+        ),
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 100,
+          statusText: stack.length ? `Smart filters · ${stack.length}` : 'Smart filters cleared',
+        },
+      }));
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Smart filter bake failed'),
         },
       });
     }

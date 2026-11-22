@@ -48,6 +48,17 @@ const VersionHistoryModal = lazy(() =>
     default: m.VersionHistoryModal,
   }))
 );
+const FillModal = lazy(() =>
+  import('../components/modals/FillModal').then((m) => ({ default: m.FillModal }))
+);
+const ColorRangeModal = lazy(() =>
+  import('../components/modals/ColorRangeModal').then((m) => ({ default: m.ColorRangeModal }))
+);
+const SelectAndMaskModal = lazy(() =>
+  import('../components/modals/SelectAndMaskModal').then((m) => ({
+    default: m.SelectAndMaskModal,
+  }))
+);
 const OnboardingTour = lazy(() =>
   import('../components/onboarding/OnboardingTour').then((m) => ({ default: m.OnboardingTour }))
 );
@@ -145,6 +156,9 @@ function EditorWorkspace() {
         <ExifModal />
         <IconifyModal />
         <VersionHistoryModal />
+        <FillModal />
+        <ColorRangeModal />
+        <SelectAndMaskModal />
         <ShortcutsModal />
         <OnboardingTour />
       </Suspense>

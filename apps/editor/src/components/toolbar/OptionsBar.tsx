@@ -29,6 +29,7 @@ const TOOL_LABEL: Record<ToolType, string> = {
   brush: 'Brush',
   eraser: 'Eraser',
   refineBrush: 'Refine Edge',
+  historyBrush: 'History Brush',
   spotHealing: 'Spot Heal',
   healing: 'Healing Brush',
   patch: 'Patch',
@@ -70,6 +71,7 @@ const renderToolOptions = (tool: ToolType): React.ReactNode => {
     case 'fill':
     case 'blur':
     case 'refineBrush':
+    case 'historyBrush':
       return <BrushOptions tool={tool} />;
     case 'gradient':
       return <GradientOptions />;
