@@ -17,6 +17,8 @@ export interface HealthCheckResponse {
   openverseAvailable?: boolean;
   /** Server has HF_TOKEN / HUGGINGFACE_API_KEY — AI fallback without Replicate */
   huggingfaceConfigured?: boolean;
+  /** Cache + throttle backend: redis when REDIS_URL connects, else memory */
+  redis?: 'connected' | 'memory';
 }
 
 export interface RemoveBgRequestDto {

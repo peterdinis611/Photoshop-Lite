@@ -1,14 +1,6 @@
 {
   "name": "@photoshop-lite/api",
   "version": "0.0.1",
-  "private": true,
-  "scripts": {
-    "dev": "bun --watch src/main.ts",
-    "start": "bun src/main.ts",
-    "test": "vitest run",
-    "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
-  },
   "dependencies": {
     "@nestjs/common": "^12.1.0",
     "@nestjs/core": "^12.1.0",
@@ -20,8 +12,17 @@
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",
     "express": "^5.2.1",
+    "ioredis": "^6.0.0",
     "multer": "^2.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun src/main.ts",
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

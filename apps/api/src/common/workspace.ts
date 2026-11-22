@@ -44,12 +44,38 @@ export async function runWithWorkspaceAsync<T>(
   return workspaceAls.run({ workspaceId: normalizeWorkspaceId(workspaceId) }, fn);
 }
 
-/** Express/Nest middleware — scopes the request to a workspace. */
+function readWorkspaceHeader(req: Request): string | undefined {
+  return (
+    (req.header(WORKSPACE_HEADER) as string | undefined) ||
+    (req.header('X-Workspace-Id') as string | undefined)
+  );
+}
+
+/** Express/Nest middleware — scopes the request to a workspace (required). */
 export function workspaceMiddleware(req: Request, _res: Response, next: NextFunction): void {
   try {
-    const header =
-      (req.header(WORKSPACE_HEADER) as string | undefined) ||
-      (req.header('X-Workspace-Id') as string | undefined);
+    const workspaceId = normalizeWorkspaceId(readWorkspaceHeader(req));
+    workspaceAls.run({ workspaceId }, () => next());
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Soft middleware — if X-Workspace-Id is present, bind ALS (for fair throttling);
+ * if absent, continue without workspace context (public reads).
+ */
+export function optionalWorkspaceMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  const header = readWorkspaceHeader(req);
+  if (!header?.trim()) {
+    next();
+    return;
+  }
+  try {
     const workspaceId = normalizeWorkspaceId(header);
     workspaceAls.run({ workspaceId }, () => next());
   } catch (err) {

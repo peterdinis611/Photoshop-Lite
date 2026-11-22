@@ -7,9 +7,11 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import type { AssetResponseDto, AssetUploadDto } from '@photoshop-lite/shared-types';
+import { writeFileAtomic, writeJsonAtomic } from '../common/atomic-fs';
 import { assetsRoot, ensureDir, newId } from '../common/data-paths';
 import { assertSafeId, resolveUnderRoot } from '../common/safe-id';
 import { requireWorkspaceId } from '../common/workspace';
+import { assertAssetQuota } from '../common/workspace-quota';
 import { CacheKeys, CacheService } from '../cache/cache.service';
 
 interface AssetIndexEntry {
@@ -42,7 +44,7 @@ export class AssetsService {
 
   private writeIndex(entries: AssetIndexEntry[]): void {
     ensureDir(assetsRoot());
-    fs.writeFileSync(this.indexPath(), JSON.stringify(entries, null, 2), 'utf8');
+    writeJsonAtomic(this.indexPath(), entries);
   }
 
   private extFromMime(mime: string): string {
@@ -96,13 +98,15 @@ export class AssetsService {
       });
     }
 
+    assertAssetQuota(buffer.length);
+
     const id = newId('asset');
     const ext = this.extFromMime(mimeType);
     const rawName = (dto.fileName?.trim() || `upload.${ext}`).replace(/[\r\n"]/g, '');
     const fileName = rawName.slice(0, 180) || `upload.${ext}`;
     const storedName = `${id}.${ext}`;
     const filePath = resolveUnderRoot(assetsRoot(), storedName);
-    fs.writeFileSync(filePath, buffer);
+    writeFileAtomic(filePath, buffer);
 
     const entry: AssetIndexEntry = {
       id,

@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { buildThrottlerOptions, ThrottlePresets } from './throttle.config';
+import {
+  buildThrottlerModuleOptions,
+  buildThrottlerOptions,
+  ThrottlePresets,
+} from './throttle.config';
 
 describe('buildThrottlerOptions', () => {
   const keys = [
@@ -61,5 +65,14 @@ describe('buildThrottlerOptions', () => {
     expect(ThrottlePresets.read.read.limit).toBe(180);
     expect(ThrottlePresets.stockFetch.stock.limit).toBe(30);
     expect(ThrottlePresets.catalogMedia.stock.limit).toBeGreaterThanOrEqual(120);
+  });
+
+  it('buildThrottlerModuleOptions attaches Redis storage when client present', () => {
+    const memory = buildThrottlerModuleOptions(null);
+    expect(memory).toMatchObject({ throttlers: expect.any(Array) });
+    expect((memory as { storage?: unknown }).storage).toBeUndefined();
+
+    const withRedis = buildThrottlerModuleOptions({ eval: async () => [] } as never);
+    expect((withRedis as { storage?: unknown }).storage).toBeTruthy();
   });
 });

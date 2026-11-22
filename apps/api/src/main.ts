@@ -1,14 +1,9 @@
 import 'reflect-metadata';
+import './env';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import * as express from 'express';
-import * as dotenv from 'dotenv';
-import * as path from 'node:path';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
-
-// Prefer monorepo root .env, then apps/api/.env
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
-dotenv.config();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

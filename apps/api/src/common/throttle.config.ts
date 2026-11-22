@@ -1,3 +1,7 @@
+import type { ThrottlerModuleOptions } from '@nestjs/throttler';
+import { RedisThrottlerStorage } from '../redis/redis-throttler.storage';
+import type { RedisClient } from '../redis/redis.client';
+
 /** Env-driven Nest Throttler limits (ttl in milliseconds). */
 
 function envInt(name: string, fallback: number): number {
@@ -42,6 +46,20 @@ export function buildThrottlerOptions(): readonly ThrottleBucket[] {
       limit: envInt('THROTTLE_READ_LIMIT', 180),
     },
   ] as const;
+}
+
+/** Nest Throttler root options — Redis storage when a client is available. */
+export function buildThrottlerModuleOptions(
+  redis: RedisClient | null | undefined
+): ThrottlerModuleOptions {
+  const throttlers = [...buildThrottlerOptions()];
+  if (redis) {
+    return {
+      throttlers,
+      storage: new RedisThrottlerStorage(redis),
+    };
+  }
+  return { throttlers };
 }
 
 type NamedLimit = { limit: number; ttl: number };

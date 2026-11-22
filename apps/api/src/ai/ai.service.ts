@@ -14,19 +14,23 @@ import type {
   AiJobRequestDto,
   AiJobResponseDto,
 } from '@photoshop-lite/shared-types';
+import { getAiConcurrencyGate } from '../common/concurrency';
 
 @Injectable()
 export class AiService {
   private readonly aiEngine = new AiEngineService();
 
-  private wrapUpstream<T>(fn: () => Promise<T>): Promise<T> {
-    return fn().catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      if (/api key|token|missing/i.test(message)) {
-        throw new BadRequestException({ error: message, code: 'VALIDATION' });
-      }
-      throw new ServiceUnavailableException({ error: message, code: 'UPSTREAM' });
-    });
+  private wrapUpstream<T>(fn: () => Promise<T>, opts?: { gated?: boolean }): Promise<T> {
+    const run = () =>
+      fn().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        if (/api key|token|missing/i.test(message)) {
+          throw new BadRequestException({ error: message, code: 'VALIDATION' });
+        }
+        throw new ServiceUnavailableException({ error: message, code: 'UPSTREAM' });
+      });
+    if (opts?.gated === false) return run();
+    return getAiConcurrencyGate().run(run);
   }
 
   private requireImage(dto: { imageBase64?: string }) {
@@ -55,7 +59,7 @@ export class AiService {
         code: 'VALIDATION',
       });
     }
-    return this.wrapUpstream(() => this.aiEngine.pollPrediction(dto));
+    return this.wrapUpstream(() => this.aiEngine.pollPrediction(dto), { gated: false });
   }
 
   async cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {

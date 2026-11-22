@@ -8,6 +8,7 @@ describe('HealthService', () => {
     expect(health.service).toMatch(/NestJS/i);
     expect(health.version).toBeTruthy();
     expect(health.timestamp).toMatch(/^\d{4}-/);
+    expect(health.redis).toBe('memory');
     expect(JSON.stringify(health)).not.toMatch(/api[_-]?key|secret|token/i);
   });
 });

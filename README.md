@@ -19,6 +19,8 @@ Browser darkroom editor — layers, retouch tools, local Neural Lab, and optiona
 - **Cloud Lab** — Denoise, colorize, face restore, inpaint, style, segment, caption (Replicate via API)
 - **Projects** — `.pslite` local save + Save to Cloud / Open from Cloud (`apps/api/data/workspaces/{id}`)
 - **Workspace isolation** — each browser gets `X-Workspace-Id` so person A never overwrites person B
+- **Traffic guards** — per-workspace rate limits, project/asset quotas, atomic disk writes, AI concurrency cap
+- **Redis** — optional shared cache + throttling (`REDIS_URL`); falls back to in-memory
 - **API cache** — Nest `CacheModule` for project lists/details, assets list, and fonts catalog
 - **Export** — PNG / JPEG / WEBP with transparent background and scale
 
@@ -70,9 +72,20 @@ Set `VITE_SITE_URL` before `npm run build` so absolute URLs match your deploy ho
 
 ## API cache & rate limits
 
-- In-memory `CacheService` for projects, fonts, stock search/fetch
+- `CacheService` + Nest Throttler — **Redis** when `REDIS_URL` is set, otherwise in-memory
 - HTTP `Cache-Control` on fonts/stock/health/assets (via `@CacheControl`)
-- Global `@nestjs/throttler` guard — tune with `THROTTLE_*` in `.env`
+- Throttler keyed by `X-Workspace-Id` (else IP) — tune with `THROTTLE_*` in `.env`
+- Per-workspace quotas (`WORKSPACE_MAX_*`) + `AI_MAX_CONCURRENT` for spike protection
+
+```sh
+docker compose up -d redis
+# in .env
+REDIS_URL=redis://127.0.0.1:6379
+bun run dev:api
+# GET /api/health → { "redis": "connected" }
+```
+
+> Disk projects/assets stay local (`DATA_DIR`). For multi-instance storage, move that to shared object storage next.
 
 ## Monorepo layout (Turborepo)
 

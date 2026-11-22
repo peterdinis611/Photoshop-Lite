@@ -11,9 +11,11 @@ import type {
   ProjectSummaryDto,
   ProjectVersionSummaryDto,
 } from '@photoshop-lite/shared-types';
+import { writeJsonAtomic } from '../common/atomic-fs';
 import { ensureDir, newId, projectsRoot } from '../common/data-paths';
 import { assertSafeId, resolveUnderRoot } from '../common/safe-id';
 import { requireWorkspaceId } from '../common/workspace';
+import { assertProjectQuota } from '../common/workspace-quota';
 import { CacheKeys, CacheService } from '../cache/cache.service';
 
 interface StoredProject {
@@ -69,7 +71,7 @@ export class ProjectsService {
     const dir = this.projectDir(project.id);
     ensureDir(dir);
     ensureDir(this.versionsDir(project.id));
-    fs.writeFileSync(this.projectFile(project.id), JSON.stringify(project, null, 2), 'utf8');
+    writeJsonAtomic(this.projectFile(project.id), project);
   }
 
   private toSummary(p: StoredProject): ProjectSummaryDto {
@@ -151,6 +153,7 @@ export class ProjectsService {
     }
 
     const workspaceId = requireWorkspaceId();
+    assertProjectQuota();
     const now = new Date().toISOString();
     const id = assertSafeId(dto.id?.trim() || newId('proj'), 'project id');
     if (fs.existsSync(this.projectFile(id))) {
@@ -290,11 +293,11 @@ export class ProjectsService {
     const dir = this.versionsDir(project.id);
     ensureDir(dir);
     const versionId = `${Date.now()}_${reason}`;
-    fs.writeFileSync(
-      path.join(dir, `${versionId}.json`),
-      JSON.stringify({ ...project, versionId, reason }, null, 2),
-      'utf8'
-    );
+    writeJsonAtomic(path.join(dir, `${versionId}.json`), {
+      ...project,
+      versionId,
+      reason,
+    });
 
     const files = fs
       .readdirSync(dir)
