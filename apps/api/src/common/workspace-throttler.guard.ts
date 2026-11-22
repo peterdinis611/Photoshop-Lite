@@ -13,7 +13,7 @@ import { WORKSPACE_HEADER } from './workspace';
  */
 @Injectable()
 export class WorkspaceThrottlerGuard extends ThrottlerGuard {
-  protected async getTracker(req: Request): Promise<string> {
+  protected override async getTracker(req: Request): Promise<string> {
     const raw = req.headers[WORKSPACE_HEADER] ?? req.headers['x-workspace-id'];
     const header = Array.isArray(raw) ? raw[0] : raw;
     const ws = typeof header === 'string' ? header.trim() : '';

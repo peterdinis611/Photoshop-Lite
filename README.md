@@ -29,16 +29,18 @@ Browser darkroom editor — layers, retouch tools, local Neural Lab, and optiona
 ```sh
 bun install   # or npm install
 
-# Editor + API via Turborepo (http://127.0.0.1:4200 · :3001)
-cp .env.example .env   # set REPLICATE_API_TOKEN if needed
-bun run dev
+# One-shot: .env + Redis + editor + API
+./scripts/dev.sh
+# or: bun run dev:all
 ```
 
 | Script | What it does |
 | --- | --- |
+| `./scripts/dev.sh` / `bun run dev:all` | `.env`, Redis (Docker), then editor + API |
 | `bun run dev` | Turbo: Vite editor (`4200`) + Nest API (`3001`) |
 | `bun run dev:editor` | Editor only |
 | `bun run dev:api` | API only |
+| `bun run redis:up` / `redis:down` | Start / stop Redis container |
 | `bun run build` | Turbo build all packages |
 | `bun run test` | Turbo test all packages |
 | `bun run test:konva` | `@photoshop-lite/editor-konva` unit tests |

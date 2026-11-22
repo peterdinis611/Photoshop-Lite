@@ -11,8 +11,11 @@
   ],
   "scripts": {
     "dev": "turbo run dev --filter=@photoshop-lite/editor --filter=@photoshop-lite/api",
+    "dev:all": "bash scripts/dev.sh",
     "dev:editor": "turbo run dev --filter=@photoshop-lite/editor",
     "dev:api": "turbo run dev --filter=@photoshop-lite/api",
+    "redis:up": "docker compose up -d redis",
+    "redis:down": "bash scripts/dev.sh --stop",
     "build": "turbo run build",
     "build:editor": "turbo run build --filter=@photoshop-lite/editor",
     "test": "turbo run test",
