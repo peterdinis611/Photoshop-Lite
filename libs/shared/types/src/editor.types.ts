@@ -469,6 +469,13 @@ export interface CropSettings {
   rotation: number;
   /** Axis-aligned crop vs keystone (perspective) crop */
   mode?: 'rect' | 'perspective';
+  /** TL, TR, BR, BL in document coords — used when mode === 'perspective' */
+  perspectiveCorners?: [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+  ];
 }
 
 export interface HistorySnapshot {

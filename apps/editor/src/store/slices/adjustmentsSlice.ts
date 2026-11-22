@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { ImageLayer, ImageAdjustments, LevelsAdjustment, CurvesAdjustment } from '../../types/editor';
-import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, deepClone, getErrorMessage, compressImageSource, colorizeImageSource, bakeCurvesLevels, bakeClassicFilter, type ClassicFilterKind, type ColorizePreset, type CompressFormat } from '@photoshop-lite/editor-core';
+import { DEFAULT_ADJUSTMENTS, FILTER_PRESETS, deepClone, getErrorMessage, compressImageSource, colorizeImageSource, bakeCurvesLevels, bakeClassicFilter, perspectiveCropToRect, type ClassicFilterKind, type ColorizePreset, type CompressFormat, type Quad } from '@photoshop-lite/editor-core';
 import { resizeImageSource } from '../../utils/resizeImage';
 import { applyCropToImageLayer } from '../../utils/cropImage';
 import { derivativeName } from '../helpers';
@@ -45,7 +45,7 @@ export interface AdjustmentsSlice {
 
 export const createAdjustmentsSlice: StateCreator<EditorStore, [], [], AdjustmentsSlice> = (set, get) => ({
   applyCrop: async () => {
-    const { cropSettings, layers } = get();
+    const { cropSettings, layers, selectedLayerId } = get();
     if (!cropSettings.active) return;
 
     const crop = {
@@ -54,6 +54,96 @@ export const createAdjustmentsSlice: StateCreator<EditorStore, [], [], Adjustmen
       width: Math.max(1, cropSettings.width),
       height: Math.max(1, cropSettings.height),
     };
+
+    // Perspective: flatten the keystone quad on the selected image into a rectangle
+    if (cropSettings.mode === 'perspective' && cropSettings.perspectiveCorners) {
+      const layer = layers.find((l) => l.id === selectedLayerId);
+      if (!layer || layer.type !== 'image') {
+        set({
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 0,
+            statusText: '',
+            error: 'Select an image layer for perspective crop',
+          },
+        });
+        return;
+      }
+      set({
+        aiStatus: {
+          isProcessing: true,
+          action: null,
+          progress: 40,
+          statusText: 'Perspective crop…',
+        },
+      });
+      try {
+        const sx = Math.abs(layer.scaleX) || 1;
+        const sy = Math.abs(layer.scaleY) || 1;
+        const localQuad = cropSettings.perspectiveCorners.map((p) => ({
+          x: (p.x - layer.x) / sx,
+          y: (p.y - layer.y) / sy,
+        })) as Quad;
+        const outW = Math.max(
+          32,
+          Math.round(
+            Math.hypot(
+              cropSettings.perspectiveCorners[1].x - cropSettings.perspectiveCorners[0].x,
+              cropSettings.perspectiveCorners[1].y - cropSettings.perspectiveCorners[0].y
+            )
+          )
+        );
+        const outH = Math.max(
+          32,
+          Math.round(
+            Math.hypot(
+              cropSettings.perspectiveCorners[3].x - cropSettings.perspectiveCorners[0].x,
+              cropSettings.perspectiveCorners[3].y - cropSettings.perspectiveCorners[0].y
+            )
+          )
+        );
+        const result = await perspectiveCropToRect(layer.src, localQuad, outW, outH);
+        if (!result) throw new Error('Perspective crop failed');
+        get().commitHistory('Perspective Crop');
+        const next: ImageLayer = {
+          ...layer,
+          src: result.src,
+          width: result.width,
+          height: result.height,
+          scaleX: layer.scaleX < 0 ? -1 : 1,
+          scaleY: layer.scaleY < 0 ? -1 : 1,
+          x: Math.round(
+            Math.min(...cropSettings.perspectiveCorners.map((c) => c.x))
+          ),
+          y: Math.round(
+            Math.min(...cropSettings.perspectiveCorners.map((c) => c.y))
+          ),
+        };
+        set((state) => ({
+          layers: state.layers.map((l) => (l.id === layer.id ? next : l)),
+          cropSettings: { ...state.cropSettings, active: false, mode: 'rect' },
+          activeTool: 'select',
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: 'Perspective crop applied',
+          },
+        }));
+      } catch (e: unknown) {
+        set({
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 0,
+            statusText: '',
+            error: getErrorMessage(e, 'Perspective crop failed'),
+          },
+        });
+      }
+      return;
+    }
 
     set({
       aiStatus: {

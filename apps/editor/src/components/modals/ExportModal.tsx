@@ -120,6 +120,22 @@ export const ExportModal: React.FC = () => {
     setError(null);
 
     try {
+      // Bake pattern overlays into pixels so export includes them (Konva pattern fill
+      // is preview-only and often missing from toDataURL).
+      const store = useEditorStore.getState();
+      const { bakePatternOverlayIntoSrc } = await import('../../utils/layerStyleProps');
+      for (const layer of store.layers) {
+        if (layer.type !== 'image') continue;
+        const op = layer.styles?.patternOverlayOpacity || 0;
+        if (op <= 0) continue;
+        const next = await bakePatternOverlayIntoSrc(layer.src, layer.styles);
+        store.updateLayer(layer.id, {
+          src: next,
+          styles: { ...layer.styles, patternOverlayOpacity: 0 },
+        });
+      }
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
       const dataUrl = await exportDocumentToDataUrl({
         format,
         quality,

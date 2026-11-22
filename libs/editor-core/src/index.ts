@@ -133,6 +133,8 @@ export {
 } from './perspectiveWarp';
 export type { Quad, WarpMethod, WarpOptions, WarpResult, WarpedImage } from './perspectiveWarp';
 
+export { perspectiveCropToRect } from './perspectiveCrop';
+
 export { extractImageExif } from './imageExif';
 export type { ImageExifSummary } from './imageExif';
 

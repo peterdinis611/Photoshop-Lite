@@ -4,7 +4,11 @@ import Konva from 'konva';
 import { applyImageNodeFilters, useKonvaImage } from '@photoshop-lite/editor-konva';
 import { ImageLayer } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
-import { layerShadowProps, patternOverlayStyle } from '../../utils/layerStyleProps';
+import {
+  layerShadowProps,
+  patternOverlayStyle,
+  secondaryStyleOverlays,
+} from '../../utils/layerStyleProps';
 
 interface ImageLayerItemProps {
   layer: ImageLayer;
@@ -46,6 +50,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
 
   const styles = layer.styles || {};
   const shadowProps = layerShadowProps(styles);
+  const secondaryFx = secondaryStyleOverlays(styles);
   const pattern = patternOverlayStyle(styles);
   const patternFill = useMemo(() => {
     if (!pattern) return null;
@@ -115,7 +120,22 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     onTransformEnd: commonTransformEnd,
   };
 
-  const overlay =
+  const fxOverlays = secondaryFx.map((fx, i) => (
+    <Rect
+      key={`${fx.kind}-${i}`}
+      width={layer.width}
+      height={layer.height}
+      fill="transparent"
+      shadowColor={fx.color}
+      shadowBlur={fx.blur}
+      shadowOffset={{ x: fx.offsetX, y: fx.offsetY }}
+      shadowOpacity={fx.opacity}
+      listening={false}
+      perfectDrawEnabled={false}
+    />
+  ));
+
+  const patternOverlay =
     pattern && patternFill ? (
       <Rect
         width={layer.width}
@@ -142,7 +162,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
           imageSmoothingEnabled={imageSmoothingEnabled}
           {...shadowProps}
         />
-        {overlay}
+        {fxOverlays}
+        {patternOverlay}
         <KonvaImage
           image={maskElement}
           width={layer.width}
@@ -170,7 +191,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
         imageSmoothingEnabled={imageSmoothingEnabled}
         {...shadowProps}
       />
-      {overlay}
+      {fxOverlays}
+      {patternOverlay}
     </Group>
   );
 });

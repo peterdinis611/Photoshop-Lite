@@ -519,6 +519,22 @@ export const StylesPanel: React.FC = () => {
             className="w-28 cursor-pointer"
           />
         </div>
+        {selectedLayer.type === 'image' && (styles.patternOverlayOpacity || 0) > 0 && (
+          <button
+            type="button"
+            className="text-[10px] text-[var(--accent-hot)] hover:underline cursor-pointer self-start mt-1"
+            onClick={async () => {
+              const { bakePatternOverlayIntoSrc } = await import('../../utils/layerStyleProps');
+              const next = await bakePatternOverlayIntoSrc(selectedLayer.src, styles);
+              updateLayer(selectedLayer.id, {
+                src: next,
+                styles: { ...styles, patternOverlayOpacity: 0 },
+              });
+            }}
+          >
+            Bake pattern into pixels (for export)
+          </button>
+        )}
       </div>
     </div>
   );

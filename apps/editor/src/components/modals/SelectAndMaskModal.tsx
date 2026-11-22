@@ -10,9 +10,6 @@ export const SelectAndMaskModal: React.FC = () => {
   const modifyMarqueeSelection = useEditorStore((s) => s.modifyMarqueeSelection);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const updateBrushSettings = useEditorStore((s) => s.updateBrushSettings);
-  const layers = useEditorStore((s) => s.layers);
-  const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
-
   const [radius, setRadius] = useState(2);
   const [contrast, setContrast] = useState(0);
   const [shiftEdge, setShiftEdge] = useState(0);
@@ -20,7 +17,6 @@ export const SelectAndMaskModal: React.FC = () => {
 
   if (!open) return null;
 
-  const layer = layers.find((l) => l.id === selectedLayerId);
   const hasSel = Boolean(marqueeSelection);
 
   const apply = async () => {
@@ -30,17 +26,22 @@ export const SelectAndMaskModal: React.FC = () => {
     }
     setBusy(true);
     try {
-      // Shift edge: expand (+) or contract (−)
       if (shiftEdge > 0) await modifyMarqueeSelection('expand', shiftEdge);
       else if (shiftEdge < 0) await modifyMarqueeSelection('contract', Math.abs(shiftEdge));
 
-      // Radius / contrast → feather soft edge into layer mask
-      const featherPx = Math.max(0, radius + Math.round(contrast / 25));
+      // Contrast: contract then expand by the same amount to tighten the edge
+      if (contrast > 0) {
+        const tight = Math.max(1, Math.round(contrast / 20));
+        await modifyMarqueeSelection('contract', tight);
+        await modifyMarqueeSelection('expand', tight);
+      }
+
+      const featherPx = Math.max(0, radius);
       if (featherPx > 0) await modifyMarqueeSelection('feather', featherPx);
 
       setActiveTool('refineBrush');
       updateBrushSettings({ refineMode: 'restore', size: Math.max(8, radius * 4) });
-      notify.success('Select & Mask applied — refine with brush');
+      notify.success('Select & Mask — soft edge on layer mask; refine with brush');
       setOpen(false);
     } catch (e) {
       notify.error(e instanceof Error ? e.message : 'Select & Mask failed');
@@ -71,13 +72,14 @@ export const SelectAndMaskModal: React.FC = () => {
 
         <div className="flex flex-col gap-3 p-4 text-xs text-[var(--text-muted)]">
           <p className="text-[11px] text-[var(--text-faint)]">
-            Refine edge on {layer?.name || 'selection'} — radius softens, shift edge grows/shrinks,
-            then opens Refine Brush.
+            Soft edge lands on a layer mask (not a live selection). Shift Edge grows/shrinks;
+            Contrast contracts then expands to tighten the boundary; Radius = feather into the
+            mask. OK opens Refine Brush.
           </p>
           {(
             [
-              ['Radius', radius, setRadius, 0, 20],
-              ['Contrast', contrast, setContrast, 0, 100],
+              ['Radius → mask feather', radius, setRadius, 0, 40],
+              ['Contrast (edge tighten)', contrast, setContrast, 0, 100],
               ['Shift Edge', shiftEdge, setShiftEdge, -50, 50],
             ] as const
           ).map(([label, value, setter, min, max]) => (

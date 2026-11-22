@@ -663,6 +663,10 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
         l.id === layer.id && l.type === 'image' ? { ...l, ...updates } : l
       ),
     }));
+    // Keep Smart Filters stack in sync with the new linked source
+    if ((layer.smartFilters || []).length > 0) {
+      void get().rebakeSmartFilters(layer.id);
+    }
   },
 
   strokePathAsDrawing: () => {

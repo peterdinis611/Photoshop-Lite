@@ -26,6 +26,7 @@ import {
 import { useEditorStore } from '../../store/editorStore';
 import { BlendMode, EditorLayer } from '../../types/editor';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
+import { SmartFiltersSection } from './SmartFiltersSection';
 
 const BLEND_MODES: { value: BlendMode; label: string }[] = [
   { value: 'source-over', label: 'Normal' },
@@ -447,6 +448,8 @@ export const LayersPanel: React.FC = () => {
           })
         )}
       </div>
+
+      <SmartFiltersSection />
 
       <div className="p-2 border-t border-[var(--border-subtle)] bg-[var(--bg-toolbar)] flex items-center justify-between">
         <span className="flex items-center gap-2 text-[11px] text-[var(--text-faint)] font-mono-ui min-w-0">

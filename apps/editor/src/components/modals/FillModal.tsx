@@ -4,7 +4,7 @@ import { fillImageRect } from '@photoshop-lite/editor-core';
 import { useEditorStore } from '../../store/editorStore';
 import { notify } from '../../utils/notify';
 
-type FillContents = 'foreground' | 'background' | 'black' | 'white' | 'content-aware';
+type FillContents = 'foreground' | 'background' | 'black' | 'white' | 'generative-remove';
 
 export const FillModal: React.FC = () => {
   const open = useEditorStore((s) => s.isFillModalOpen);
@@ -47,8 +47,9 @@ export const FillModal: React.FC = () => {
     }
     setBusy(true);
     try {
-      if (contents === 'content-aware') {
-        await runCloudAiJob(layer.id, 'object-remove');
+      if (contents === 'generative-remove') {
+        await runCloudAiJob(layer.id, 'object-remove', { applyInPlace: true });
+        notify.success('Generative remove applied in place');
         setOpen(false);
         return;
       }
@@ -104,14 +105,15 @@ export const FillModal: React.FC = () => {
               <option value="background">Background Color</option>
               <option value="black">Black</option>
               <option value="white">White</option>
-              <option value="content-aware">Content-Aware</option>
+              <option value="generative-remove">Generative Remove (cloud)</option>
             </select>
           </label>
 
-          {contents === 'content-aware' ? (
+          {contents === 'generative-remove' ? (
             <p className="flex items-start gap-2 text-[11px] text-[var(--text-faint)]">
               <Sparkles size={14} className="mt-0.5 shrink-0 text-[var(--accent-hot)]" />
-              Uses cloud object-remove on the current selection (same stack as Neural Lab).
+              Cloud object-remove into the selection, applied in place on this layer (needs API
+              key / server token). Not classic Photoshop Content-Aware Fill.
             </p>
           ) : (
             <label className="flex items-center justify-between gap-3">

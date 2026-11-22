@@ -114,10 +114,13 @@ export const brushTool: ToolHandler = {
       }
     }
 
-    // History Brush — stamp pixels from the previous undo snapshot of this layer
+    // History Brush — stamp pixels from a chosen (or latest) undo snapshot
     if (tool === 'historyBrush' && imageLayer) {
       const past = store.past;
-      const snap = past.length ? past[past.length - 1] : null;
+      const sourceId = store.historyBrushSourceId;
+      const snap =
+        (sourceId ? past.find((s) => s.id === sourceId) : null) ||
+        (past.length ? past[past.length - 1] : null);
       const histLayer = snap?.layers.find((l) => l.id === imageLayer.id);
       if (!histLayer || histLayer.type !== 'image') {
         return;

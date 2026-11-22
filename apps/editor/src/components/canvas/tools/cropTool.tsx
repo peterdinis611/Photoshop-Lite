@@ -1,5 +1,5 @@
 import React from 'react';
-import { Rect, Line } from 'react-konva';
+import { Rect, Line, Circle } from 'react-konva';
 import { Check, X } from 'pulsoicon-react';
 import type { CropSettings } from '../../../types/editor';
 import type { ToolHandler } from './types';
@@ -204,34 +204,77 @@ export const CropOverlay: React.FC<{
         listening={false}
       />
 
-      {handles.map((h) => (
-        <Rect
-          key={h.id}
-          x={h.x - handleSize / 2}
-          y={h.y - handleSize / 2}
-          width={handleSize}
-          height={handleSize}
-          fill="#ece8e1"
-          stroke="#d4923a"
-          strokeWidth={1.5 / zoom}
-          cornerRadius={2 / zoom}
-          draggable
-          onDragMove={(e) => {
-            const node = e.target;
-            const next = computeHandleCrop(
-              h.id,
-              node.x() + handleSize / 2,
-              node.y() + handleSize / 2
-            );
-            setCropSettings(next);
-            const p = handlePos(h.id, next);
-            node.position({
-              x: p.x - handleSize / 2,
-              y: p.y - handleSize / 2,
-            });
-          }}
-        />
-      ))}
+      {cropSettings.mode === 'perspective' && cropSettings.perspectiveCorners
+        ? cropSettings.perspectiveCorners.map((corner, idx) => (
+            <React.Fragment key={`pc-${idx}`}>
+              <Circle
+                x={corner.x}
+                y={corner.y}
+                radius={Math.max(6, 8 / zoom)}
+                fill="#d4923a"
+                stroke="#ece8e1"
+                strokeWidth={1.5 / zoom}
+                draggable
+                onDragMove={(e) => {
+                  const next = [...cropSettings.perspectiveCorners!] as NonNullable<
+                    CropSettings['perspectiveCorners']
+                  >;
+                  next[idx] = {
+                    x: Math.round(e.target.x()),
+                    y: Math.round(e.target.y()),
+                  };
+                  const xs = next.map((p) => p.x);
+                  const ys = next.map((p) => p.y);
+                  setCropSettings({
+                    perspectiveCorners: next,
+                    x: Math.min(...xs),
+                    y: Math.min(...ys),
+                    width: Math.max(20, Math.max(...xs) - Math.min(...xs)),
+                    height: Math.max(20, Math.max(...ys) - Math.min(...ys)),
+                  });
+                }}
+              />
+              <Line
+                points={[
+                  corner.x,
+                  corner.y,
+                  cropSettings.perspectiveCorners![(idx + 1) % 4].x,
+                  cropSettings.perspectiveCorners![(idx + 1) % 4].y,
+                ]}
+                stroke="#d4923a"
+                strokeWidth={2 / zoom}
+                listening={false}
+              />
+            </React.Fragment>
+          ))
+        : handles.map((h) => (
+            <Rect
+              key={h.id}
+              x={h.x - handleSize / 2}
+              y={h.y - handleSize / 2}
+              width={handleSize}
+              height={handleSize}
+              fill="#ece8e1"
+              stroke="#d4923a"
+              strokeWidth={1.5 / zoom}
+              cornerRadius={2 / zoom}
+              draggable
+              onDragMove={(e) => {
+                const node = e.target;
+                const next = computeHandleCrop(
+                  h.id,
+                  node.x() + handleSize / 2,
+                  node.y() + handleSize / 2
+                );
+                setCropSettings(next);
+                const p = handlePos(h.id, next);
+                node.position({
+                  x: p.x - handleSize / 2,
+                  y: p.y - handleSize / 2,
+                });
+              }}
+            />
+          ))}
     </>
   );
 };

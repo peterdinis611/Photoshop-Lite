@@ -34,11 +34,16 @@ export const CropOptions: React.FC = () => {
       <OptChip
         active={cropSettings.mode === 'perspective'}
         onClick={() => {
-          setCropSettings({ mode: 'perspective' });
-          // Perspective crop → Transform perspective handles
-          const store = useEditorStore.getState();
-          store.setActiveTool('transform');
-          store.setTransformMode('perspective');
+          const { x, y, width, height } = cropSettings;
+          setCropSettings({
+            mode: 'perspective',
+            perspectiveCorners: [
+              { x, y },
+              { x: x + width, y },
+              { x: x + width, y: y + height },
+              { x, y: y + height },
+            ],
+          });
         }}
       >
         Perspective

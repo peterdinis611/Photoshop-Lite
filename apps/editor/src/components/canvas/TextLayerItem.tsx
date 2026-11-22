@@ -89,10 +89,32 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
   const shadowProps = layerShadowProps(styles);
   const trackingExtra = ((layer.tracking ?? 0) / 1000) * layer.fontSize;
   const bend = (layer.warpBend ?? 0) / 100;
-  const warp = layer.warpStyle && layer.warpStyle !== 'none';
-  // Lightweight warp approx: skew / scale rather than full mesh
-  const skewX = warp ? bend * (layer.warpStyle === 'flag' || layer.warpStyle === 'wave' ? 18 : 8) : 0;
-  const skewY = warp ? bend * (layer.warpStyle === 'arc' || layer.warpStyle === 'arch' ? 12 : 4) : 0;
+  const style = layer.warpStyle || 'none';
+  const warp = style !== 'none';
+  // Mesh-ish approx via skew + scale + slight rotation (not full envelope warp)
+  const skewX = warp
+    ? bend *
+      (style === 'flag' || style === 'wave' || style === 'fish'
+        ? 22
+        : style === 'twist'
+          ? 6
+          : 10)
+    : 0;
+  const skewY = warp
+    ? bend *
+      (style === 'arc' || style === 'arch' || style === 'bulge' || style === 'rise'
+        ? 16
+        : style === 'fisheye' || style === 'inflate'
+          ? 10
+          : 5)
+    : 0;
+  const scaleBump =
+    style === 'inflate' || style === 'fisheye'
+      ? 1 + Math.abs(bend) * 0.18
+      : style === 'squeeze'
+        ? 1 - Math.abs(bend) * 0.22
+        : 1;
+  const rotBump = style === 'twist' ? bend * 18 : style === 'wave' ? bend * 4 : 0;
 
   return (
     <KonvaText
@@ -106,9 +128,12 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
         layer.fontSize * layer.lineHeight,
         layer.height || layer.fontSize * layer.lineHeight
       )}
-      scaleX={layer.scaleX * (warp && layer.warpStyle === 'inflate' ? 1 + Math.abs(bend) * 0.15 : 1)}
-      scaleY={layer.scaleY * (warp && layer.warpStyle === 'squeeze' ? 1 - Math.abs(bend) * 0.2 : 1)}
-      rotation={layer.rotation + (warp && layer.warpStyle === 'twist' ? bend * 12 : 0)}
+      scaleX={layer.scaleX * (warp ? scaleBump : 1)}
+      scaleY={
+        layer.scaleY *
+        (warp ? (style === 'squeeze' ? scaleBump : style === 'bulge' ? 1 + Math.abs(bend) * 0.12 : 1) : 1)
+      }
+      rotation={layer.rotation + (warp ? rotBump : 0)}
       skewX={skewX}
       skewY={skewY}
       opacity={layer.opacity}

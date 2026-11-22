@@ -72,6 +72,8 @@ export interface AISlice {
       maskBase64?: string;
       /** Segment: apply result as non-destructive layer mask instead of a new layer */
       applyAsMask?: boolean;
+      /** Inpaint / object-remove: update the selected layer instead of adding a derivative */
+      applyInPlace?: boolean;
     }
   ) => Promise<void>;
   setAIStatus: (status: Partial<AIStatus>) => void;
@@ -1230,6 +1232,28 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
       }
 
       get().commitHistory(actionLabel[kind]);
+
+      const inPlace =
+        options.applyInPlace === true &&
+        (kind === 'inpaint' || kind === 'object-remove' || kind === 'outpaint');
+
+      if (inPlace) {
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === id && l.type === 'image' ? { ...l, src: resultSrc } : l
+          ),
+          marqueeSelection:
+            kind === 'inpaint' || kind === 'object-remove' ? null : state.marqueeSelection,
+          aiStatus: {
+            isProcessing: false,
+            action: null,
+            progress: 100,
+            statusText: `${actionLabel[kind]} applied in place`,
+          },
+        }));
+        return;
+      }
+
       const baked: ImageLayer = {
         ...deepClone(layer),
         id: `${Date.now()}_${kind}`,

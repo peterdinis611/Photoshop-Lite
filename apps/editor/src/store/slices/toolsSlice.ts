@@ -27,6 +27,9 @@ export interface ToolsSlice {
   updateLiquifySettings: (settings: Partial<LiquifySettings>) => void;
   transformMode: TransformMode;
   setTransformMode: (mode: TransformMode) => void;
+  /** History snapshot id used as History Brush source (null = latest past). */
+  historyBrushSourceId: string | null;
+  setHistoryBrushSourceId: (id: string | null) => void;
   setActiveTool: (tool: ToolType) => void;
   setActiveShapeType: (shape: ShapeType) => void;
   setMarqueeMode: (mode: MarqueeMode) => void;
@@ -80,6 +83,10 @@ export const createToolsSlice: StateCreator<EditorStore, [], [], ToolsSlice> = (
   liquifySettings: { mode: 'push', strength: 1 },
 
   transformMode: 'free',
+
+  historyBrushSourceId: null,
+
+  setHistoryBrushSourceId: (id) => set({ historyBrushSourceId: id }),
 
   setActiveTool: (tool) => {
     if (tool === 'crop') {
