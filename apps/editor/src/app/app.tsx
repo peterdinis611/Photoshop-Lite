@@ -1,6 +1,8 @@
 import { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
+import { AnalyticsScripts } from '../analytics/AnalyticsScripts';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { DarkroomSpinner } from '../components/ui/DarkroomSpinner';
 import { LandingPage } from '../pages/LandingPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 
@@ -8,10 +10,8 @@ const EditorShell = lazy(() => import('./EditorShell'));
 
 function EditorRouteFallback() {
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[var(--bg-app)] text-[var(--text-muted)]">
-      <p className="font-mono-ui text-[11px] uppercase tracking-[0.16em] text-[var(--accent)]">
-        Opening darkroom…
-      </p>
+    <div className="flex h-screen w-screen items-center justify-center bg-[var(--bg-app)]">
+      <DarkroomSpinner label="Opening editor" caption="Developing…" />
     </div>
   );
 }
@@ -19,6 +19,7 @@ function EditorRouteFallback() {
 export function App() {
   return (
     <ErrorBoundary>
+      <AnalyticsScripts />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route

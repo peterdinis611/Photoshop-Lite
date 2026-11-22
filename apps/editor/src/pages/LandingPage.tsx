@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { usePageMeta } from '../seo/usePageMeta';
 import { SkipLink } from '../a11y/SkipLink';
 import { LiveRegion } from '../a11y/LiveRegion';
 import { useRouteWarmup } from '../hooks/useRouteWarmup';
+import { trackCta } from '../analytics/trackCta';
+import { LandingBeforeAfter } from './landing/LandingBeforeAfter';
+import { LandingCtaLink } from './landing/LandingCtaLink';
 import {
   ArrowUpRightIcon,
   BrushIcon,
@@ -300,9 +302,10 @@ export const LandingPage: React.FC = () => {
               plates, Enter to fan, orbit tools to preview.
             </p>
             <div className="landing__lede-row">
-              <Link
+              <LandingCtaLink
                 to="/editor"
                 id="landing-cta"
+                cta="hero_open_editor"
                 className="landing__cta"
                 onMouseEnter={() => {
                   void warmEditor();
@@ -313,7 +316,7 @@ export const LandingPage: React.FC = () => {
               >
                 <span>Open editor</span>
                 <ArrowUpRightIcon size={18} strokeWidth={2.4} />
-              </Link>
+              </LandingCtaLink>
               <label className="landing__dial font-mono-ui">
                 <span>EXP {Math.round(exposure * 100)}</span>
                 <input
@@ -406,7 +409,11 @@ export const LandingPage: React.FC = () => {
                     aria-pressed={activeTool === t.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveTool((cur) => (cur === t.id ? null : t.id));
+                      setActiveTool((cur) => {
+                        const next = cur === t.id ? null : t.id;
+                        if (next) trackCta('landing_orbit_tool', { tool: next });
+                        return next;
+                      });
                     }}
                   >
                     <t.Icon size={14} strokeWidth={2.2} aria-hidden />
@@ -529,6 +536,8 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      <LandingBeforeAfter />
+
       <section className="landing__caps" aria-label="Capabilities">
         <p className="landing__caps-label font-mono-ui">On the bench · hover to lift</p>
         <ul className="landing__caps-list">
@@ -549,10 +558,17 @@ export const LandingPage: React.FC = () => {
         </ul>
 
         <div className="landing__outro">
-          <Link to="/editor" className="landing__cta landing__cta--ghost">
+          <LandingCtaLink
+            to="/editor"
+            cta="outro_open_editor"
+            className="landing__cta landing__cta--ghost"
+            onMouseEnter={() => {
+              void warmEditor();
+            }}
+          >
             <span>Open editor</span>
             <ArrowUpRightIcon size={18} strokeWidth={2.4} />
-          </Link>
+          </LandingCtaLink>
           <span className="landing__legal font-mono-ui">PhotoshopLite · local-first</span>
         </div>
       </section>

@@ -1,16 +1,6 @@
 {
   "name": "@photoshop-lite/editor",
   "version": "0.0.1",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit"
-  },
   "dependencies": {
     "@photoshop-lite/editor-ai-client": "0.0.1",
     "@photoshop-lite/editor-core": "0.0.1",
@@ -29,5 +19,15 @@
     "react-router-dom": "6.30.3",
     "sonner": "^2.0.8",
     "zustand": "^5.0.15"
-  }
+  },
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
+  },
+  "type": "module"
 }
