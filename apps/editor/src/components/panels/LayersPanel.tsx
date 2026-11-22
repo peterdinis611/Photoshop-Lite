@@ -21,6 +21,7 @@ import {
   Replace,
   SlidersHorizontal,
   Blend,
+  Film,
 } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { BlendMode, EditorLayer } from '../../types/editor';
@@ -46,6 +47,15 @@ const LayerThumb: React.FC<{ layer: EditorLayer }> = ({ layer }) => {
     return (
       <div className="w-8 h-8 rounded-[var(--radius-sm)] overflow-hidden border border-[var(--border-subtle)] bg-[var(--bg-app)] shrink-0">
         <img src={layer.src} alt="" className="w-full h-full object-cover" draggable={false} />
+      </div>
+    );
+  }
+  if (layer.type === 'lottie') {
+    return (
+      <div className="w-8 h-8 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-app)] flex items-center justify-center shrink-0">
+        <span className="font-mono-ui text-[8px] font-bold tracking-tight text-[var(--accent-hot)]">
+          LOT
+        </span>
       </div>
     );
   }
@@ -152,6 +162,8 @@ export const LayersPanel: React.FC = () => {
     switch (type) {
       case 'image':
         return <ImageIcon size={11} className="text-[var(--ink-blue)]" />;
+      case 'lottie':
+        return <Film size={11} className="text-[var(--accent-hot)]" />;
       case 'text':
         return <Type size={11} className="text-[var(--accent-hot)]" />;
       case 'shape':

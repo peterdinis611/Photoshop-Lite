@@ -1,6 +1,7 @@
 import React, { Activity, Suspense, lazy, startTransition, useEffect, useState, ViewTransition } from 'react';
 import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
+import { DarkroomSpinner } from '../ui/DarkroomSpinner';
 
 const LayersPanel = lazy(() =>
   import('./LayersPanel').then((m) => ({ default: m.LayersPanel }))
@@ -29,7 +30,9 @@ type TabType = 'layers' | 'adjustments' | 'ai' | 'styles' | 'history' | 'actions
 const STORAGE_KEY = 'px_sidebar_open';
 
 const PanelFallback = () => (
-  <div className="p-4 text-[11px] text-[var(--text-faint)] font-mono-ui">Loading panel…</div>
+  <div className="flex h-32 items-center justify-center">
+    <DarkroomSpinner label="Loading panel" caption="Loading…" />
+  </div>
 );
 
 const PANELS: { id: TabType; label: string; node: React.ReactNode }[] = [
@@ -56,6 +59,7 @@ export const RightSidebar: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('layers');
   const [visited, setVisited] = useState<Set<TabType>>(() => new Set(['layers']));
   const [isOpen, setIsOpen] = useState(readOpenPreference);
+  const [railTip, setRailTip] = useState<{ label: string; top: number; left: number } | null>(null);
   const { aiStatus, isRecordingAction } = useEditorStore();
 
   useEffect(() => {
@@ -156,16 +160,23 @@ export const RightSidebar: React.FC = () => {
               aria-controls={isOpen ? `sidebar-panel-${tab.id}` : undefined}
               data-testid={`tab-${tab.id}`}
               onClick={() => selectTab(tab.id)}
+              onMouseEnter={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setRailTip({
+                  label:
+                    isOpen && activeTab === tab.id
+                      ? `${tab.label} · close`
+                      : tab.label,
+                  top: r.top + r.height / 2,
+                  left: r.left - 8,
+                });
+              }}
+              onMouseLeave={() => setRailTip(null)}
               className={`ui-interactive relative w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center cursor-pointer transition-colors ${
                 isActive
                   ? 'bg-[var(--accent-dim)] text-[var(--accent-hot)] border border-[var(--accent)]/40'
-                  : 'text-[var(--text-faint)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-toolbar)]/60'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-toolbar)]/60'
               }`}
-              title={
-                isOpen && activeTab === tab.id
-                  ? `${tab.label} · click to close`
-                  : tab.label
-              }
               aria-label={
                 tab.badge
                   ? `${tab.label}${tab.id === 'ai' ? ', processing' : ', recording'}`
@@ -183,6 +194,16 @@ export const RightSidebar: React.FC = () => {
           );
         })}
       </div>
+
+      {railTip && (
+        <div
+          className="sidebar-rail-tip font-mono-ui"
+          style={{ top: railTip.top, left: railTip.left }}
+          role="tooltip"
+        >
+          {railTip.label}
+        </div>
+      )}
 
       {isOpen && (
         <div

@@ -13,6 +13,7 @@ import { handTool, zoomTool } from './handZoomTool';
 import { cloneStampTool, healingBrushTool, patchTool, spotHealingTool } from './healingTools';
 import { liquifyTool } from './liquifyTool';
 import { penTool } from './penTool';
+import { selectTool } from './selectTool';
 import {
   lassoTool,
   marqueeTool,
@@ -26,6 +27,7 @@ import { toneBrushTool } from './toneBrushTool';
 import { transformTool } from './transformTool';
 
 const TOOLS = [
+  selectTool,
   handTool,
   zoomTool,
   eyedropperTool,

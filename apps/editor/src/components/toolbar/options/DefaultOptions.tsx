@@ -1,7 +1,10 @@
 import React from 'react';
-import { FlipHorizontal, FlipVertical, AlignCenter } from 'pulsoicon-react';
+import { FlipHorizontal, FlipVertical, AlignCenter, Pause, Play, ImageDown } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
-import { ColorOpt, OptChip, OptHint, OptSep, SizeOpt } from '../../ui/OptionControls';
+import { ColorOpt, NumOpt, OptChip, OptHint, OptSep, SizeOpt } from '../../ui/OptionControls';
+import { FontPicker } from '../../ui/FontPicker';
+import { loadGoogleFont } from '../../../utils/googleFonts';
+import { notify } from '../../../utils/notify';
 
 interface DefaultOptionsProps {
   tool: 'select' | 'hand' | 'zoom' | 'eyedropper';
@@ -11,6 +14,7 @@ const MoveOptions: React.FC = () => {
   const layers = useEditorStore((s) => s.layers);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const updateLayer = useEditorStore((s) => s.updateLayer);
+  const bakeLottieLayer = useEditorStore((s) => s.bakeLottieLayer);
   const canvasWidth = useEditorStore((s) => s.canvasWidth);
   const canvasHeight = useEditorStore((s) => s.canvasHeight);
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
@@ -80,6 +84,72 @@ const MoveOptions: React.FC = () => {
             step={0.05}
             onCommit={(opacity) => updateLayer(selectedLayer.id, { opacity })}
           />
+
+          {selectedLayer.type === 'text' && (
+            <>
+              <OptSep />
+              <FontPicker
+                value={selectedLayer.fontFamily}
+                onChange={async (family) => {
+                  await loadGoogleFont(family);
+                  updateLayer(selectedLayer.id, { fontFamily: family });
+                }}
+              />
+              <NumOpt
+                label="Size"
+                value={selectedLayer.fontSize}
+                min={8}
+                max={400}
+                unit="px"
+                widthClass="w-12"
+                onCommit={(fontSize) => updateLayer(selectedLayer.id, { fontSize })}
+              />
+            </>
+          )}
+
+          {selectedLayer.type === 'lottie' && (
+            <>
+              <OptSep />
+              <div className="flex items-center gap-0.5 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
+                <button
+                  type="button"
+                  title={selectedLayer.playing ? 'Pause' : 'Play'}
+                  className="p-1 hover:bg-[var(--bg-subtle)] rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  onClick={() =>
+                    updateLayer(selectedLayer.id, { playing: !selectedLayer.playing })
+                  }
+                >
+                  {selectedLayer.playing ? <Pause size={13} /> : <Play size={13} />}
+                </button>
+                <button
+                  type="button"
+                  title="Bake current frame to image layer"
+                  className="p-1 hover:bg-[var(--bg-subtle)] rounded cursor-pointer text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                  onClick={() => {
+                    void bakeLottieLayer(selectedLayer.id).then(() =>
+                      notify.success('Frame baked', 'New image layer from Lottie')
+                    );
+                  }}
+                >
+                  <ImageDown size={13} />
+                </button>
+              </div>
+              <OptChip
+                active={selectedLayer.loop}
+                onClick={() => updateLayer(selectedLayer.id, { loop: !selectedLayer.loop })}
+              >
+                Loop
+              </OptChip>
+              <SizeOpt
+                label="Speed"
+                value={selectedLayer.speed}
+                min={0.1}
+                max={3}
+                step={0.1}
+                onCommit={(speed) => updateLayer(selectedLayer.id, { speed })}
+              />
+            </>
+          )}
 
           {selectedLayer.type === 'shape' && (
             <>

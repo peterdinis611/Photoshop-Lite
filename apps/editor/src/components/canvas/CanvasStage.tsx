@@ -5,6 +5,7 @@ import { useThrottledCallback } from '@tanstack/react-pacer';
 import { registerStage, listeningPolicy } from '@photoshop-lite/editor-konva';
 import { useEditorStore } from '../../store/editorStore';
 import { ImageLayerItem } from './ImageLayerItem';
+import { LottieLayerItem } from './LottieLayerItem';
 import { TextLayerItem } from './TextLayerItem';
 import { ShapeLayerItem } from './ShapeLayerItem';
 import { DrawingLayerItem } from './DrawingLayerItem';
@@ -116,16 +117,27 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
 
   // Space (pan) / Shift (keep ratio) + the active tool's key bindings (Enter / Esc, ...)
   useEffect(() => {
+    const isTypingTarget = () => {
+      const el = document.activeElement;
+      if (!el || !(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      return (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        el.isContentEditable
+      );
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setKeepRatio(true);
-      if (
-        e.code === 'Space' &&
-        !e.repeat &&
-        document.activeElement?.tagName !== 'INPUT' &&
-        document.activeElement?.tagName !== 'TEXTAREA'
-      ) {
-        session.spacePressed = true;
-        ctx.requestRedraw();
+      if (e.code === 'Space' && !isTypingTarget()) {
+        // Stop page scroll / button activation — Space is temporary Hand
+        e.preventDefault();
+        if (!e.repeat) {
+          session.spacePressed = true;
+          ctx.requestRedraw();
+        }
       }
       onToolKeyDown(e);
     };
@@ -138,11 +150,23 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    const clearSpacePan = () => {
+      if (!session.spacePressed && !session.panning) return;
+      session.spacePressed = false;
+      session.panning = false;
+      session.panStart = null;
+      ctx.requestRedraw();
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', clearSpacePan);
+    document.addEventListener('visibilitychange', clearSpacePan);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', clearSpacePan);
+      document.removeEventListener('visibilitychange', clearSpacePan);
     };
   }, [ctx, onToolKeyDown, session]);
 
@@ -333,6 +357,17 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             if (layer.type === 'image') {
               return (
                 <ImageLayerItem
+                  key={layer.id}
+                  layer={layer}
+                  isSelected={isSelected}
+                  onSelect={() => selectLayer(layer.id)}
+                  onChange={(updates) => updateLayer(layer.id, updates)}
+                />
+              );
+            }
+            if (layer.type === 'lottie') {
+              return (
+                <LottieLayerItem
                   key={layer.id}
                   layer={layer}
                   isSelected={isSelected}

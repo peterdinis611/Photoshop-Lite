@@ -99,17 +99,20 @@ const renderToolOptions = (tool: ToolType): React.ReactNode => {
 
 export const OptionsBar: React.FC = () => {
   const activeTool = useEditorStore((s) => s.activeTool);
+  // Move (V) always keeps Move options — Type tool has its own bar.
+  // Previously select+text replaced Move with Type and broke flip/center/drag chrome.
+  const label = TOOL_LABEL[activeTool] || activeTool;
 
   return (
     <div
       className="shell-options h-9 bg-[var(--bg-toolbar)] border-b border-[var(--border-subtle)] px-3 flex items-center gap-3 text-[11px] text-[var(--text-muted)] select-none overflow-x-auto"
       role="region"
-      aria-label={`${TOOL_LABEL[activeTool] || activeTool} options`}
+      aria-label={`${label} options`}
     >
       <div className="flex items-center gap-1.5 shrink-0 pr-2.5 border-r border-[var(--border-subtle)]">
         <Move size={12} className="text-[var(--accent)]" aria-hidden />
         <span className="font-display font-bold text-[var(--text-primary)] text-[11px]">
-          {TOOL_LABEL[activeTool] || activeTool}
+          {label}
         </span>
       </div>
       {renderToolOptions(activeTool)}

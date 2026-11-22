@@ -1,4 +1,4 @@
-import React, { startTransition, useEffect, useState, ViewTransition } from 'react';
+import React, { startTransition, useEffect, useRef, useState, ViewTransition } from 'react';
 import {
   Scissors,
   Sparkles,
@@ -17,6 +17,7 @@ import {
   MessageSquareText,
   ChevronDown,
   ImageOff,
+  ImagePlus,
   Cpu,
   Globe,
   Lightbulb,
@@ -35,10 +36,11 @@ import { RELIGHT_MODES, type RelightMode } from '../../utils/photoRelight';
 import { PORTRAIT_MODES, type PortraitMode } from '../../utils/photoPortrait';
 import { CLARITY_MODES, type ClarityMode } from '../../utils/photoClarity';
 import { OUTPAINT_PRESETS, type OutpaintPreset } from '../../utils/photoOutpaint';
-import { loadImageFiles } from '../../utils/loadImageFiles';
+import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
 import type { AiStylePreset } from '@photoshop-lite/shared-types';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
 import { extractPaletteFromImage } from '@photoshop-lite/editor-core';
+import { PanelEmptyState } from './PanelEmptyState';
 
 const CLOUD_STYLES: { id: AiStylePreset; label: string }[] = [
   { id: 'film', label: 'Film' },
@@ -78,6 +80,7 @@ export const AISuitePanel: React.FC = () => {
     updateBrushSettings,
     marqueeSelection,
     updateAdjustments,
+    addImageLayer,
     commitHistory,
   } = useEditorStore();
 
@@ -117,6 +120,7 @@ export const AISuitePanel: React.FC = () => {
   const [serverReplicate, setServerReplicate] = useState(false);
   const [serverHuggingFace, setServerHuggingFace] = useState(false);
   const [serverReachable, setServerReachable] = useState(false);
+  const openFileRef = useRef<HTMLInputElement>(null);
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isImage = selectedLayer?.type === 'image';
@@ -162,6 +166,14 @@ export const AISuitePanel: React.FC = () => {
 
   const selectZone = (next: LabZone) => {
     startTransition(() => setZone(next));
+  };
+
+  const openImage = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const loaded = await loadImageFiles(Array.from(files).slice(0, 1));
+    const img = loaded[0];
+    if (!img) return;
+    addImageLayer(img.src, img.name, img.width, img.height);
   };
 
   const selectRecipe = (next: LocalRecipe) => {
@@ -249,15 +261,32 @@ export const AISuitePanel: React.FC = () => {
 
       <div className="flex-1 px-3 py-3 flex flex-col gap-3">
         {!hasImage && (
-          <div className="lab-empty">
-            <ImageOff size={18} className="text-[var(--accent)]" />
-            <p className="font-display font-bold text-[13px] text-[var(--text-primary)]">
-              Drop an image first
-            </p>
-            <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
-              Lab tools need a photo on the canvas. Drag one in, or use File → Open Image.
-            </p>
-          </div>
+          <>
+            <input
+              ref={openFileRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                void openImage(e.target.files);
+                e.target.value = '';
+              }}
+            />
+            <PanelEmptyState
+              icon={<ImageOff size={26} />}
+              title="Drop an image first"
+              description="Lab tools need a photo on the canvas. Open one here, or drag onto the stage."
+              features={['Revive · Cleanup', 'Relight · Portrait', 'Cloud styles', 'Cutout']}
+              actions={[
+                {
+                  label: 'Open image',
+                  primary: true,
+                  icon: <ImagePlus size={13} />,
+                  onClick: () => openFileRef.current?.click(),
+                },
+              ]}
+            />
+          </>
         )}
 
         <ViewTransition name="lab-zone" update="auto">

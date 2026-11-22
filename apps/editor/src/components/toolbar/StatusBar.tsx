@@ -1,10 +1,10 @@
 import React from 'react';
-import { Frame, Layers, MousePointer2, Ruler } from 'pulsoicon-react';
+import { Frame, Hand, Layers, MousePointer2, Ruler, Search } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { LiveRegion } from '../../a11y/LiveRegion';
 
 const TOOL_HINT: Record<string, string> = {
-  select: 'Drag to move · Shift-constrain',
+  select: 'Drag layer · Space+drag pan · H hand',
   marquee: 'Drag to select · Esc to clear',
   crop: 'Drag handles · Enter apply · Esc cancel',
   brush: 'Paint · [ ] size · X swap colors',
@@ -18,7 +18,7 @@ const TOOL_HINT: Record<string, string> = {
   text: 'Click canvas to place type',
   shape: 'Drag to draw · click to drop',
   pen: 'Click anchors · drag curves · click first to close · Enter finish · Esc cancel',
-  hand: 'Drag to pan the stage',
+  hand: 'Drag to pan · Space temporary · H to stay',
   zoom: 'Click zoom in · Alt zoom out',
   liquify: 'Drag on an image layer to push pixels · Size in options bar',
 };
@@ -27,9 +27,11 @@ export const StatusBar: React.FC = () => {
   const layers = useEditorStore((s) => s.layers);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const activeTool = useEditorStore((s) => s.activeTool);
+  const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const canvasWidth = useEditorStore((s) => s.canvasWidth);
   const canvasHeight = useEditorStore((s) => s.canvasHeight);
   const zoom = useEditorStore((s) => s.zoom);
+  const setZoom = useEditorStore((s) => s.setZoom);
   const showGrid = useEditorStore((s) => s.showGrid);
   const showRulers = useEditorStore((s) => s.showRulers);
   const artboards = useEditorStore((s) => s.artboards);
@@ -68,7 +70,10 @@ export const StatusBar: React.FC = () => {
             {canvasWidth} × {canvasHeight}
           </span>
         </span>
-        <span className="status-pill status-pill--mono" aria-label={`Zoom ${Math.round(zoom * 100)} percent`}>
+        <span
+          className="status-pill status-pill--mono"
+          aria-label={`Zoom ${Math.round(zoom * 100)} percent`}
+        >
           {Math.round(zoom * 100)}%
         </span>
         <span className="status-pill">
@@ -89,6 +94,46 @@ export const StatusBar: React.FC = () => {
       </div>
 
       <div className="status-bar-group status-bar-group--end">
+        <div className="status-view-tools" role="group" aria-label="View tools">
+          <button
+            type="button"
+            title="Hand — pan stage (H) · hold Space"
+            aria-label="Hand tool"
+            aria-pressed={activeTool === 'hand'}
+            className={`status-tool-btn ${activeTool === 'hand' ? 'is-on' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'hand' ? 'select' : 'hand')}
+          >
+            <Hand size={12} />
+          </button>
+          <button
+            type="button"
+            title="Zoom tool (Z)"
+            aria-label="Zoom tool"
+            aria-pressed={activeTool === 'zoom'}
+            className={`status-tool-btn ${activeTool === 'zoom' ? 'is-on' : ''}`}
+            onClick={() => setActiveTool(activeTool === 'zoom' ? 'select' : 'zoom')}
+          >
+            <Search size={12} />
+          </button>
+          <button
+            type="button"
+            title="Zoom out"
+            aria-label="Zoom out"
+            className="status-tool-btn"
+            onClick={() => setZoom((z) => Math.max(0.1, z / 1.25))}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            title="Zoom in"
+            aria-label="Zoom in"
+            className="status-tool-btn"
+            onClick={() => setZoom((z) => Math.min(8, z * 1.25))}
+          >
+            +
+          </button>
+        </div>
         {showRulers && <span className="status-chip">Rulers</span>}
         {showGrid && <span className="status-chip">Grid</span>}
         <span className="status-chip status-chip--accent" aria-label={`Active tool ${activeTool}`}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   MousePointer,
   Crop,
@@ -46,16 +46,38 @@ import { BeforeAfterSlider } from '../canvas/BeforeAfterSlider';
 import { ColorField } from '../ui/ColorField';
 import { AnimatedMenu, MenuLabel } from '../ui/AnimatedMenu';
 
+type ToolId =
+  | ToolType
+  | 'beforeAfter'
+  | 'marqueeMenu'
+  | 'brushMenu'
+  | 'lassoMenu'
+  | 'healMenu'
+  | 'wandMenu';
+
 interface ToolItem {
-  id: ToolType | 'beforeAfter' | 'marqueeMenu' | 'brushMenu';
+  id: ToolId;
   label: string;
   shortcut?: string;
   icon: React.ReactNode;
-  separator?: boolean;
+}
+
+interface ToolGroup {
+  id: string;
+  label: string;
+  tools: ToolItem[];
 }
 
 const BRUSH_SIZES = [4, 12, 24, 48, 80];
 const QUICK_COLORS = ['#d4923a', '#ece8e1', '#0b0c0f', '#e85d5d', '#5ecf9a', '#5b8def', '#ffffff'];
+
+const LASSO_TOOLS: ToolType[] = ['lasso', 'polyLasso', 'magneticLasso'];
+const HEAL_TOOLS: ToolType[] = ['spotHealing', 'healing', 'patch'];
+const WAND_TOOLS: ToolType[] = ['wand', 'quickSelect'];
+
+function FlyoutChevron() {
+  return <ChevronRight size={9} className="absolute -right-0.5 -bottom-0.5 opacity-55" aria-hidden />;
+}
 
 export const ToolsPanel: React.FC = () => {
   const {
@@ -78,6 +100,9 @@ export const ToolsPanel: React.FC = () => {
   const [showShapeMenu, setShowShapeMenu] = useState(false);
   const [showMarqueeMenu, setShowMarqueeMenu] = useState(false);
   const [showBrushMenu, setShowBrushMenu] = useState(false);
+  const [showLassoMenu, setShowLassoMenu] = useState(false);
+  const [showHealMenu, setShowHealMenu] = useState(false);
+  const [showWandMenu, setShowWandMenu] = useState(false);
   const [scrollTop, setScrollTop] = useState(0);
   const [hoverTip, setHoverTip] = useState<{
     label: string;
@@ -86,226 +111,255 @@ export const ToolsPanel: React.FC = () => {
     left: number;
   } | null>(null);
 
-  const tools: ToolItem[] = [
-    {
-      id: 'select',
-      label: 'Move / Selection Tool',
-      shortcut: 'V',
-      icon: <MousePointer size={18} />,
-    },
-    {
-      id: 'marqueeMenu',
-      label: 'Marquee Tools',
-      shortcut: 'M',
-      icon:
-        marqueeMode === 'ellipse' ? (
-          <Ellipse size={18} className="text-sky-400" />
-        ) : (
-          <Square size={18} className="text-sky-400" />
-        ),
-    },
-    {
-      id: 'lasso',
-      label: 'Lasso Selection',
-      shortcut: 'L',
-      icon: <Lasso size={18} className="text-sky-300" />,
-    },
-    {
-      id: 'polyLasso',
-      label: 'Polygonal Lasso — click points, double-click to close',
-      shortcut: 'Shift+L',
-      icon: <Hexagon size={18} className="text-sky-300" />,
-    },
-    {
-      id: 'magneticLasso',
-      label: 'Magnetic Lasso — snaps to edges',
-      icon: <Magnet size={18} className="text-sky-300" />,
-    },
-    {
-      id: 'quickSelect',
-      label: 'Quick Selection — paint to select',
-      shortcut: 'Shift+W',
-      icon: <Sparkle size={18} className="text-violet-300" />,
-    },
-    {
-      id: 'wand',
-      label: 'Magic Wand',
-      shortcut: 'W',
-      icon: <WandSparkles size={18} className="text-violet-300" />,
-    },
-    {
-      id: 'crop',
-      label: 'Crop & Rotate',
-      shortcut: 'C',
-      icon: <Crop size={18} />,
-      separator: true,
-    },
-    {
-      id: 'brushMenu',
-      label: 'Brush Tool — color & size',
-      shortcut: 'B',
-      icon: (
-        <div className="relative">
-          <Paintbrush size={18} />
-          <ChevronRight size={9} className="absolute -right-0.5 -bottom-0.5 opacity-70" />
-        </div>
-      ),
-    },
-    {
-      id: 'eraser',
-      label: 'Eraser Tool',
-      shortcut: 'E',
-      icon: <Eraser size={18} />,
-    },
-    {
-      id: 'fill',
-      label: 'Paint Bucket — Flood Fill',
-      shortcut: 'G',
-      icon: <PaintBucket size={18} className="text-sky-300" />,
-    },
-    {
-      id: 'gradient',
-      label: 'Gradient Tool — drag to fill',
-      shortcut: 'Shift+G',
-      icon: <Blend size={18} className="text-sky-300" />,
-    },
-    {
-      id: 'blur',
-      label: 'Blur Tool',
-      shortcut: 'R',
-      icon: <Droplets size={18} className="text-cyan-300" />,
-    },
-    {
-      id: 'sharpenTool',
-      label: 'Sharpen Tool — paint to add detail',
-      shortcut: 'Shift+S',
-      icon: <Aperture size={18} className="text-cyan-300" />,
-    },
-    {
-      id: 'dodge',
-      label: 'Dodge Tool — lighten areas',
-      shortcut: 'O',
-      icon: <SunMedium size={18} className="text-amber-300" />,
-    },
-    {
-      id: 'burn',
-      label: 'Burn Tool — darken areas',
-      shortcut: 'Shift+O',
-      icon: <Moon size={18} className="text-amber-500" />,
-    },
-    {
-      id: 'refineBrush',
-      label: 'Edge Refinement Brush (Fix Cutouts)',
-      shortcut: 'Shift+R',
-      icon: <Sparkles size={18} className="text-amber-400" />,
-    },
-    {
-      id: 'spotHealing',
-      label: 'Spot Healing Brush (Remove Blemishes)',
-      shortcut: 'J',
-      icon: <Bandage size={18} className="text-orange-400" />,
-    },
-    {
-      id: 'healing',
-      label: 'Healing Brush — Alt+Click to set source',
-      shortcut: 'Shift+J',
-      icon: <Bandage size={18} className="text-orange-300" />,
-    },
-    {
-      id: 'patch',
-      label: 'Patch Tool — select area, drag to source',
-      icon: <BoxSelect size={18} className="text-orange-300" />,
-    },
-    {
-      id: 'clone',
-      label: 'Clone Stamp — Alt+Click to set source',
-      shortcut: 'S',
-      icon: <Stamp size={18} />,
-      separator: true,
-    },
-    {
-      id: 'eyedropper',
-      label: 'Eyedropper — Sample Color',
-      shortcut: 'I',
-      icon: <Pipette size={18} className="text-emerald-400" />,
-    },
-    {
-      id: 'text',
-      label: 'Horizontal Type Tool',
-      shortcut: 'T',
-      icon: <Type size={18} />,
-    },
-    {
-      id: 'pen',
-      label: 'Pen Tool — click for corners, drag for curves',
-      shortcut: 'P',
-      icon: <PenTool size={18} className="text-[var(--accent-hot)]" />,
-    },
-    {
-      id: 'shape',
-      label: 'Shape Tool',
-      shortcut: 'U',
-      icon: (
-        <div className="relative">
-          {activeShapeType === 'circle' || activeShapeType === 'ellipse' ? (
-            <Circle size={18} />
-          ) : activeShapeType === 'arrow' ? (
-            <ArrowRight size={18} />
-          ) : activeShapeType === 'star' ? (
-            <Star size={18} />
-          ) : activeShapeType === 'callout' ? (
-            <MessageSquare size={18} />
-          ) : (
-            <Square size={18} />
-          )}
-          <ChevronRight size={9} className="absolute -right-0.5 -bottom-0.5 opacity-70" />
-        </div>
-      ),
-      separator: true,
-    },
-    {
-      id: 'liquify',
-      label: 'Liquify — push pixels',
-      shortcut: 'Shift+X',
-      icon: <Waves size={18} className="text-teal-300" />,
-      separator: true,
-    },
-    {
-      id: 'transform',
-      label: 'Transform — free, skew, distort, perspective, warp',
-      shortcut: 'Shift+T',
-      icon: <Move3d size={18} className="text-teal-300" />,
-    },
-    {
-      id: 'hand',
-      label: 'Hand Tool (Pan)',
-      shortcut: 'H',
-      icon: <Hand size={18} />,
-    },
-    {
-      id: 'zoom',
-      label: 'Zoom Tool',
-      shortcut: 'Z',
-      icon: <Search size={18} />,
-    },
-    {
-      id: 'beforeAfter',
-      label: 'Before / After Comparison',
-      shortcut: '\\',
-      icon: <GitCompare size={18} className="text-[var(--accent-hot)]" />,
-      separator: true,
-    },
+  const groups: ToolGroup[] = useMemo(
+    () => [
+      {
+        id: 'select',
+        label: 'Select',
+        tools: [
+          {
+            id: 'select',
+            label: 'Move / Selection',
+            shortcut: 'V',
+            icon: <MousePointer size={17} />,
+          },
+          {
+            id: 'marqueeMenu',
+            label: 'Marquee Tools',
+            shortcut: 'M',
+            icon: (
+              <span className="relative inline-flex">
+                {marqueeMode === 'ellipse' ? <Ellipse size={17} /> : <Square size={17} />}
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+          {
+            id: 'lassoMenu',
+            label: 'Lasso Tools',
+            shortcut: 'L',
+            icon: (
+              <span className="relative inline-flex">
+                {activeTool === 'polyLasso' ? (
+                  <Hexagon size={17} />
+                ) : activeTool === 'magneticLasso' ? (
+                  <Magnet size={17} />
+                ) : (
+                  <Lasso size={17} />
+                )}
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+          {
+            id: 'wandMenu',
+            label: 'Wand Tools',
+            shortcut: 'W',
+            icon: (
+              <span className="relative inline-flex">
+                {activeTool === 'quickSelect' ? <Sparkle size={17} /> : <WandSparkles size={17} />}
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+        ],
+      },
+      {
+        id: 'crop',
+        label: 'Crop',
+        tools: [
+          {
+            id: 'crop',
+            label: 'Crop & Rotate',
+            shortcut: 'C',
+            icon: <Crop size={17} />,
+          },
+        ],
+      },
+      {
+        id: 'paint',
+        label: 'Paint',
+        tools: [
+          {
+            id: 'brushMenu',
+            label: 'Brush — color & size',
+            shortcut: 'B',
+            icon: (
+              <span className="relative inline-flex">
+                <Paintbrush size={17} />
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+          {
+            id: 'eraser',
+            label: 'Eraser',
+            shortcut: 'E',
+            icon: <Eraser size={17} />,
+          },
+          {
+            id: 'fill',
+            label: 'Paint Bucket',
+            shortcut: 'G',
+            icon: <PaintBucket size={17} />,
+          },
+          {
+            id: 'gradient',
+            label: 'Gradient',
+            shortcut: 'Shift+G',
+            icon: <Blend size={17} />,
+          },
+        ],
+      },
+      {
+        id: 'tone',
+        label: 'Tone',
+        tools: [
+          {
+            id: 'blur',
+            label: 'Blur',
+            shortcut: 'R',
+            icon: <Droplets size={17} />,
+          },
+          {
+            id: 'sharpenTool',
+            label: 'Sharpen',
+            shortcut: 'Shift+S',
+            icon: <Aperture size={17} />,
+          },
+          {
+            id: 'dodge',
+            label: 'Dodge — lighten',
+            shortcut: 'O',
+            icon: <SunMedium size={17} />,
+          },
+          {
+            id: 'burn',
+            label: 'Burn — darken',
+            shortcut: 'Shift+O',
+            icon: <Moon size={17} />,
+          },
+          {
+            id: 'refineBrush',
+            label: 'Edge Refinement',
+            shortcut: 'Shift+R',
+            icon: <Sparkles size={17} />,
+          },
+        ],
+      },
+      {
+        id: 'retouch',
+        label: 'Retouch',
+        tools: [
+          {
+            id: 'healMenu',
+            label: 'Healing Tools',
+            shortcut: 'J',
+            icon: (
+              <span className="relative inline-flex">
+                {activeTool === 'patch' ? <BoxSelect size={17} /> : <Bandage size={17} />}
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+          {
+            id: 'clone',
+            label: 'Clone Stamp',
+            shortcut: 'S',
+            icon: <Stamp size={17} />,
+          },
+        ],
+      },
+      {
+        id: 'draw',
+        label: 'Draw',
+        tools: [
+          {
+            id: 'eyedropper',
+            label: 'Eyedropper',
+            shortcut: 'I',
+            icon: <Pipette size={17} />,
+          },
+          {
+            id: 'text',
+            label: 'Type',
+            shortcut: 'T',
+            icon: <Type size={17} />,
+          },
+          {
+            id: 'pen',
+            label: 'Pen',
+            shortcut: 'P',
+            icon: <PenTool size={17} />,
+          },
+          {
+            id: 'shape',
+            label: 'Shape',
+            shortcut: 'U',
+            icon: (
+              <span className="relative inline-flex">
+                {activeShapeType === 'circle' || activeShapeType === 'ellipse' ? (
+                  <Circle size={17} />
+                ) : activeShapeType === 'arrow' ? (
+                  <ArrowRight size={17} />
+                ) : activeShapeType === 'star' ? (
+                  <Star size={17} />
+                ) : activeShapeType === 'callout' ? (
+                  <MessageSquare size={17} />
+                ) : (
+                  <Square size={17} />
+                )}
+                <FlyoutChevron />
+              </span>
+            ),
+          },
+        ],
+      },
+      {
+        id: 'view',
+        label: 'View',
+        tools: [
+          {
+            id: 'liquify',
+            label: 'Liquify',
+            shortcut: 'Shift+X',
+            icon: <Waves size={17} />,
+          },
+          {
+            id: 'transform',
+            label: 'Transform',
+            shortcut: 'Shift+T',
+            icon: <Move3d size={17} />,
+          },
+          {
+            id: 'beforeAfter',
+            label: 'Before / After',
+            shortcut: '\\',
+            icon: <GitCompare size={17} />,
+          },
+        ],
+      },
+    ],
+    [activeShapeType, activeTool, marqueeMode]
+  );
+
+  /** Always pinned — Hand / Zoom stay reachable without scrolling the rail. */
+  const viewDock: { id: ToolId; label: string; shortcut: string; icon: React.ReactNode }[] = [
+    { id: 'hand', label: 'Hand (Pan)', shortcut: 'H', icon: <Hand size={17} /> },
+    { id: 'zoom', label: 'Zoom', shortcut: 'Z', icon: <Search size={17} /> },
   ];
 
-  // Flyouts anchor to their tool button: 36px button + 2px gap per row, 9px per separator.
-  const flyoutTop = (id: ToolItem['id']) => {
+  // Flyouts: 36px button; ~13px group divider
+  const flyoutTop = (id: ToolId) => {
     let top = 0;
-    for (const t of tools) {
-      if (t.separator) top += 9;
-      if (t.id === id) return top;
-      top += 38;
+    for (const group of groups) {
+      top += 13; // group head
+      for (const t of group.tools) {
+        if (t.id === id) return top - scrollTop;
+        top += 38;
+      }
     }
-    return top - scrollTop;
+    return 0;
   };
 
   const shapes: { type: ShapeType; label: string; icon: React.ReactNode }[] = [
@@ -326,9 +380,21 @@ export const ToolsPanel: React.FC = () => {
     setShowShapeMenu(false);
     setShowMarqueeMenu(false);
     setShowBrushMenu(false);
+    setShowLassoMenu(false);
+    setShowHealMenu(false);
+    setShowWandMenu(false);
   };
 
-  const handleToolClick = (toolId: ToolItem['id']) => {
+  const isToolActive = (id: ToolId) => {
+    if (id === 'marqueeMenu') return activeTool === 'marquee';
+    if (id === 'brushMenu') return activeTool === 'brush';
+    if (id === 'lassoMenu') return LASSO_TOOLS.includes(activeTool);
+    if (id === 'healMenu') return HEAL_TOOLS.includes(activeTool);
+    if (id === 'wandMenu') return WAND_TOOLS.includes(activeTool);
+    return activeTool === id;
+  };
+
+  const handleToolClick = (toolId: ToolId) => {
     if (toolId === 'beforeAfter') {
       setBeforeAfterOpen(true);
       closeMenus();
@@ -338,88 +404,125 @@ export const ToolsPanel: React.FC = () => {
       setShowMarqueeMenu((v) => !v);
       setShowShapeMenu(false);
       setShowBrushMenu(false);
+      setShowLassoMenu(false);
+      setShowHealMenu(false);
+      setShowWandMenu(false);
       setActiveTool('marquee');
+      return;
+    }
+    if (toolId === 'lassoMenu') {
+      setShowLassoMenu((v) => !v);
+      setShowMarqueeMenu(false);
+      setShowShapeMenu(false);
+      setShowBrushMenu(false);
+      setShowHealMenu(false);
+      setShowWandMenu(false);
+      if (!LASSO_TOOLS.includes(activeTool)) setActiveTool('lasso');
+      return;
+    }
+    if (toolId === 'healMenu') {
+      setShowHealMenu((v) => !v);
+      setShowMarqueeMenu(false);
+      setShowShapeMenu(false);
+      setShowBrushMenu(false);
+      setShowLassoMenu(false);
+      setShowWandMenu(false);
+      if (!HEAL_TOOLS.includes(activeTool)) setActiveTool('spotHealing');
+      return;
+    }
+    if (toolId === 'wandMenu') {
+      setShowWandMenu((v) => !v);
+      setShowMarqueeMenu(false);
+      setShowShapeMenu(false);
+      setShowBrushMenu(false);
+      setShowLassoMenu(false);
+      setShowHealMenu(false);
+      if (!WAND_TOOLS.includes(activeTool)) setActiveTool('wand');
       return;
     }
     if (toolId === 'brushMenu') {
       setShowBrushMenu((v) => !v);
       setShowShapeMenu(false);
       setShowMarqueeMenu(false);
+      setShowLassoMenu(false);
+      setShowHealMenu(false);
+      setShowWandMenu(false);
       setActiveTool('brush');
       return;
     }
-    if (toolId === 'text') {
-      closeMenus();
-      setActiveTool('text');
-    } else if (toolId === 'shape') {
+    if (toolId === 'shape') {
       setShowShapeMenu((v) => !v);
       setShowMarqueeMenu(false);
       setShowBrushMenu(false);
+      setShowLassoMenu(false);
+      setShowHealMenu(false);
+      setShowWandMenu(false);
       setActiveTool('shape');
-    } else {
-      closeMenus();
-      setActiveTool(toolId as ToolType);
+      return;
     }
+    closeMenus();
+    setActiveTool(toolId as ToolType);
   };
 
   return (
     <>
       <aside
-        className="shell-tools w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2.5 z-40 select-none justify-between"
+        className="shell-tools tools-rail w-13 bg-[var(--bg-panel)] border-r border-[var(--border-subtle)] flex flex-col items-center py-2 z-40 select-none justify-between"
         data-tour="tour-tools"
         aria-label="Tools"
       >
         <div className="relative flex-1 min-h-0 w-full">
-        <div
-          onScroll={(e) => {
-            setScrollTop(e.currentTarget.scrollTop);
-            setHoverTip(null);
-          }}
-          className="tools-scroll h-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-0.5 w-full px-1.5 pb-2"
-        >
-          {tools.map((tool) => {
-            const isActive =
-              tool.id === 'marqueeMenu'
-                ? activeTool === 'marquee'
-                : tool.id === 'brushMenu'
-                  ? activeTool === 'brush'
-                  : activeTool === tool.id;
-
-            return (
-              <React.Fragment key={tool.id}>
-                {tool.separator && <div className="w-6 h-[1px] bg-[var(--border-subtle)] my-1" />}
-                <div
-                  className="relative group w-full flex justify-center"
-                  onMouseEnter={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    setHoverTip({
-                      label: tool.label,
-                      shortcut: tool.shortcut,
-                      top: r.top + r.height / 2,
-                      left: r.right + 8,
-                    });
-                  }}
-                  onMouseLeave={() => setHoverTip(null)}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleToolClick(tool.id)}
-                    aria-label={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
-                    aria-pressed={isActive}
-                    className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
-                      isActive
-                        ? 'tool-btn-active bg-[var(--accent)] text-[#1a1208]'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
-                    }`}
-                  >
-                    {tool.icon}
-                  </button>
-
+          <div
+            onScroll={(e) => {
+              setScrollTop(e.currentTarget.scrollTop);
+              setHoverTip(null);
+            }}
+            className="tools-scroll h-full overflow-y-auto overflow-x-hidden flex flex-col items-center gap-0 w-full px-1.5 pb-2"
+          >
+            {groups.map((group) => (
+              <div key={group.id} className="tools-group w-full flex flex-col items-center">
+                <div className="tools-group__rule" title={group.label} aria-hidden>
+                  <span className="tools-group__tick" />
                 </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
+                <span className="sr-only">{group.label}</span>
+                {group.tools.map((tool) => {
+                  const isActive = isToolActive(tool.id);
+                  return (
+                    <div
+                      key={tool.id}
+                      className="relative group w-full flex justify-center"
+                      onMouseEnter={(e) => {
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setHoverTip({
+                          label: tool.label,
+                          shortcut: tool.shortcut,
+                          top: r.top + r.height / 2,
+                          left: r.right + 8,
+                        });
+                      }}
+                      onMouseLeave={() => setHoverTip(null)}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleToolClick(tool.id)}
+                        aria-label={
+                          tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label
+                        }
+                        aria-pressed={isActive}
+                        className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
+                          isActive
+                            ? 'tool-btn-active'
+                            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                        }`}
+                      >
+                        {tool.icon}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
 
           <AnimatedMenu
             open={showBrushMenu}
@@ -507,6 +610,139 @@ export const ToolsPanel: React.FC = () => {
           </AnimatedMenu>
 
           <AnimatedMenu
+            open={showLassoMenu}
+            onClose={() => setShowLassoMenu(false)}
+            origin="left"
+            widthClass="w-52"
+            className="left-full ml-2"
+            style={{ top: flyoutTop('lassoMenu') }}
+            closeOnLeave={false}
+          >
+            <MenuLabel>Lasso</MenuLabel>
+            {(
+              [
+                { id: 'lasso' as const, label: 'Freehand Lasso', icon: <Lasso size={14} />, shortcut: 'L' },
+                {
+                  id: 'polyLasso' as const,
+                  label: 'Polygonal',
+                  icon: <Hexagon size={14} />,
+                  shortcut: 'Shift+L',
+                },
+                {
+                  id: 'magneticLasso' as const,
+                  label: 'Magnetic',
+                  icon: <Magnet size={14} />,
+                },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setActiveTool(item.id);
+                  setShowLassoMenu(false);
+                }}
+                className={`menu-item ${activeTool === item.id ? 'menu-item--active' : ''}`}
+              >
+                <span className="menu-item-label">
+                  {item.icon} {item.label}
+                </span>
+                {'shortcut' in item && item.shortcut ? (
+                  <span className="menu-item-hint">{item.shortcut}</span>
+                ) : null}
+              </button>
+            ))}
+          </AnimatedMenu>
+
+          <AnimatedMenu
+            open={showWandMenu}
+            onClose={() => setShowWandMenu(false)}
+            origin="left"
+            widthClass="w-52"
+            className="left-full ml-2"
+            style={{ top: flyoutTop('wandMenu') }}
+            closeOnLeave={false}
+          >
+            <MenuLabel>Select</MenuLabel>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTool('wand');
+                setShowWandMenu(false);
+              }}
+              className={`menu-item ${activeTool === 'wand' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <WandSparkles size={14} /> Magic Wand
+              </span>
+              <span className="menu-item-hint">W</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTool('quickSelect');
+                setShowWandMenu(false);
+              }}
+              className={`menu-item ${activeTool === 'quickSelect' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <Sparkle size={14} /> Quick Select
+              </span>
+              <span className="menu-item-hint">Shift+W</span>
+            </button>
+          </AnimatedMenu>
+
+          <AnimatedMenu
+            open={showHealMenu}
+            onClose={() => setShowHealMenu(false)}
+            origin="left"
+            widthClass="w-56"
+            className="left-full ml-2"
+            style={{ top: flyoutTop('healMenu') }}
+            closeOnLeave={false}
+          >
+            <MenuLabel>Healing</MenuLabel>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTool('spotHealing');
+                setShowHealMenu(false);
+              }}
+              className={`menu-item ${activeTool === 'spotHealing' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <Bandage size={14} /> Spot Healing
+              </span>
+              <span className="menu-item-hint">J</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTool('healing');
+                setShowHealMenu(false);
+              }}
+              className={`menu-item ${activeTool === 'healing' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <Bandage size={14} /> Healing Brush
+              </span>
+              <span className="menu-item-hint">Shift+J</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTool('patch');
+                setShowHealMenu(false);
+              }}
+              className={`menu-item ${activeTool === 'patch' ? 'menu-item--active' : ''}`}
+            >
+              <span className="menu-item-label">
+                <BoxSelect size={14} /> Patch
+              </span>
+            </button>
+          </AnimatedMenu>
+
+          <AnimatedMenu
             open={showShapeMenu}
             onClose={() => setShowShapeMenu(false)}
             origin="left"
@@ -536,7 +772,40 @@ export const ToolsPanel: React.FC = () => {
           </AnimatedMenu>
         </div>
 
-        <div className="flex flex-col items-center gap-2 pb-2">
+        <div className="tools-view-dock flex flex-col items-center gap-0.5 w-full px-1.5 pt-1.5 border-t border-[var(--border-subtle)]">
+          {viewDock.map((tool) => {
+            const isActive = activeTool === tool.id;
+            return (
+              <button
+                key={tool.id}
+                type="button"
+                title={`${tool.label} (${tool.shortcut})`}
+                aria-label={`${tool.label} (${tool.shortcut})`}
+                aria-pressed={isActive}
+                onClick={() => handleToolClick(tool.id)}
+                onMouseEnter={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setHoverTip({
+                    label: tool.label,
+                    shortcut: tool.shortcut,
+                    top: r.top + r.height / 2,
+                    left: r.right + 8,
+                  });
+                }}
+                onMouseLeave={() => setHoverTip(null)}
+                className={`tool-btn w-9 h-9 flex items-center justify-center rounded-[var(--radius-sm)] cursor-pointer ${
+                  isActive
+                    ? 'tool-btn-active'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]'
+                }`}
+              >
+                {tool.icon}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="tools-colors flex flex-col items-center gap-2 pb-2 pt-1 border-t border-[var(--border-subtle)] w-full">
           {(activeTool === 'eyedropper' ||
             activeTool === 'brush' ||
             activeTool === 'fill' ||
@@ -577,6 +846,7 @@ export const ToolsPanel: React.FC = () => {
 
           <div className="flex items-center gap-1 text-[var(--text-faint)]">
             <button
+              type="button"
               onClick={swapBrushColors}
               title="Swap Colors (X)"
               className="p-1 hover:text-[var(--text-primary)] cursor-pointer"
@@ -584,6 +854,7 @@ export const ToolsPanel: React.FC = () => {
               <ArrowLeftRight size={11} />
             </button>
             <button
+              type="button"
               onClick={resetBrushColors}
               title="Default Colors (D)"
               className="w-2.5 h-2.5 rounded-sm bg-[var(--border-strong)] hover:bg-[var(--accent)] cursor-pointer"

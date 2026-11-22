@@ -3,7 +3,7 @@ import { Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'pulsoicon-reac
 import { useEditorStore } from '../../../store/editorStore';
 import { FontPicker } from '../../ui/FontPicker';
 import { loadGoogleFont } from '../../../utils/googleFonts';
-import { ColorOpt, OptHint, SizeOpt } from '../../ui/OptionControls';
+import { ColorOpt, NumOpt, OptHint, OptSep } from '../../ui/OptionControls';
 
 export const TextOptions: React.FC = () => {
   const textSettings = useEditorStore((s) => s.textSettings);
@@ -11,64 +11,99 @@ export const TextOptions: React.FC = () => {
   const layers = useEditorStore((s) => s.layers);
   const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
   const updateLayer = useEditorStore((s) => s.updateLayer);
+  const canvasWidth = useEditorStore((s) => s.canvasWidth);
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
+  const isText = selectedLayer?.type === 'text';
+
+  const apply = <K extends keyof typeof textSettings>(
+    key: K,
+    value: (typeof textSettings)[K]
+  ) => {
+    updateTextSettings({ [key]: value } as Partial<typeof textSettings>);
+    if (isText) {
+      updateLayer(selectedLayer.id, { [key]: value } as Partial<typeof selectedLayer>);
+    }
+  };
+
+  const fontFamily = isText ? selectedLayer.fontFamily : textSettings.fontFamily;
+  const fontSize = isText ? selectedLayer.fontSize : textSettings.fontSize;
+  const fontStyle = isText ? selectedLayer.fontStyle : textSettings.fontStyle;
+  const align = isText ? selectedLayer.align : textSettings.align;
+  const fill = isText ? selectedLayer.fill : textSettings.fill;
+  const stroke = isText ? selectedLayer.stroke || textSettings.stroke : textSettings.stroke;
+  const strokeWidth = isText ? selectedLayer.strokeWidth ?? 0 : textSettings.strokeWidth;
+  const letterSpacing = isText ? selectedLayer.letterSpacing : textSettings.letterSpacing;
+  const lineHeight = isText ? selectedLayer.lineHeight : textSettings.lineHeight;
+  const boxWidth = isText ? selectedLayer.width : 240;
 
   return (
-    <div className="flex items-center gap-2.5">
-      {selectedLayer?.type !== 'text' && (
-        <OptHint>Set style below · click canvas to place</OptHint>
-      )}
+    <div className="type-options flex flex-nowrap items-center gap-2 min-w-0">
+      {!isText && <OptHint>Click canvas to place</OptHint>}
+
       <FontPicker
-        value={
-          selectedLayer?.type === 'text'
-            ? selectedLayer.fontFamily
-            : textSettings.fontFamily
-        }
+        value={fontFamily}
         onChange={async (family) => {
           await loadGoogleFont(family);
-          updateTextSettings({ fontFamily: family });
-          if (selectedLayer?.type === 'text') {
-            updateLayer(selectedLayer.id, { fontFamily: family });
-          }
+          apply('fontFamily', family);
         }}
       />
-      <SizeOpt
+
+      <NumOpt
         label="Size"
-        value={
-          selectedLayer?.type === 'text' ? selectedLayer.fontSize : textSettings.fontSize
-        }
+        value={fontSize}
         min={8}
-        max={200}
+        max={400}
         unit="px"
-        onCommit={(fontSize) => {
-          updateTextSettings({ fontSize });
-          if (selectedLayer?.type === 'text') {
-            updateLayer(selectedLayer.id, { fontSize });
-          }
-        }}
+        widthClass="w-12"
+        onCommit={(v) => apply('fontSize', v)}
       />
-      <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
+      <NumOpt
+        label="Lead"
+        value={Math.round(lineHeight * 100)}
+        min={80}
+        max={250}
+        unit="%"
+        widthClass="w-11"
+        onCommit={(v) => apply('lineHeight', Math.round(v) / 100)}
+      />
+      {isText && (
+        <NumOpt
+          label="Box"
+          value={Math.round(boxWidth)}
+          min={40}
+          max={Math.max(canvasWidth, 800)}
+          unit="px"
+          widthClass="w-12"
+          onCommit={(width) => {
+            updateLayer(selectedLayer.id, {
+              width,
+              height: Math.max(
+                fontSize * lineHeight,
+                Math.round(
+                  fontSize * lineHeight * Math.max(1, selectedLayer.text.split('\n').length)
+                )
+              ),
+            });
+          }}
+        />
+      )}
+
+      <OptSep />
+
+      <div className="flex shrink-0 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
         <button
+          type="button"
+          title="Bold"
           onClick={() => {
-            const current =
-              selectedLayer?.type === 'text'
-                ? selectedLayer.fontStyle
-                : textSettings.fontStyle;
-            const next = current.includes('bold')
-              ? (current.replace('bold', '').trim() || 'normal')
-              : current.includes('italic')
+            const next = fontStyle.includes('bold')
+              ? (fontStyle.replace('bold', '').trim() || 'normal')
+              : fontStyle.includes('italic')
                 ? 'bold italic'
                 : 'bold';
-            updateTextSettings({ fontStyle: next as typeof textSettings.fontStyle });
-            if (selectedLayer?.type === 'text') {
-              updateLayer(selectedLayer.id, { fontStyle: next as typeof textSettings.fontStyle });
-            }
+            apply('fontStyle', next as typeof textSettings.fontStyle);
           }}
           className={`p-1 rounded cursor-pointer ${
-            (selectedLayer?.type === 'text'
-              ? selectedLayer.fontStyle
-              : textSettings.fontStyle
-            ).includes('bold')
+            fontStyle.includes('bold')
               ? 'bg-[var(--accent)] text-[#1a1208]'
               : 'text-[var(--text-muted)]'
           }`}
@@ -76,26 +111,18 @@ export const TextOptions: React.FC = () => {
           <Bold size={12} />
         </button>
         <button
+          type="button"
+          title="Italic"
           onClick={() => {
-            const current =
-              selectedLayer?.type === 'text'
-                ? selectedLayer.fontStyle
-                : textSettings.fontStyle;
-            const next = current.includes('italic')
-              ? (current.replace('italic', '').trim() || 'normal')
-              : current.includes('bold')
+            const next = fontStyle.includes('italic')
+              ? (fontStyle.replace('italic', '').trim() || 'normal')
+              : fontStyle.includes('bold')
                 ? 'bold italic'
                 : 'italic';
-            updateTextSettings({ fontStyle: next as typeof textSettings.fontStyle });
-            if (selectedLayer?.type === 'text') {
-              updateLayer(selectedLayer.id, { fontStyle: next as typeof textSettings.fontStyle });
-            }
+            apply('fontStyle', next as typeof textSettings.fontStyle);
           }}
           className={`p-1 rounded cursor-pointer ${
-            (selectedLayer?.type === 'text'
-              ? selectedLayer.fontStyle
-              : textSettings.fontStyle
-            ).includes('italic')
+            fontStyle.includes('italic')
               ? 'bg-[var(--accent)] text-[#1a1208]'
               : 'text-[var(--text-muted)]'
           }`}
@@ -103,26 +130,21 @@ export const TextOptions: React.FC = () => {
           <Italic size={12} />
         </button>
       </div>
-      <div className="flex bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
-        {(['left', 'center', 'right'] as const).map((align) => (
+
+      <div className="flex shrink-0 bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] p-0.5">
+        {(['left', 'center', 'right'] as const).map((a) => (
           <button
-            key={align}
-            onClick={() => {
-              updateTextSettings({ align });
-              if (selectedLayer?.type === 'text') {
-                updateLayer(selectedLayer.id, { align });
-              }
-            }}
+            key={a}
+            type="button"
+            title={`Align ${a}`}
+            onClick={() => apply('align', a)}
             className={`p-1 rounded cursor-pointer ${
-              (selectedLayer?.type === 'text' ? selectedLayer.align : textSettings.align) ===
-              align
-                ? 'bg-[var(--accent)] text-[#1a1208]'
-                : 'text-[var(--text-muted)]'
+              align === a ? 'bg-[var(--accent)] text-[#1a1208]' : 'text-[var(--text-muted)]'
             }`}
           >
-            {align === 'left' ? (
+            {a === 'left' ? (
               <AlignLeft size={12} />
-            ) : align === 'center' ? (
+            ) : a === 'center' ? (
               <AlignCenter size={12} />
             ) : (
               <AlignRight size={12} />
@@ -130,70 +152,37 @@ export const TextOptions: React.FC = () => {
           </button>
         ))}
       </div>
-      <ColorOpt
-        label="Fill"
-        value={selectedLayer?.type === 'text' ? selectedLayer.fill : textSettings.fill}
-        onChange={(fill) => {
-          updateTextSettings({ fill });
-          if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { fill });
-        }}
-      />
+
+      <OptSep />
+
+      <ColorOpt label="Fill" value={fill} onChange={(v) => apply('fill', v)} />
       <ColorOpt
         label="Stroke"
-        value={
-          selectedLayer?.type === 'text'
-            ? selectedLayer.stroke || textSettings.stroke
-            : textSettings.stroke
-        }
-        onChange={(stroke) => {
-          updateTextSettings({ stroke });
-          if (selectedLayer?.type === 'text') updateLayer(selectedLayer.id, { stroke });
-        }}
+        value={stroke}
+        onChange={(v) => apply('stroke', v)}
         allowNone
-        isNone={
-          (selectedLayer?.type === 'text'
-            ? selectedLayer.strokeWidth ?? 0
-            : textSettings.strokeWidth) === 0
-        }
+        isNone={strokeWidth === 0}
         onNone={() => {
-          updateTextSettings({ strokeWidth: 0, stroke: 'transparent' });
-          if (selectedLayer?.type === 'text') {
-            updateLayer(selectedLayer.id, { strokeWidth: 0, stroke: 'transparent' });
-          }
+          apply('strokeWidth', 0);
+          apply('stroke', 'transparent');
         }}
       />
-      <SizeOpt
-        label="Weight"
-        value={
-          selectedLayer?.type === 'text'
-            ? selectedLayer.strokeWidth ?? 0
-            : textSettings.strokeWidth
-        }
+      <NumOpt
+        label="Wt"
+        value={strokeWidth}
         min={0}
         max={12}
         unit="px"
-        onCommit={(strokeWidth) => {
-          updateTextSettings({ strokeWidth });
-          if (selectedLayer?.type === 'text') {
-            updateLayer(selectedLayer.id, { strokeWidth });
-          }
-        }}
+        widthClass="w-9"
+        onCommit={(v) => apply('strokeWidth', v)}
       />
-      <SizeOpt
+      <NumOpt
         label="Track"
-        value={
-          selectedLayer?.type === 'text'
-            ? selectedLayer.letterSpacing
-            : textSettings.letterSpacing
-        }
+        value={letterSpacing}
         min={-20}
         max={40}
-        onCommit={(letterSpacing) => {
-          updateTextSettings({ letterSpacing });
-          if (selectedLayer?.type === 'text') {
-            updateLayer(selectedLayer.id, { letterSpacing });
-          }
-        }}
+        widthClass="w-9"
+        onCommit={(v) => apply('letterSpacing', v)}
       />
     </div>
   );

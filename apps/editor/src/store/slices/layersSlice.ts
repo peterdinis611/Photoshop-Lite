@@ -1,10 +1,11 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
-import type { EditorLayer, ImageLayer, TextLayer, ShapeLayer, DrawingLayer, PathLayer, PathAnchor, ShapeType, BlendMode, AdjustmentLayer, AdjustmentLayerKind, GradientLayer, GroupLayer } from '../../types/editor';
+import type { EditorLayer, ImageLayer, LottieLayer, TextLayer, ShapeLayer, DrawingLayer, PathLayer, PathAnchor, ShapeType, BlendMode, AdjustmentLayer, AdjustmentLayerKind, GradientLayer, GroupLayer } from '../../types/editor';
 import { normalizeAnchors, pathBounds } from '../../utils/pathHelpers';
 import { DEFAULT_ADJUSTMENTS, deepClone, DEFAULT_CURVES, DEFAULT_LEVELS, createLinearGradientDataUrl, createRadialGradientDataUrl } from '@photoshop-lite/editor-core';
 import { exportDocumentToDataUrl } from '@photoshop-lite/editor-konva';
 import { uniqueLayerName, makeId, ADJUSTMENT_LABELS, flattenPathLayer, loadImageElement } from '../helpers';
+import { rasterizeLottieFrame } from '../../utils/lottieFiles';
 
 export interface LayersSlice {
   layers: EditorLayer[];
@@ -31,6 +32,13 @@ export interface LayersSlice {
   toggleLayerMask: (id: string) => void;
   paintLayerMask: (id: string, maskDataUrl: string) => void;
   addImageLayer: (src: string, name?: string, naturalWidth?: number, naturalHeight?: number) => void;
+  addLottieLayer: (
+    animationData: Record<string, unknown>,
+    name?: string,
+    naturalWidth?: number,
+    naturalHeight?: number
+  ) => void;
+  bakeLottieLayer: (id?: string) => Promise<void>;
   addTextLayer: (position?: { x: number; y: number }) => void;
   addShapeLayer: (type?: ShapeType) => void;
   addPathLayer: (anchors: PathAnchor[], closed?: boolean) => void;
@@ -205,6 +213,82 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
       selectedLayerId: newLayer.id,
       isDocumentOpen: true,
     }));
+  },
+
+  addLottieLayer: (animationData, name = 'Lottie', naturalWidth, naturalHeight) => {
+    const state = get();
+    let { canvasWidth, canvasHeight } = state;
+    const w = Math.max(1, Math.round(naturalWidth || Number(animationData.w) || 512));
+    const h = Math.max(1, Math.round(naturalHeight || Number(animationData.h) || 512));
+
+    let targetW = w;
+    let targetH = h;
+    let x = 0;
+    let y = 0;
+
+    if (state.layers.length === 0) {
+      canvasWidth = w;
+      canvasHeight = h;
+      set({ canvasWidth, canvasHeight });
+    } else {
+      const maxAllowedW = canvasWidth * 0.85;
+      const maxAllowedH = canvasHeight * 0.85;
+      if (targetW > maxAllowedW || targetH > maxAllowedH) {
+        const scale = Math.min(maxAllowedW / targetW, maxAllowedH / targetH);
+        targetW = Math.round(targetW * scale);
+        targetH = Math.round(targetH * scale);
+      }
+      x = Math.round((canvasWidth - targetW) / 2);
+      y = Math.round((canvasHeight - targetH) / 2);
+    }
+
+    const newLayer: LottieLayer = {
+      id: `${Date.now()}_lottie_${Math.random().toString(36).substring(2, 6)}`,
+      name: uniqueLayerName(name, state.layers),
+      type: 'lottie',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      blendMode: 'source-over',
+      x,
+      y,
+      width: targetW,
+      height: targetH,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      animationData: structuredClone(animationData),
+      sourceName: name,
+      loop: true,
+      playing: true,
+      speed: 1,
+      intrinsicWidth: w,
+      intrinsicHeight: h,
+    };
+
+    get().commitHistory(`Add ${newLayer.name}`);
+    set((s) => ({
+      layers: [...s.layers, newLayer],
+      selectedLayerId: newLayer.id,
+      isDocumentOpen: true,
+    }));
+  },
+
+  bakeLottieLayer: async (id) => {
+    const layerId = id ?? get().selectedLayerId;
+    const layer = get().layers.find((l) => l.id === layerId);
+    if (!layer || layer.type !== 'lottie') return;
+
+    try {
+      const src = await rasterizeLottieFrame(
+        layer.animationData,
+        layer.width,
+        layer.height
+      );
+      get().addImageLayer(src, `${layer.name} Frame`, layer.width, layer.height);
+    } catch {
+      /* caller may toast */
+    }
   },
 
   addTextLayer: (position) => {

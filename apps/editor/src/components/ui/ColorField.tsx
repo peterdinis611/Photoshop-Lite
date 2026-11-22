@@ -32,13 +32,17 @@ export const ColorField: React.FC<ColorFieldProps> = ({
 }) => {
   const swatch = size === 'sm' ? 'w-6 h-6' : 'w-8 h-8';
 
+  const compact = size === 'sm';
+
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {label && <span className="text-[var(--text-faint)] shrink-0">{label}</span>}
+    <div className={`flex items-center gap-1.5 ${compact ? 'flex-nowrap' : 'flex-wrap'}`}>
+      {label && (
+        <span className="text-[var(--text-faint)] shrink-0 text-[10px]">{label}</span>
+      )}
       <label
         className={`relative ${swatch} rounded-[var(--radius-sm)] border-2 border-[var(--border-strong)] shadow-inner cursor-pointer overflow-hidden shrink-0 ring-offset-1 hover:ring-1 hover:ring-[var(--accent)]`}
         style={{ backgroundColor: value }}
-        title="Pick color"
+        title={label ? `${label}: ${value}` : 'Pick color'}
       >
         <input
           type="color"
@@ -57,7 +61,8 @@ export const ColorField: React.FC<ColorFieldProps> = ({
           }
         }}
         spellCheck={false}
-        className="w-[4.5rem] bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-1.5 py-0.5 font-mono-ui text-[10px] text-[var(--text-primary)] uppercase outline-none focus:border-[var(--accent)]"
+        aria-label={label ? `${label} hex` : 'Color hex'}
+        className={`${compact ? 'w-[3.6rem]' : 'w-[4.5rem]'} bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-1 py-0.5 font-mono-ui text-[10px] text-[var(--text-primary)] uppercase outline-none focus:border-[var(--accent)] shrink-0`}
       />
       {showPresets && (
         <div className="flex items-center gap-1 flex-wrap">

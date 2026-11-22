@@ -94,7 +94,11 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       text={layer.text}
       x={layer.x}
       y={layer.y}
-      width={layer.width}
+      width={Math.max(40, layer.width)}
+      height={Math.max(
+        layer.fontSize * layer.lineHeight,
+        layer.height || layer.fontSize * layer.lineHeight
+      )}
       scaleX={layer.scaleX}
       scaleY={layer.scaleY}
       rotation={layer.rotation}
@@ -112,6 +116,8 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       draggable={canMove}
       listening={canMove || activeTool === 'text'}
       globalCompositeOperation={layer.blendMode}
+      // Hit the whole box, not just glyph pixels — Move needs a solid drag target
+      hitStrokeWidth={Math.max(12, layer.fontSize)}
       shadowColor={useGlow ? styles.outerGlowColor || '#e8a84a' : styles.shadowColor}
       shadowBlur={useGlow ? styles.outerGlowBlur || 0 : styles.shadowBlur || 0}
       shadowOffset={
@@ -133,12 +139,23 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       onTransformEnd={() => {
         const node = textRef.current;
         if (!node) return;
+        const sx = node.scaleX();
+        const sy = node.scaleY();
+        // Bake scale into box width + font size so Size / Box W stay editable
+        const nextWidth = Math.max(40, Math.round(Math.abs(node.width() * sx)));
+        const nextFontSize = Math.max(8, Math.round(layer.fontSize * Math.abs(sy)));
+        const lines = Math.max(1, layer.text.split('\n').length);
+        node.scaleX(sx < 0 ? -1 : 1);
+        node.scaleY(sy < 0 ? -1 : 1);
         onChange({
           x: Math.round(node.x()),
           y: Math.round(node.y()),
           rotation: Math.round(node.rotation()),
-          scaleX: node.scaleX(),
-          scaleY: node.scaleY(),
+          width: nextWidth,
+          height: Math.max(nextFontSize, Math.round(nextFontSize * layer.lineHeight * lines)),
+          fontSize: nextFontSize,
+          scaleX: sx < 0 ? -1 : 1,
+          scaleY: sy < 0 ? -1 : 1,
         });
       }}
     />

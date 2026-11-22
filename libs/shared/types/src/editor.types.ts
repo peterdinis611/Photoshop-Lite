@@ -151,6 +151,23 @@ export interface ImageLayer extends BaseLayer {
   smartObjectSrc?: string; // linked original
 }
 
+/** Bodymovin / Lottie animation layer (JSON or unpacked .lottie). */
+export interface LottieLayer extends BaseLayer {
+  type: 'lottie';
+  /** Bodymovin animation JSON (mutated by the player — keep a structured clone on load). */
+  animationData: Record<string, unknown>;
+  /** Original file basename without extension */
+  sourceName?: string;
+  loop: boolean;
+  /** Whether the timeline is currently advancing */
+  playing: boolean;
+  /** Playback rate (0.1–3) */
+  speed: number;
+  /** Intrinsic composition size from the Lottie file */
+  intrinsicWidth: number;
+  intrinsicHeight: number;
+}
+
 export interface TextLayer extends BaseLayer {
   type: 'text';
   text: string;
@@ -249,6 +266,7 @@ export interface GroupLayer extends BaseLayer {
 
 export type EditorLayer =
   | ImageLayer
+  | LottieLayer
   | TextLayer
   | ShapeLayer
   | DrawingLayer

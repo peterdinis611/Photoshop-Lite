@@ -18,6 +18,11 @@ import {
   loadImageFiles,
   type LoadImageProgress,
 } from '../../utils/loadImageFiles';
+import {
+  collectLottieFiles,
+  LOTTIE_ACCEPT,
+  loadLottieFiles,
+} from '../../utils/lottieFiles';
 
 interface CanvasDropZoneProps {
   onImagesAdded?: () => void;
@@ -31,12 +36,13 @@ const PHASE_LABEL: Record<LoadImageProgress['phase'], string> = {
   error: 'Skipped frame',
 };
 
-const FORMAT_CHIPS = ['PNG', 'JPEG', 'WEBP', 'GIF', 'AVIF', 'HEIC'];
+const FORMAT_CHIPS = ['PNG', 'JPEG', 'WEBP', 'GIF', 'AVIF', 'LOTTIE'];
 
 export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded }) => {
   const layersCount = useEditorStore((s) => s.layers.length);
   const isDocumentOpen = useEditorStore((s) => s.isDocumentOpen);
   const addImageLayer = useEditorStore((s) => s.addImageLayer);
+  const addLottieLayer = useEditorStore((s) => s.addLottieLayer);
   const addTextLayer = useEditorStore((s) => s.addTextLayer);
   const addShapeLayer = useEditorStore((s) => s.addShapeLayer);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
@@ -60,26 +66,30 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
   const importFiles = useCallback(
     async (files: File[]) => {
       const images = collectImageFiles(files);
-      if (images.length === 0) {
-        setError('Drop PNG, JPEG, WEBP, GIF, or AVIF files');
+      const lotties = collectLottieFiles(files);
+      if (images.length === 0 && lotties.length === 0) {
+        setError('Drop PNG, JPEG, WEBP, GIF, AVIF, or Lottie (.json / .lottie)');
         window.setTimeout(() => setError(null), 2800);
         return;
       }
 
       setIsImporting(true);
       setError(null);
+      const firstName = images[0]?.name ?? lotties[0]?.name ?? 'file';
       setProgress({
-        fileName: images[0].name,
+        fileName: firstName,
         index: 0,
-        total: images.length,
+        total: Math.max(images.length + lotties.length, 1),
         phase: 'read',
         percent: 2,
       });
 
       try {
-        const loaded = await loadImageFiles(images, setProgress);
-        if (loaded.length === 0) {
-          setError('Could not read those images — try JPEG/PNG/WEBP');
+        const loaded = images.length ? await loadImageFiles(images, setProgress) : [];
+        const loadedLottie = lotties.length ? await loadLottieFiles(lotties) : [];
+
+        if (loaded.length === 0 && loadedLottie.length === 0) {
+          setError('Could not read those files — try JPEG/PNG/WEBP or Lottie JSON');
           window.setTimeout(() => setError(null), 3200);
           return;
         }
@@ -87,6 +97,9 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
         startTransition(() => {
           for (const img of loaded) {
             addImageLayer(img.src, img.name, img.width, img.height);
+          }
+          for (const anim of loadedLottie) {
+            addLottieLayer(anim.animationData, anim.name, anim.width, anim.height);
           }
         });
         window.setTimeout(() => onImagesAdded?.(), 140);
@@ -102,7 +115,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
         dragDepthRef.current = 0;
       }
     },
-    [addImageLayer, onImagesAdded]
+    [addImageLayer, addLottieLayer, onImagesAdded]
   );
 
   const pasteFromClipboard = useCallback(async () => {
@@ -206,7 +219,7 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
       <input
         ref={fileInputRef}
         type="file"
-        accept={IMAGE_ACCEPT}
+        accept={`${IMAGE_ACCEPT},${LOTTIE_ACCEPT}`}
         multiple
         className="hidden"
         onChange={onBrowse}
@@ -232,11 +245,11 @@ export const CanvasDropZone: React.FC<CanvasDropZoneProps> = ({ onImagesAdded })
               Empty stage
             </p>
             <h2 className="mt-2 font-display text-[1.55rem] font-extrabold tracking-tight text-[var(--text-primary)]">
-              Drop images here
+              Drop images or Lottie
             </h2>
             <p className="mx-auto mt-2 max-w-[34ch] text-[13px] leading-relaxed text-[var(--text-muted)]">
-              Large photos welcome — the document sizes to your image. Or start blank and build
-              layers.
+              Photos, .json Lottie, or .lottie packs. The document sizes to your first file — or
+              start blank and build layers.
             </p>
 
             <div className="drop-format-row">

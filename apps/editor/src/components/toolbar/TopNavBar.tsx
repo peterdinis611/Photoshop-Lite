@@ -24,6 +24,7 @@ import { useEditorStore } from '../../store/editorStore';
 import { findSampleImage } from '../../assets/loadSampleImages';
 import { PROJECT_FILE_EXTENSION, readProjectFile } from '../../utils/projectFile';
 import { IMAGE_ACCEPT, loadImageFiles } from '../../utils/loadImageFiles';
+import { isLottieFile, LOTTIE_ACCEPT, loadLottieFile } from '../../utils/lottieFiles';
 import { importPsdFile } from '../../utils/psdImport';
 import { notify } from '../../utils/notify';
 import {
@@ -122,6 +123,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     future,
     setExportModalOpen,
     addImageLayer,
+    addLottieLayer,
     removeBackground,
     selectLayer,
     aiStatus,
@@ -192,11 +194,30 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
     e.target.value = '';
     close();
     if (!files.length) return;
+
+    let placed = 0;
+    for (const file of files) {
+      if (isLottieFile(file)) {
+        try {
+          const anim = await loadLottieFile(file);
+          addLottieLayer(anim.animationData, anim.name, anim.width, anim.height);
+          placed += 1;
+        } catch (err) {
+          notify.error(
+            'Could not open Lottie',
+            err instanceof Error ? err.message : file.name
+          );
+        }
+        continue;
+      }
+    }
+
     const loaded = await loadImageFiles(files);
     for (const img of loaded) {
       addImageLayer(img.src, img.name, img.width, img.height);
+      placed += 1;
     }
-    if (loaded.length) onFitToScreen();
+    if (placed) onFitToScreen();
   };
 
   const handleProjectFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -315,7 +336,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
       <input
         ref={fileInputRef}
         type="file"
-        accept={IMAGE_ACCEPT}
+        accept={`${IMAGE_ACCEPT},${LOTTIE_ACCEPT}`}
         multiple
         className="hidden"
         onChange={handleFileChange}

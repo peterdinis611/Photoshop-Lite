@@ -45,10 +45,56 @@ export const SizeOpt: React.FC<SizeOptProps> = ({
       onCommit={onCommit}
       className={`${widthClass} cursor-pointer`}
     />
-    <span className="font-mono-ui w-8 text-[var(--text-primary)] tabular-nums">
+    <span className="font-mono-ui min-w-[2rem] text-[var(--text-primary)] tabular-nums">
       {step < 1 && step >= 0.01 ? Math.round(value * 100) : Math.round(value)}
       {step < 1 && step >= 0.01 ? '%' : unit}
     </span>
+  </label>
+);
+
+interface NumOptProps {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  onCommit: (v: number) => void;
+  /** Input width class */
+  widthClass?: string;
+}
+
+/** Compact numeric field for dense option bars (avoids wide range sliders). */
+export const NumOpt: React.FC<NumOptProps> = ({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit = '',
+  onCommit,
+  widthClass = 'w-11',
+}) => (
+  <label className="flex items-center gap-1 shrink-0" title={`${label}${unit ? ` (${unit})` : ''}`}>
+    <OptLabel>{label}</OptLabel>
+    <input
+      type="number"
+      value={Number.isFinite(value) ? value : 0}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(e) => {
+        const next = Number(e.target.value);
+        if (!Number.isFinite(next)) return;
+        const clamped =
+          min !== undefined && next < min ? min : max !== undefined && next > max ? max : next;
+        onCommit(clamped);
+      }}
+      className={`${widthClass} bg-[var(--bg-elevated)] border border-[var(--border-subtle)] rounded-[var(--radius-sm)] px-1 py-0.5 font-mono-ui text-[10px] text-[var(--text-primary)] tabular-nums outline-none focus:border-[var(--accent)]`}
+    />
+    {unit ? (
+      <span className="text-[9px] font-mono-ui text-[var(--text-faint)]">{unit}</span>
+    ) : null}
   </label>
 );
 

@@ -93,6 +93,11 @@ export function useToolDispatch(options: {
       // The previous gesture never saw a pointer-up (released outside the stage) — close it first
       if (session.downTool) await finishGesture(e);
 
+      // Only left-click or explicit pan (Space / Hand / middle). Ignore right-click.
+      if (e.evt.button !== 0 && e.evt.button !== 1 && !session.spacePressed) {
+        return;
+      }
+
       const wantsPan = session.spacePressed || activeTool === 'hand' || e.evt.button === 1;
       const tool: ToolType = wantsPan ? 'hand' : activeTool;
       const handler = getToolHandler(tool);
@@ -108,6 +113,7 @@ export function useToolDispatch(options: {
       const result = handler.onPointerDown(toToolEvent(e, getCanvasCoords(e)), ctx);
       ctx.requestRedraw();
       const handled = result instanceof Promise ? await result : result;
+      // `false` = tool declined (e.g. Move on empty canvas) → optional deselect
       if (handled === false) onUnhandledPointerDown?.(e, ctx);
       ctx.requestRedraw();
     },
