@@ -126,7 +126,10 @@ export class AssetsService {
     const workspaceId = requireWorkspaceId();
     return this.cache.wrap(
       CacheKeys.assetList(workspaceId),
-      () => this.readIndex().map((e) => this.toDto(e)),
+      () =>
+        this.readIndex()
+          .filter((e) => !e.workspaceId || e.workspaceId === workspaceId)
+          .map((e) => this.toDto(e)),
       30_000
     );
   }
