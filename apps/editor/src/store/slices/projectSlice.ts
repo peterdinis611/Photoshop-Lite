@@ -2,8 +2,10 @@ import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { ProjectFileData } from '../../types/editor';
 import { getErrorMessage, buildProjectFile, downloadProjectFile, extractImageExif, type ImageExifSummary } from '@photoshop-lite/editor-core';
+import { clearKonvaImageCache } from '@photoshop-lite/editor-konva';
 import { aiApiClient } from '@photoshop-lite/editor-ai-client';
 import type { ProjectSummaryDto, ProjectVersionSummaryDto } from '@photoshop-lite/shared-types';
+import { clearDraft } from '../../utils/draftAutosave';
 
 export interface ProjectSlice {
   lastExif: ImageExifSummary | null;
@@ -85,9 +87,11 @@ export const createProjectSlice: StateCreator<EditorStore, [], [], ProjectSlice>
       layers,
     });
     downloadProjectFile(project);
+    void clearDraft();
   },
 
   loadProject: (project: ProjectFileData) => {
+    clearKonvaImageCache();
     set({
       projectTitle: project.title || 'Untitled plate',
       canvasWidth: project.canvasWidth,

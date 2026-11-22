@@ -4,17 +4,45 @@ interface CachedImageEntry {
   image: HTMLImageElement | null;
   status: CachedImageStatus;
   promise: Promise<HTMLImageElement | null>;
+  /** LRU touch — higher = more recent */
+  lastUsed: number;
 }
 
+/** Soft cap on warm decoded images (not bytes — HTMLImageElement size is opaque). */
+export const KONVA_IMAGE_CACHE_MAX = 48;
+
 const cache = new Map<string, CachedImageEntry>();
+let touchClock = 0;
 
 function cacheKey(src: string, crossOrigin: string | null): string {
   return `${crossOrigin ?? 'null'}::${src}`;
 }
 
+function touch(entry: CachedImageEntry): void {
+  entry.lastUsed = ++touchClock;
+}
+
+function evictIfNeeded(): void {
+  while (cache.size > KONVA_IMAGE_CACHE_MAX) {
+    let oldestKey: string | null = null;
+    let oldestUsed = Infinity;
+    for (const [key, entry] of cache) {
+      // Never evict in-flight loads — wait until they settle
+      if (entry.status === 'loading') continue;
+      if (entry.lastUsed < oldestUsed) {
+        oldestUsed = entry.lastUsed;
+        oldestKey = key;
+      }
+    }
+    if (!oldestKey) break;
+    cache.delete(oldestKey);
+  }
+}
+
 /**
  * Shared HTMLImageElement loader. Dedupes concurrent loads and keeps decoded
  * images warm across layer remounts / Before-After / export helpers.
+ * LRU-evicts when the cache exceeds {@link KONVA_IMAGE_CACHE_MAX}.
  */
 export function loadKonvaImage(
   src: string,
@@ -23,8 +51,10 @@ export function loadKonvaImage(
   const key = cacheKey(src, crossOrigin);
   const existing = cache.get(key);
   if (existing) {
-    // Allow retry after a failed load
-    if (existing.status !== 'failed') return existing.promise;
+    if (existing.status !== 'failed') {
+      touch(existing);
+      return existing.promise;
+    }
     cache.delete(key);
   }
 
@@ -37,8 +67,10 @@ export function loadKonvaImage(
     image: null,
     status: 'loading',
     promise,
+    lastUsed: ++touchClock,
   };
   cache.set(key, entry);
+  evictIfNeeded();
 
   const img = new window.Image();
   if (crossOrigin) img.crossOrigin = crossOrigin;
@@ -46,7 +78,9 @@ export function loadKonvaImage(
   img.onload = () => {
     entry.image = img;
     entry.status = 'loaded';
+    touch(entry);
     resolve(img);
+    evictIfNeeded();
   };
   img.onerror = () => {
     entry.image = null;
@@ -65,20 +99,25 @@ export function peekKonvaImage(
   crossOrigin: string | null = 'anonymous'
 ): HTMLImageElement | null {
   if (!src) return null;
-  return cache.get(cacheKey(src, crossOrigin))?.image ?? null;
+  const entry = cache.get(cacheKey(src, crossOrigin));
+  if (!entry?.image) return null;
+  touch(entry);
+  return entry.image;
 }
 
-/** @deprecated Kept for API stability — cache is process-warm; no-op. */
+/** Drop one src (or no-op if missing). */
 export function releaseKonvaImage(
-  _src?: string | null,
-  _crossOrigin?: string | null
+  src?: string | null,
+  crossOrigin: string | null = 'anonymous'
 ): void {
-  /* intentional no-op: decoded images stay warm for the session */
+  if (!src) return;
+  cache.delete(cacheKey(src, crossOrigin));
 }
 
 /** Test / project-switch helper. */
 export function clearKonvaImageCache(): void {
   cache.clear();
+  touchClock = 0;
 }
 
 export function konvaImageCacheSize(): number {

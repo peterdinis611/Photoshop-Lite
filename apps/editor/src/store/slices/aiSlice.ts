@@ -86,9 +86,10 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
     statusText: '',
   },
 
-  removeBgApiKey: localStorage.getItem('px_remove_bg_key') || '',
+  // Session-only — never persist secrets in localStorage
+  removeBgApiKey: '',
 
-  replicateApiKey: localStorage.getItem('px_replicate_key') || '',
+  replicateApiKey: '',
 
   revivePhotoLayer: async (id, mode = 'natural', intensity = 0.75, bakeNewLayer = false) => {
     const layer = get().layers.find((l) => l.id === id);
@@ -1266,13 +1267,14 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
     set((state) => ({ aiStatus: { ...state.aiStatus, ...status } })),
 
   setApiKeys: ({ removeBgApiKey, replicateApiKey }) => {
-    if (removeBgApiKey !== undefined) {
-      localStorage.setItem('px_remove_bg_key', removeBgApiKey);
-      set({ removeBgApiKey });
+    // Prefer server-side keys; client values are session memory only.
+    try {
+      localStorage.removeItem('px_remove_bg_key');
+      localStorage.removeItem('px_replicate_key');
+    } catch {
+      /* ignore */
     }
-    if (replicateApiKey !== undefined) {
-      localStorage.setItem('px_replicate_key', replicateApiKey);
-      set({ replicateApiKey });
-    }
+    if (removeBgApiKey !== undefined) set({ removeBgApiKey });
+    if (replicateApiKey !== undefined) set({ replicateApiKey });
   },
 });

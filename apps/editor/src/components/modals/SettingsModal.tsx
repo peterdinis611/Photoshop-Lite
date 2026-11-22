@@ -49,7 +49,8 @@ export const SettingsModal: React.FC = () => {
         {/* Content */}
         <div className="p-5 flex flex-col gap-4 text-xs text-zinc-300">
           <p className="text-zinc-400 leading-relaxed text-[11px]">
-            Photoshop-Lite works 100% locally in-browser via WebAssembly by default. You can optionally connect cloud AI services below for heavy batch tasks or dedicated models:
+            Local WebAssembly tools need no keys. Prefer server-configured providers (Nest env). Optional
+            keys below are kept in this tab only — they are never written to localStorage.
           </p>
 
           {/* remove.bg */}
@@ -97,7 +98,7 @@ export const SettingsModal: React.FC = () => {
           </div>
 
           <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 text-[11px] text-zinc-500 leading-tight">
-            *Keys are stored only in your local browser storage.
+            Session memory only. Closing the tab clears them. Production should set keys on the API.
           </div>
         </div>
 

@@ -50,15 +50,22 @@ export const LottieLayerItem: React.FC<LottieLayerItemProps> = React.memo(
       animRef.current = anim;
       setCanvasEl(canvas);
 
+      // Coalesce enterFrame storms into one Konva paint per animation frame
+      let raf = 0;
       const onFrame = () => {
-        const node = imageRef.current;
-        if (!node) return;
-        node.getLayer()?.batchDraw();
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const node = imageRef.current;
+          if (!node) return;
+          node.getLayer()?.batchDraw();
+        });
       };
       anim.addEventListener('enterFrame', onFrame);
 
       return () => {
         anim.removeEventListener('enterFrame', onFrame);
+        if (raf) cancelAnimationFrame(raf);
         anim.destroy();
         if (animRef.current === anim) animRef.current = null;
       };

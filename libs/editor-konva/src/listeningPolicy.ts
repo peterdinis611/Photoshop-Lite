@@ -1,6 +1,7 @@
 export type KonvaToolKind =
   | 'select'
   | 'hand'
+  | 'zoom'
   | 'crop'
   | 'marquee'
   | 'lasso'
@@ -28,81 +29,95 @@ export interface ListeningPolicy {
   cursor: string;
 }
 
-/** Central listening rules so tools don't fight Transformer / layer drag. */
+/** Tools that paint / pick on the stage — content layers must not steal hits. */
+const CROSSHAIR_TOOLS = new Set<string>([
+  'marquee',
+  'lasso',
+  'wand',
+  'brush',
+  'eraser',
+  'heal',
+  'spotHealing',
+  'clone',
+  'blur',
+  'fill',
+  'eyedropper',
+  'refineBrush',
+  'gradient',
+  'dodge',
+  'burn',
+  'sharpenTool',
+  'polyLasso',
+  'magneticLasso',
+  'quickSelect',
+  'healing',
+  'patch',
+  'liquify',
+  'text',
+  'shape',
+  'pen',
+]);
+
+const CONTENT_HIT_TOOLS = new Set<string>(['select']);
+
+const OVERLAY_TOOLS = new Set<string>(['transform', 'crop']);
+
+/**
+ * Central listening rules so tools don't fight Transformer / layer drag.
+ * Keep in sync with registered tool ids in `apps/editor/.../tools/index.ts`.
+ */
 export function listeningPolicy(activeTool: KonvaToolKind): ListeningPolicy {
-  switch (activeTool) {
-    case 'select':
-      return {
-        stageListening: true,
-        contentListening: true,
-        overlayListening: false,
-        cursor: 'default',
-      };
-    case 'hand':
-      return {
-        stageListening: true,
-        contentListening: false,
-        overlayListening: false,
-        cursor: 'grab',
-      };
-    case 'transform':
-      // Transformer lives in the overlay layer and attaches to the selected layer
-      return {
-        stageListening: true,
-        contentListening: false,
-        overlayListening: true,
-        cursor: 'default',
-      };
-    case 'crop':
-      return {
-        stageListening: true,
-        contentListening: false,
-        overlayListening: true,
-        cursor: 'crosshair',
-      };
-    case 'marquee':
-    case 'lasso':
-    case 'wand':
-    case 'brush':
-    case 'eraser':
-    case 'heal':
-    case 'spotHealing':
-    case 'clone':
-    case 'blur':
-    case 'fill':
-    case 'eyedropper':
-    case 'refineBrush':
-    case 'gradient':
-    case 'dodge':
-    case 'burn':
-    case 'sharpenTool':
-    case 'polyLasso':
-    case 'magneticLasso':
-    case 'quickSelect':
-    case 'healing':
-    case 'patch':
-    case 'liquify':
-      return {
-        stageListening: true,
-        contentListening: false,
-        overlayListening: false,
-        cursor: 'crosshair',
-      };
-    case 'text':
-    case 'shape':
-    case 'pen':
-      return {
-        stageListening: true,
-        contentListening: false,
-        overlayListening: false,
-        cursor: 'crosshair',
-      };
-    default:
-      return {
-        stageListening: true,
-        contentListening: true,
-        overlayListening: false,
-        cursor: 'default',
-      };
+  if (activeTool === 'hand') {
+    return {
+      stageListening: true,
+      contentListening: false,
+      overlayListening: false,
+      cursor: 'grab',
+    };
   }
+
+  if (activeTool === 'zoom') {
+    return {
+      stageListening: true,
+      contentListening: false,
+      overlayListening: false,
+      cursor: 'zoom-in',
+    };
+  }
+
+  if (CONTENT_HIT_TOOLS.has(activeTool)) {
+    return {
+      stageListening: true,
+      contentListening: true,
+      // Transformer lives in the UI layer and must receive hits while Move is active
+      overlayListening: true,
+      cursor: 'default',
+    };
+  }
+
+  if (OVERLAY_TOOLS.has(activeTool)) {
+    return {
+      stageListening: true,
+      contentListening: false,
+      overlayListening: true,
+      cursor: activeTool === 'crop' ? 'crosshair' : 'default',
+    };
+  }
+
+  if (CROSSHAIR_TOOLS.has(activeTool)) {
+    return {
+      stageListening: true,
+      contentListening: false,
+      overlayListening: false,
+      cursor: 'crosshair',
+    };
+  }
+
+  // Unknown tools: prefer stage-only so content doesn't steal unexpected hits
+  return {
+    stageListening: true,
+    contentListening: false,
+    overlayListening: false,
+    cursor: 'default',
+  };
 }

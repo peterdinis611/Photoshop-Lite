@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clearKonvaImageCache,
+  KONVA_IMAGE_CACHE_MAX,
   konvaImageCacheSize,
   loadKonvaImage,
   peekKonvaImage,
+  releaseKonvaImage,
 } from './imageCache';
 
 afterEach(() => {
@@ -49,6 +51,43 @@ describe('imageCache', () => {
     const img = await loadKonvaImage('blob:bad');
     expect(img).toBeNull();
     expect(peekKonvaImage('blob:bad')).toBeNull();
+    expect(konvaImageCacheSize()).toBe(0);
+  });
+
+  it('LRU-evicts when over the soft cap', async () => {
+    class MockImage {
+      onload: (() => void) | null = null;
+      onerror: ((e?: unknown) => void) | null = null;
+      crossOrigin = '';
+      set src(_v: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('Image', MockImage);
+
+    for (let i = 0; i < KONVA_IMAGE_CACHE_MAX + 5; i++) {
+      await loadKonvaImage(`blob:n${i}`);
+    }
+    expect(konvaImageCacheSize()).toBeLessThanOrEqual(KONVA_IMAGE_CACHE_MAX);
+    // Oldest should be gone; newest still warm
+    expect(peekKonvaImage('blob:n0')).toBeNull();
+    expect(peekKonvaImage(`blob:n${KONVA_IMAGE_CACHE_MAX + 4}`)).not.toBeNull();
+  });
+
+  it('releaseKonvaImage drops a single entry', async () => {
+    class MockImage {
+      onload: (() => void) | null = null;
+      onerror: ((e?: unknown) => void) | null = null;
+      crossOrigin = '';
+      set src(_v: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('Image', MockImage);
+
+    await loadKonvaImage('blob:one');
+    expect(konvaImageCacheSize()).toBe(1);
+    releaseKonvaImage('blob:one');
     expect(konvaImageCacheSize()).toBe(0);
   });
 });

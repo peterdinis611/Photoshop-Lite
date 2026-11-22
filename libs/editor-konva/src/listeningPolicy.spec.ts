@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { listeningPolicy } from './listeningPolicy';
 
 describe('listeningPolicy', () => {
-  it('allows content hits in select mode', () => {
+  it('allows content + overlay hits in select mode (Move + Transformer)', () => {
     const p = listeningPolicy('select');
     expect(p.contentListening).toBe(true);
-    expect(p.overlayListening).toBe(false);
+    expect(p.overlayListening).toBe(true);
+  });
+
+  it('disables content hits for zoom (click-to-zoom, not layer drag)', () => {
+    const p = listeningPolicy('zoom');
+    expect(p.contentListening).toBe(false);
+    expect(p.cursor).toBe('zoom-in');
+  });
+
+  it('does not fall through to contentListening for unknown tools', () => {
+    expect(listeningPolicy('beforeAfter').contentListening).toBe(false);
   });
 
   it('disables content hits for brush / crop', () => {

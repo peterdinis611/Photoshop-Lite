@@ -15,6 +15,7 @@ import { FloatingAIStatusToast } from '../components/ui/FloatingAIStatusToast';
 import { AppToaster } from '../components/ui/AppToaster';
 import { useAutoStartOnboarding } from '../components/onboarding/useAutoStartOnboarding';
 import { useEditorHotkeys } from '../hooks/useEditorHotkeys';
+import { useDraftAutosave } from '../hooks/useDraftAutosave';
 import { usePageMeta } from '../seo/usePageMeta';
 import { SkipLink } from '../a11y/SkipLink';
 
@@ -94,6 +95,7 @@ function EditorWorkspace() {
   }, [fitToScreen]);
 
   useEditorHotkeys({ canvasContainerRef, onFitToScreen: handleFit });
+  useDraftAutosave();
   useAutoStartOnboarding();
 
   const selected = layers.find((l) => l.id === selectedLayerId);
