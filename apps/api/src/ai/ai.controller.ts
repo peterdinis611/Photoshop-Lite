@@ -86,4 +86,19 @@ export class AiController {
   caption(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
     return this.aiService.caption(body);
   }
+
+  @Post('colorize')
+  colorize(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.colorize(body);
+  }
+
+  @Post('uncrop')
+  uncrop(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.uncrop(body);
+  }
+
+  @Post('reimagine')
+  reimagine(@Body() body: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.aiService.reimagine(body);
+  }
 }

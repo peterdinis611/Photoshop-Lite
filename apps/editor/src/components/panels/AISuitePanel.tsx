@@ -88,7 +88,9 @@ export const AISuitePanel: React.FC = () => {
   const [paletteColors, setPaletteColors] = useState<string[]>([]);
   const [paletteBusy, setPaletteBusy] = useState(false);
   const [localRecipe, setLocalRecipe] = useState<LocalRecipe>('revive');
-  const [provider, setProvider] = useState<'client' | 'remove.bg'>('client');
+  const [provider, setProvider] = useState<'client' | 'remove.bg' | 'photoroom' | 'fal'>(
+    'client'
+  );
   const [upscaleFactor, setUpscaleFactor] = useState<number>(2);
   const [showKeyInputs, setShowKeyInputs] = useState(false);
   const [reviveMode, setReviveMode] = useState<ReviveMode>('natural');
@@ -233,6 +235,10 @@ export const AISuitePanel: React.FC = () => {
                 onChange={(e) => setApiKeys({ replicateApiKey: e.target.value })}
               />
             </label>
+            <p className="text-[10px] text-[var(--text-faint)] leading-snug mt-1">
+              Free fallbacks on the API: FAL_KEY, TOGETHER_API_KEY, FIREWORKS_API_KEY,
+              CLIPDROP_API_KEY, DEEPAI_API_KEY, PHOTOROOM_API_KEY (see .env.example).
+            </p>
           </div>
         )}
 
@@ -807,8 +813,8 @@ export const AISuitePanel: React.FC = () => {
                 {!serverReachable
                   ? 'API offline — start bun run dev (port 3001). Local Lab still works.'
                   : cloudReady
-                    ? 'Cloud ready — Replicate token found.'
-                    : 'No Replicate token — Object Remove / Face / Style / Caption need Keys or REPLICATE_API_TOKEN. Revive / Clean / Relight fall back to local.'}
+                    ? 'Cloud ready — Replicate / HF / free providers (fal, Clipdrop, DeepAI…) via API env.'
+                    : 'No Replicate token — set Keys or API env (FAL / Clipdrop / DeepAI / PhotoRoom / Together). Local Revive / Clean still work.'}
               </div>
               <section className="lab-card lab-card--hero">
                 <div className="lab-card-head">
@@ -849,7 +855,7 @@ export const AISuitePanel: React.FC = () => {
                       <Cloud size={14} className="text-[var(--accent-hot)]" />
                       Cloud jobs
                     </h3>
-                    <p>Replicate via local API — set token in Keys or env.</p>
+                    <p>Replicate + free fallbacks (fal / Clipdrop / DeepAI) via API env.</p>
                   </div>
                   <span className="lab-badge lab-badge--accent">API</span>
                 </div>
@@ -858,9 +864,12 @@ export const AISuitePanel: React.FC = () => {
                   {(
                     [
                       ['cleanup', 'Denoise', Eraser],
-                      ['revive', 'Colorize', SunMedium],
+                      ['revive', 'Revive', SunMedium],
+                      ['colorize', 'Colorize', SunMedium],
                       ['face-restore', 'Face', ScanFace],
                       ['segment', 'Segment', VenetianMask],
+                      ['uncrop', 'Uncrop', Maximize],
+                      ['reimagine', 'Reimagine', Paintbrush],
                     ] as const
                   ).map(([kind, label, Icon]) => (
                     <button
@@ -984,14 +993,21 @@ export const AISuitePanel: React.FC = () => {
                 </div>
 
                 <div className="lab-seg lab-seg--2">
-                  {(['client', 'remove.bg'] as const).map((p) => (
+                  {(
+                    [
+                      ['client', 'WASM'],
+                      ['remove.bg', 'remove.bg'],
+                      ['photoroom', 'PhotoRoom'],
+                      ['fal', 'fal rembg'],
+                    ] as const
+                  ).map(([p, label]) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setProvider(p)}
                       className={provider === p ? 'on' : ''}
                     >
-                      {p === 'client' ? 'WASM' : 'remove.bg'}
+                      {label}
                     </button>
                   ))}
                 </div>

@@ -6,7 +6,7 @@
  */
 
 export interface BgRemovalOptions {
-  provider?: 'client' | 'remove.bg';
+  provider?: 'client' | 'remove.bg' | 'photoroom' | 'fal';
   apiKey?: string;
   onProgress?: (progress: number, status: string) => void;
 }
@@ -188,17 +188,43 @@ export function smartSegmentBackground(canvas: HTMLCanvasElement): string {
 export async function executeBackgroundRemoval(
   src: string,
   options: BgRemovalOptions = {}
-): Promise<{ dataUrl: string; methodUsed: 'neural-wasm' | 'remove.bg' | 'smart-segment' }> {
+): Promise<{
+  dataUrl: string;
+  methodUsed: 'neural-wasm' | 'remove.bg' | 'photoroom' | 'fal' | 'smart-segment';
+}> {
   const { provider = 'client', apiKey, onProgress } = options;
 
   onProgress?.(15, 'Rasterizing image layers...');
   const canvas = await rasterizeToCanvas(src);
+  const imageBase64 = canvas.toDataURL('image/png');
 
-  // 1. Try remove.bg API if key is provided and requested
+  // Cloud cutout via Nest API (PhotoRoom / fal / remove.bg with server keys)
+  if (provider === 'photoroom' || provider === 'fal' || (provider === 'remove.bg' && !apiKey)) {
+    onProgress?.(40, `Contacting ${provider} via API…`);
+    try {
+      const { aiApiClient } = await import('./apiClient');
+      const result = await aiApiClient.removeBackground({
+        imageBase64,
+        apiKey,
+        provider,
+      });
+      if (result.success && result.imageBase64) {
+        onProgress?.(100, `${provider} cutout complete!`);
+        return {
+          dataUrl: result.imageBase64,
+          methodUsed: provider === 'remove.bg' ? 'remove.bg' : provider,
+        };
+      }
+    } catch (e) {
+      console.warn(`${provider} cutout failed, falling back:`, e);
+    }
+  }
+
+  // Direct remove.bg from the browser when the user pasted a client key
   if (provider === 'remove.bg' && apiKey) {
     onProgress?.(40, 'Contacting remove.bg cloud API...');
     try {
-      const cleanBase64 = canvas.toDataURL('image/png').replace(/^data:image\/\w+;base64,/, '');
+      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const response = await fetch('https://api.remove.bg/v1.0/removebg', {
         method: 'POST',
         headers: {

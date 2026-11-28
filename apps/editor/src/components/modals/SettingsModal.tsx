@@ -98,7 +98,9 @@ export const SettingsModal: React.FC = () => {
           </div>
 
           <div className="p-3 bg-zinc-900/80 rounded-lg border border-zinc-800 text-[11px] text-zinc-500 leading-tight">
-            Session memory only. Closing the tab clears them. Production should set keys on the API.
+            Session memory only. Closing the tab clears them. Prefer API env for free providers:
+            FAL_KEY, TOGETHER_API_KEY, FIREWORKS_API_KEY, CLIPDROP_API_KEY, DEEPAI_API_KEY,
+            PHOTOROOM_API_KEY (see .env.example).
           </div>
         </div>
 

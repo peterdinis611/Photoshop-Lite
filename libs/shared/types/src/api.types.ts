@@ -17,6 +17,13 @@ export interface HealthCheckResponse {
   openverseAvailable?: boolean;
   /** Server has HF_TOKEN / HUGGINGFACE_API_KEY — AI fallback without Replicate */
   huggingfaceConfigured?: boolean;
+  /** Optional free/freemium providers (flags may be omitted on public /health) */
+  falConfigured?: boolean;
+  togetherConfigured?: boolean;
+  fireworksConfigured?: boolean;
+  clipdropConfigured?: boolean;
+  deepAiConfigured?: boolean;
+  photoroomConfigured?: boolean;
   /** Cache + throttle backend: redis when REDIS_URL connects, else memory */
   redis?: 'connected' | 'memory';
 }
@@ -24,7 +31,7 @@ export interface HealthCheckResponse {
 export interface RemoveBgRequestDto {
   imageBase64: string;
   apiKey?: string;
-  provider?: 'client' | 'remove.bg';
+  provider?: 'client' | 'remove.bg' | 'photoroom' | 'fal';
 }
 
 export interface RemoveBgResponseDto {
@@ -89,7 +96,10 @@ export type AiJobKind =
   | 'style'
   | 'relight'
   | 'segment'
-  | 'caption';
+  | 'caption'
+  | 'colorize'
+  | 'uncrop'
+  | 'reimagine';
 
 export type AiStylePreset = 'film' | 'sketch' | 'anime' | 'watercolor' | 'noir';
 

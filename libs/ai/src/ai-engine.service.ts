@@ -12,6 +12,25 @@ import type {
 } from '@photoshop-lite/shared-types';
 import { REAL_ESRGAN_VERSION, REPLICATE_MODEL_REFS, styleModelRef } from './replicate-models';
 import { hfCaption, hfSegmentHint, hfUpscale, huggingfaceToken } from './huggingface';
+import {
+  clipdropCleanup,
+  clipdropKey,
+  clipdropReimagine,
+  clipdropUncrop,
+  deepAiColorize,
+  deepAiKey,
+  deepAiStyle,
+  deepAiSuperRes,
+  falInpaint,
+  falKey,
+  falRemoveBg,
+  falUpscale,
+  fireworksKey,
+  photoroomKey,
+  photoroomRemoveBg,
+  textToImageFill,
+  togetherKey,
+} from './providers';
 
 type PredictionStart = {
   id?: string;
@@ -90,44 +109,59 @@ export class AiEngineService {
       throw new Error('Missing imageBase64 parameter');
     }
 
-    if (provider === 'remove.bg' || apiKey || process.env.REMOVE_BG_API_KEY) {
+    const tryRemoveBg = provider === 'remove.bg' || (!provider && (apiKey || process.env.REMOVE_BG_API_KEY));
+    if (tryRemoveBg) {
       const key = apiKey || process.env.REMOVE_BG_API_KEY;
-      if (!key) {
-        throw new Error('No remove.bg API key provided');
+      if (key) {
+        const cleanBase64 = this.stripDataUrl(imageBase64);
+        const response = await fetch('https://api.remove.bg/v1.0/removebg', {
+          method: 'POST',
+          headers: {
+            'X-Api-Key': key,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            image_file_b64: cleanBase64,
+            size: 'auto',
+            format: 'png',
+          }),
+        });
+
+        if (response.ok) {
+          const data = (await response.json()) as { data?: { result_b64?: string } };
+          if (data?.data?.result_b64) {
+            return {
+              success: true,
+              imageBase64: `data:image/png;base64,${data.data.result_b64}`,
+            };
+          }
+        }
       }
+    }
 
-      const cleanBase64 = this.stripDataUrl(imageBase64);
-      const response = await fetch('https://api.remove.bg/v1.0/removebg', {
-        method: 'POST',
-        headers: {
-          'X-Api-Key': key,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          image_file_b64: cleanBase64,
-          size: 'auto',
-          format: 'png',
-        }),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`remove.bg error: ${errText}`);
+    if (provider === 'photoroom' || (!provider && photoroomKey())) {
+      try {
+        const result = await photoroomRemoveBg({ imageBase64, apiKey });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try fal */
       }
+    }
 
-      const data = (await response.json()) as { data?: { result_b64?: string } };
-      if (data?.data?.result_b64) {
-        return {
-          success: true,
-          imageBase64: `data:image/png;base64,${data.data.result_b64}`,
-        };
+    if (provider === 'fal' || (!provider && falKey())) {
+      try {
+        const result = await falRemoveBg({ imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
       }
     }
 
     return {
       fallback: true,
-      message: 'Server-side key not provided, use client-side neural wasm engine.',
+      message:
+        'No cutout provider key (remove.bg / PhotoRoom / fal) — use client-side neural wasm engine.',
     };
   }
 
@@ -156,6 +190,24 @@ export class AiEngineService {
       };
     }
 
+    if (falKey()) {
+      try {
+        const result = await falUpscale({ imageBase64, scale: Number(scale) });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try next */
+      }
+    }
+
+    if (deepAiKey()) {
+      try {
+        const result = await deepAiSuperRes({ imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try next */
+      }
+    }
+
     const hf = huggingfaceToken();
     if (hf) {
       try {
@@ -169,13 +221,13 @@ export class AiEngineService {
     return {
       success: false,
       fallbackToClient: true,
-      message: started.message || 'No Replicate/HF token — use client upscale.',
+      message: started.message || 'No Replicate/fal/DeepAI/HF token — use client upscale.',
     };
   }
 
   async cleanup(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.cleanup,
       apiKey: dto.apiKey,
       input: {
@@ -185,6 +237,20 @@ export class AiEngineService {
         jpeg: 40,
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropCleanup({
+          imageBase64: dto.imageBase64,
+          maskBase64: dto.maskBase64,
+        });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
+      }
+    }
+    return started;
   }
 
   async revive(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
@@ -216,7 +282,7 @@ export class AiEngineService {
   async inpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
     if (!dto.maskBase64) throw new Error('Missing maskBase64 for inpaint');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.inpaint,
       apiKey: dto.apiKey,
       input: {
@@ -227,13 +293,41 @@ export class AiEngineService {
         num_inference_steps: 30,
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    if (falKey()) {
+      try {
+        const result = await falInpaint({
+          imageBase64: dto.imageBase64,
+          maskBase64: dto.maskBase64,
+          prompt: dto.prompt,
+        });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try text→image fill when prompt present */
+      }
+    }
+
+    if (dto.prompt?.trim() && (togetherKey() || fireworksKey())) {
+      try {
+        const result = await textToImageFill({ prompt: dto.prompt.trim() });
+        return {
+          success: true,
+          imageBase64: result.imageBase64,
+          message: 'Generated via Together/Fireworks text→image (not mask-aware)',
+        };
+      } catch {
+        /* fall through */
+      }
+    }
+    return started;
   }
 
   /** Object remove — same inpaint model, fixed “erase & fill” prompt (no user text). */
   async objectRemove(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
     if (!dto.maskBase64) throw new Error('Missing maskBase64 for object-remove');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.objectRemove,
       apiKey: dto.apiKey,
       input: {
@@ -245,13 +339,41 @@ export class AiEngineService {
         num_inference_steps: 32,
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    if (falKey()) {
+      try {
+        const result = await falInpaint({
+          imageBase64: dto.imageBase64,
+          maskBase64: dto.maskBase64,
+          prompt:
+            'remove the masked object completely, seamless photorealistic background fill',
+        });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try clipdrop cleanup with mask */
+      }
+    }
+
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropCleanup({
+          imageBase64: dto.imageBase64,
+          maskBase64: dto.maskBase64,
+        });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
+      }
+    }
+    return started;
   }
 
   /** Outpaint — generate white-masked border; keep black region. */
   async outpaint(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
     if (!dto.imageBase64) throw new Error('Missing imageBase64');
     if (!dto.maskBase64) throw new Error('Missing maskBase64 for outpaint');
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model: REPLICATE_MODEL_REFS.outpaint,
       apiKey: dto.apiKey,
       input: {
@@ -264,6 +386,30 @@ export class AiEngineService {
         num_inference_steps: 32,
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropUncrop({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
+      }
+    }
+
+    if (falKey()) {
+      try {
+        const result = await falInpaint({
+          imageBase64: dto.imageBase64,
+          maskBase64: dto.maskBase64,
+          prompt: dto.prompt || 'extend the scene seamlessly beyond the frame',
+        });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
+      }
+    }
+    return started;
   }
 
   async relight(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
@@ -300,7 +446,7 @@ export class AiEngineService {
       noir: 'high contrast black and white noir photography',
     };
 
-    return this.startPrediction({
+    const started = await this.startPrediction({
       model,
       apiKey: dto.apiKey,
       input: {
@@ -309,6 +455,81 @@ export class AiEngineService {
         strength: dto.intensity ?? 0.65,
       },
     });
+    if (!started.fallbackToClient) return started;
+
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropReimagine({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try DeepAI */
+      }
+    }
+
+    if (deepAiKey()) {
+      try {
+        const result = await deepAiStyle({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* fall through */
+      }
+    }
+    return started;
+  }
+
+  async colorize(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (deepAiKey()) {
+      try {
+        const result = await deepAiColorize({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch (err) {
+        return {
+          success: false,
+          fallbackToClient: true,
+          message: err instanceof Error ? err.message : 'DeepAI colorize failed',
+        };
+      }
+    }
+    // Replicate DDColor is revive — reuse when available
+    return this.revive(dto);
+  }
+
+  async uncrop(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropUncrop({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch (err) {
+        return {
+          success: false,
+          fallbackToClient: true,
+          message: err instanceof Error ? err.message : 'Clipdrop uncrop failed',
+        };
+      }
+    }
+    if (!dto.maskBase64) {
+      return {
+        success: false,
+        fallbackToClient: true,
+        message: 'Uncrop needs CLIPDROP_API_KEY (or outpaint with a border mask).',
+      };
+    }
+    return this.outpaint(dto);
+  }
+
+  async reimagine(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    if (!dto.imageBase64) throw new Error('Missing imageBase64');
+    if (clipdropKey()) {
+      try {
+        const result = await clipdropReimagine({ imageBase64: dto.imageBase64 });
+        return { success: true, imageBase64: result.imageBase64 };
+      } catch {
+        /* try style transfer */
+      }
+    }
+    return this.styleTransfer({ ...dto, style: dto.style || 'film' });
   }
 
   async segment(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
@@ -488,7 +709,16 @@ export class AiEngineService {
       host === 'replicate.com' ||
       host.endsWith('.replicate.com') ||
       host.endsWith('.hf.co') ||
-      host.endsWith('.huggingface.co');
+      host.endsWith('.huggingface.co') ||
+      host.endsWith('.fal.media') ||
+      host.endsWith('.fal.ai') ||
+      host === 'fal.media' ||
+      host.endsWith('.together.ai') ||
+      host.endsWith('.fireworks.ai') ||
+      host.endsWith('.deepai.org') ||
+      host === 'api.deepai.org' ||
+      host.endsWith('.clipdrop.co') ||
+      host.endsWith('.photoroom.com');
     if (!allowed) {
       throw new Error(`Refusing to download from host: ${host}`);
     }

@@ -129,4 +129,19 @@ export class AiService {
     this.requireImage(dto);
     return this.wrapUpstream(() => this.aiEngine.caption(dto));
   }
+
+  async colorize(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.colorize(dto));
+  }
+
+  async uncrop(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.uncrop(dto));
+  }
+
+  async reimagine(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    this.requireImage(dto);
+    return this.wrapUpstream(() => this.aiEngine.reimagine(dto));
+  }
 }

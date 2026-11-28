@@ -19,6 +19,9 @@ const ACTION_LABELS: Record<string, string> = {
   batch: 'Batch Lab',
   segment: 'Segment',
   caption: 'Caption',
+  colorize: 'Colorize',
+  uncrop: 'Uncrop',
+  reimagine: 'Reimagine',
 };
 
 /**

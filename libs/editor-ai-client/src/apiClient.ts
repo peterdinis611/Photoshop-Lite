@@ -258,6 +258,18 @@ export class AiApiClient {
     return this.request<AiJobResponseDto>('/ai/caption', dto);
   }
 
+  colorize(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/colorize', dto);
+  }
+
+  uncrop(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/uncrop', dto);
+  }
+
+  reimagine(dto: AiJobRequestDto): Promise<AiJobResponseDto> {
+    return this.request<AiJobResponseDto>('/ai/reimagine', dto);
+  }
+
   async pollUntilComplete(
     dto: PredictionPollRequestDto,
     options: {

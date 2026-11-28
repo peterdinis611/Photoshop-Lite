@@ -57,9 +57,12 @@ export interface AISlice {
     cutout?: boolean;
     reviveMode?: ReviveMode;
     cleanupMode?: CleanupMode;
-    cutoutProvider?: 'client' | 'remove.bg';
+    cutoutProvider?: 'client' | 'remove.bg' | 'photoroom' | 'fal';
   }) => Promise<void>;
-  removeBackground: (id: string, provider?: 'client' | 'remove.bg') => Promise<void>;
+  removeBackground: (
+    id: string,
+    provider?: 'client' | 'remove.bg' | 'photoroom' | 'fal'
+  ) => Promise<void>;
   upscaleLayer: (id: string, scaleFactor?: number) => Promise<void>;
   runCloudAiJob: (
     id: string,
@@ -893,9 +896,13 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
           statusText:
             result.methodUsed === 'remove.bg'
               ? 'Background removed via remove.bg!'
-              : result.methodUsed === 'neural-wasm'
-              ? 'Background removed via AI Neural Model!'
-              : 'Background removed via Smart Boundary Segmentation!',
+              : result.methodUsed === 'photoroom'
+                ? 'Background removed via PhotoRoom!'
+                : result.methodUsed === 'fal'
+                  ? 'Background removed via fal rembg!'
+                  : result.methodUsed === 'neural-wasm'
+                    ? 'Background removed via AI Neural Model!'
+                    : 'Background removed via Smart Boundary Segmentation!',
         },
       }));
     } catch (e: unknown) {
@@ -1044,6 +1051,9 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
       relight: 'Cloud Relight',
       segment: 'Segmentation',
       caption: 'Caption',
+      colorize: 'Colorize',
+      uncrop: 'Uncrop',
+      reimagine: 'Reimagine',
     };
 
     get().recordActionStep('cloud-job', actionLabel[kind], {
@@ -1111,6 +1121,9 @@ export const createAISlice: StateCreator<EditorStore, [], [], AISlice> = (set, g
         relight: () => aiApiClient.relight(jobBody),
         segment: () => aiApiClient.segment(jobBody),
         caption: () => aiApiClient.caption(jobBody),
+        colorize: () => aiApiClient.colorize(jobBody),
+        uncrop: () => aiApiClient.uncrop(jobBody),
+        reimagine: () => aiApiClient.reimagine(jobBody),
       };
 
       const started = await starters[kind]();

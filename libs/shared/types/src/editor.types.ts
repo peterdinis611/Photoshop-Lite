@@ -552,6 +552,9 @@ export interface AIStatus {
     | 'batch'
     | 'segment'
     | 'caption'
+    | 'colorize'
+    | 'uncrop'
+    | 'reimagine'
     | null;
   progress: number;
   statusText: string;
