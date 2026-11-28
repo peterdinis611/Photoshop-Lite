@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Scissors } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { notify } from '../../utils/notify';
@@ -8,16 +8,30 @@ export const SelectAndMaskModal: React.FC = () => {
   const setOpen = useEditorStore((s) => s.setSelectAndMaskModalOpen);
   const marqueeSelection = useEditorStore((s) => s.marqueeSelection);
   const modifyMarqueeSelection = useEditorStore((s) => s.modifyMarqueeSelection);
+  const applySelectionToLayerMask = useEditorStore((s) => s.applySelectionToLayerMask);
   const setActiveTool = useEditorStore((s) => s.setActiveTool);
   const updateBrushSettings = useEditorStore((s) => s.updateBrushSettings);
   const [radius, setRadius] = useState(2);
   const [contrast, setContrast] = useState(0);
   const [shiftEdge, setShiftEdge] = useState(0);
+  const [outputToMask, setOutputToMask] = useState(false);
   const [busy, setBusy] = useState(false);
-
-  if (!open) return null;
+  const featherGen = useRef(0);
 
   const hasSel = Boolean(marqueeSelection);
+
+  // Live feather → softMaskSrc on the selection (never bakes unless user checks Output on OK)
+  useEffect(() => {
+    if (!open || !marqueeSelection) return;
+    const gen = ++featherGen.current;
+    const timer = window.setTimeout(() => {
+      if (gen !== featherGen.current) return;
+      void modifyMarqueeSelection('feather', Math.max(0, radius));
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [open, radius, modifyMarqueeSelection, marqueeSelection?.x, marqueeSelection?.y, marqueeSelection?.width, marqueeSelection?.height]);
+
+  if (!open) return null;
 
   const apply = async () => {
     if (!marqueeSelection) {
@@ -29,7 +43,6 @@ export const SelectAndMaskModal: React.FC = () => {
       if (shiftEdge > 0) await modifyMarqueeSelection('expand', shiftEdge);
       else if (shiftEdge < 0) await modifyMarqueeSelection('contract', Math.abs(shiftEdge));
 
-      // Contrast: contract then expand by the same amount to tighten the edge
       if (contrast > 0) {
         const tight = Math.max(1, Math.round(contrast / 20));
         await modifyMarqueeSelection('contract', tight);
@@ -37,11 +50,25 @@ export const SelectAndMaskModal: React.FC = () => {
       }
 
       const featherPx = Math.max(0, radius);
-      if (featherPx > 0) await modifyMarqueeSelection('feather', featherPx);
+      if (featherPx > 0) {
+        if (outputToMask) {
+          await modifyMarqueeSelection('feather', featherPx, { bakeToLayerMask: true });
+        } else {
+          await modifyMarqueeSelection('feather', featherPx);
+        }
+      } else if (outputToMask) {
+        await applySelectionToLayerMask();
+      }
+
+      if (outputToMask) {
+        notify.success('Selection written to layer mask');
+        setOpen(false);
+        return;
+      }
 
       setActiveTool('refineBrush');
       updateBrushSettings({ refineMode: 'restore', size: Math.max(8, radius * 4) });
-      notify.success('Select & Mask — soft edge on layer mask; refine with brush');
+      notify.success('Soft edge on selection — refine with brush or mask out on OK');
       setOpen(false);
     } catch (e) {
       notify.error(e instanceof Error ? e.message : 'Select & Mask failed');
@@ -72,15 +99,15 @@ export const SelectAndMaskModal: React.FC = () => {
 
         <div className="flex flex-col gap-3 p-4 text-xs text-[var(--text-muted)]">
           <p className="text-[11px] text-[var(--text-faint)]">
-            Soft edge lands on a layer mask (not a live selection). Shift Edge grows/shrinks;
-            Contrast contracts then expands to tighten the boundary; Radius = feather into the
-            mask. OK opens Refine Brush.
+            Radius feathers the selection live (semi-transparent preview on canvas). Shift Edge grows
+            or shrinks on OK; Contrast tightens the boundary on OK. Check Output to bake the result
+            into the active image layer mask instead of keeping a soft selection.
           </p>
           {(
             [
-              ['Radius → mask feather', radius, setRadius, 0, 40],
-              ['Contrast (edge tighten)', contrast, setContrast, 0, 100],
-              ['Shift Edge', shiftEdge, setShiftEdge, -50, 50],
+              ['Feather radius (live)', radius, setRadius, 0, 40],
+              ['Edge contrast (on OK)', contrast, setContrast, 0, 100],
+              ['Shift edge (on OK)', shiftEdge, setShiftEdge, -50, 50],
             ] as const
           ).map(([label, value, setter, min, max]) => (
             <label key={label} className="flex items-center justify-between gap-3">
@@ -98,6 +125,15 @@ export const SelectAndMaskModal: React.FC = () => {
               </div>
             </label>
           ))}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={outputToMask}
+              onChange={(e) => setOutputToMask(e.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            <span>Output to layer mask</span>
+          </label>
           {!hasSel && (
             <p className="text-[11px] text-[var(--danger,#c45)]">No active selection.</p>
           )}

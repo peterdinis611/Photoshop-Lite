@@ -39,6 +39,8 @@ export const ADJUSTMENT_LABELS: Record<AdjustmentLayerKind, string> = {
   hueSaturation: 'Hue/Saturation',
   invert: 'Invert',
   grayscale: 'Black & White',
+  gradientMap: 'Gradient Map',
+  photoFilter: 'Photo Filter',
 };
 
 /** Flatten a bezier path layer into document-space [x,y,…] points (honours scale + rotation). */

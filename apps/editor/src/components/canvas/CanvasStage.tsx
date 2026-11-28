@@ -2,8 +2,10 @@ import React, { useRef, useEffect, useEffectEvent, useState, useCallback, useMem
 import { Stage, Layer, FastLayer, Transformer, Rect, Line, Text as KonvaText } from 'react-konva';
 import Konva from 'konva';
 import { useThrottledCallback } from '@tanstack/react-pacer';
+import { useShallow } from 'zustand/react/shallow';
 import { registerStage, listeningPolicy } from '@photoshop-lite/editor-konva';
 import { useEditorStore } from '../../store/editorStore';
+import type { EditorLayer } from '../../types/editor';
 import { ImageLayerItem } from './ImageLayerItem';
 import { LottieLayerItem } from './LottieLayerItem';
 import { TextLayerItem } from './TextLayerItem';
@@ -71,10 +73,52 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
     guides,
     snapToGuides,
     transformMode,
-  } = useEditorStore();
+  } = useEditorStore(
+    useShallow((s) => ({
+      canvasWidth: s.canvasWidth,
+      canvasHeight: s.canvasHeight,
+      backgroundColor: s.backgroundColor,
+      zoom: s.zoom,
+      pan: s.pan,
+      showGrid: s.showGrid,
+      showRulers: s.showRulers,
+      activeTool: s.activeTool,
+      cropSettings: s.cropSettings,
+      layers: s.layers,
+      selectedLayerId: s.selectedLayerId,
+      setZoom: s.setZoom,
+      setPan: s.setPan,
+      selectLayer: s.selectLayer,
+      updateLayer: s.updateLayer,
+      setCropSettings: s.setCropSettings,
+      applyCrop: s.applyCrop,
+      cancelCrop: s.cancelCrop,
+      artboards: s.artboards,
+      activeArtboardId: s.activeArtboardId,
+      setMarqueeSelection: s.setMarqueeSelection,
+      guides: s.guides,
+      snapToGuides: s.snapToGuides,
+      transformMode: s.transformMode,
+    }))
+  );
 
   // Image layers with any adjustment layers above them folded into their filter settings
   const renderLayers = useMemo(() => applyAdjustmentLayers(layers), [layers]);
+
+  const layersById = useMemo(() => {
+    const map = new Map<string, EditorLayer>();
+    for (const l of renderLayers) map.set(l.id, l);
+    return map;
+  }, [renderLayers]);
+
+  /** Groups that hide their children on canvas (collapsed or invisible). */
+  const hiddenGroupIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of layers) {
+      if (l.type === 'group' && (!l.visible || l.expanded === false)) set.add(l.id);
+    }
+    return set;
+  }, [layers]);
 
   const [containerSize, setContainerSize] = useState({ width: 1000, height: 700 });
   const [keepRatio, setKeepRatio] = useState(false);
@@ -352,14 +396,24 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
           {/* Document Layers (rendered in array order: bottom to top) */}
           {renderLayers.map((layer) => {
             if (layer.type === 'group') return null;
+            if (layer.parentGroupId && hiddenGroupIds.has(layer.parentGroupId)) return null;
             const isSelected = layer.id === selectedLayerId;
 
             if (layer.type === 'image') {
+              const clipTarget = layer.clippingMaskToId
+                ? layersById.get(layer.clippingMaskToId)
+                : undefined;
+              const maskPathId = layer.vectorMaskPathId;
+              const maskLayer = maskPathId ? layersById.get(maskPathId) : undefined;
+              const vectorMaskPath =
+                maskLayer?.type === 'path' ? maskLayer : undefined;
               return (
                 <ImageLayerItem
                   key={layer.id}
                   layer={layer}
                   isSelected={isSelected}
+                  clipTarget={clipTarget}
+                  vectorMaskPath={vectorMaskPath}
                   onSelect={() => selectLayer(layer.id)}
                   onChange={(updates) => updateLayer(layer.id, updates)}
                 />
@@ -560,6 +614,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({ containerRef }) => {
             ref={transformerRef}
             keepRatio={freeTransformMode ? false : keepRatio}
             rotateEnabled={rotateEnabled}
+            skewEnabled={activeTool === 'transform' && transformMode === 'skew'}
             boundBoxFunc={(oldBox, newBox) => {
               if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10) {
                 return oldBox;

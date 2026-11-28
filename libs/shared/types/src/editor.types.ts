@@ -53,6 +53,8 @@ export type SelectionShape = {
   mode?: MarqueeMode;
   /** Closed freehand path for lasso (document coords, flat [x,y,...]) */
   path?: number[];
+  /** Soft/feathered selection alpha (document-space PNG data URL) — live, not baked to layer mask. */
+  softMaskSrc?: string;
 };
 
 export type BlendMode =
@@ -138,7 +140,16 @@ export interface LayerStyles {
 /** Non-destructive classic filter entry on a smart object. */
 export interface SmartFilter {
   id: string;
-  kind: 'gaussian' | 'unsharp' | 'noise' | 'sharpen';
+  kind:
+    | 'gaussian'
+    | 'unsharp'
+    | 'noise'
+    | 'sharpen'
+    | 'highPass'
+    | 'motionBlur'
+    | 'radialBlur'
+    | 'median'
+    | 'emboss';
   enabled: boolean;
   params?: Record<string, number>;
 }
@@ -171,10 +182,15 @@ export interface BaseLayer {
   scaleX: number;
   scaleY: number;
   rotation: number; // degrees
+  /** Skew in degrees (Konva / CSS-like); used by Transform → Skew. */
+  skewX?: number;
+  skewY?: number;
   styles?: LayerStyles;
   clippingMaskToId?: string; // clips this layer to the shape/text below it
   hasLayerMask?: boolean; // non-destructive layer mask
   layerMaskSrc?: string; // black/white alpha mask data URL
+  /** Path layer id used as a vector mask (Konva clip from flattened path). */
+  vectorMaskPathId?: string | null;
   /** When set, layer is nested under a group in the flat stack. */
   parentGroupId?: string | null;
 }
@@ -188,6 +204,8 @@ export interface ImageLayer extends BaseLayer {
   maskDataUrl?: string; // transparent mask after bg removal or refine
   smartObject?: boolean;
   smartObjectSrc?: string; // linked original
+  /** Shared across duplicates — replace/rebake updates all instances with same id. */
+  smartObjectInstanceId?: string;
   /** Smart Filters stack — re-baked from smartObjectSrc / originalSrc */
   smartFilters?: SmartFilter[];
 }
@@ -285,13 +303,26 @@ export type AdjustmentLayerKind =
   | 'curves'
   | 'hueSaturation'
   | 'invert'
-  | 'grayscale';
+  | 'grayscale'
+  | 'gradientMap'
+  | 'photoFilter';
+
+export interface GradientMapStop {
+  offset: number; // 0–1
+  color: string;
+}
 
 export interface AdjustmentLayer extends BaseLayer {
   type: 'adjustment';
   kind: AdjustmentLayerKind;
   adjustments: ImageAdjustments; // reused; curves/levels live here
   affectedChannel?: 'rgb' | 'red' | 'green' | 'blue';
+  /** Gradient Map: map luminance → these stops */
+  gradientMapStops?: GradientMapStop[];
+  /** Photo Filter: wash color + density 0–1 */
+  photoFilterColor?: string;
+  photoFilterDensity?: number;
+  photoFilterPreserveLuminosity?: boolean;
 }
 
 export interface GradientLayer extends BaseLayer {
@@ -360,6 +391,18 @@ export interface BrushSettings {
   flow: number; // 0-1
   refineMode: 'erase' | 'restore'; // for background edge refinement
   cloneSource?: { x: number; y: number } | null; // for clone stamp
+  /** Size jitter 0–1 (dynamics) */
+  sizeJitter?: number;
+  /** Opacity jitter 0–1 */
+  opacityJitter?: number;
+  /** Spacing as fraction of brush size (0.05–2) */
+  spacing?: number;
+}
+
+export interface BrushPreset {
+  id: string;
+  name: string;
+  settings: BrushSettings;
 }
 
 export interface GradientSettings {

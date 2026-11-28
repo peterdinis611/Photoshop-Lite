@@ -1,3 +1,5 @@
+import type { BlendMode } from '../types/editor';
+
 export interface PsdImportedLayer {
   name: string;
   /** PNG data URL of the layer's pixels */
@@ -10,12 +12,22 @@ export interface PsdImportedLayer {
   /** 0–1 */
   opacity: number;
   visible: boolean;
+  blendMode: BlendMode;
+  hasLayerMask?: boolean;
+  layerMaskSrc?: string;
+}
+
+export interface PsdImportedGroupStub {
+  name: string;
+  visible: boolean;
+  opacity: number;
 }
 
 export interface PsdImportResult {
   width: number;
   height: number;
   layers: PsdImportedLayer[];
+  groupStubs: PsdImportedGroupStub[];
   title: string;
   /** True when per-layer decode wasn't possible and `layers` holds one flattened composite. */
   flattened: boolean;
@@ -47,17 +59,56 @@ function titleFromFile(file: File): string {
   return base || 'Untitled PSD';
 }
 
+const PSD_BLEND_MAP: Record<string, BlendMode> = {
+  normal: 'source-over',
+  dissolve: 'source-over',
+  darken: 'darken',
+  multiply: 'multiply',
+  colorburn: 'color-burn',
+  'color burn': 'color-burn',
+  linearburn: 'color-burn',
+  lightendarken: 'overlay',
+  lighten: 'lighten',
+  screen: 'screen',
+  colordodge: 'color-dodge',
+  'color dodge': 'color-dodge',
+  lineardodge: 'color-dodge',
+  overlay: 'overlay',
+  softlight: 'soft-light',
+  'soft light': 'soft-light',
+  hardlight: 'hard-light',
+  'hard light': 'hard-light',
+  vividlight: 'hard-light',
+  linearlight: 'hard-light',
+  pinlight: 'hard-light',
+  hardmix: 'hard-light',
+  difference: 'difference',
+  exclusion: 'exclusion',
+};
+
+function mapPsdBlendMode(raw: string | undefined): BlendMode {
+  if (!raw) return 'source-over';
+  const key = raw.toLowerCase().replace(/\s+/g, '');
+  return PSD_BLEND_MAP[key] ?? PSD_BLEND_MAP[raw.toLowerCase()] ?? 'source-over';
+}
+
 /** Walks the layer tree (bottom → top), flattening groups and inheriting hidden state. */
 function collectLayers(
   nodes: import('ag-psd').Layer[] | undefined,
   parentVisible: boolean,
-  out: PsdImportedLayer[]
+  out: PsdImportedLayer[],
+  groups: PsdImportedGroupStub[]
 ): void {
   if (!nodes) return;
   nodes.forEach((node, index) => {
     const visible = parentVisible && !node.hidden;
     if (node.children?.length) {
-      collectLayers(node.children, visible, out);
+      groups.push({
+        name: node.name?.trim() || `Group ${groups.length + 1}`,
+        visible,
+        opacity: node.opacity == null ? 1 : Math.min(1, Math.max(0, node.opacity)),
+      });
+      collectLayers(node.children, visible, out, groups);
       return;
     }
     const canvas = node.canvas;
@@ -65,6 +116,7 @@ function collectLayers(
 
     const left = node.left ?? 0;
     const top = node.top ?? 0;
+    const maskCanvas = node.mask?.canvas;
     out.push({
       name: node.name?.trim() || `Layer ${out.length + index + 1}`,
       src: canvas.toDataURL('image/png'),
@@ -74,6 +126,13 @@ function collectLayers(
       height: canvas.height,
       opacity: node.opacity == null ? 1 : Math.min(1, Math.max(0, node.opacity)),
       visible,
+      blendMode: mapPsdBlendMode(node.blendMode),
+      ...(maskCanvas && maskCanvas.width > 0 && maskCanvas.height > 0
+        ? {
+            hasLayerMask: true,
+            layerMaskSrc: maskCanvas.toDataURL('image/png'),
+          }
+        : {}),
     });
   });
 }
@@ -99,6 +158,7 @@ export async function importPsdFile(file: File): Promise<PsdImportResult> {
   let width = 0;
   let height = 0;
   const layers: PsdImportedLayer[] = [];
+  const groupStubs: PsdImportedGroupStub[] = [];
   let compositeCanvas: HTMLCanvasElement | undefined;
 
   try {
@@ -106,13 +166,13 @@ export async function importPsdFile(file: File): Promise<PsdImportResult> {
     width = psd.width;
     height = psd.height;
     compositeCanvas = psd.canvas;
-    collectLayers(psd.children, true, layers);
+    collectLayers(psd.children, true, layers, groupStubs);
   } catch (err) {
     console.warn('PSD layer decode failed, falling back to composite', err);
   }
 
   if (layers.length > 0) {
-    return { width, height, layers, title, flattened: false };
+    return { width, height, layers, groupStubs, title, flattened: false };
   }
 
   if (!compositeCanvas) {
@@ -145,8 +205,10 @@ export async function importPsdFile(file: File): Promise<PsdImportResult> {
         height: compositeCanvas.height,
         opacity: 1,
         visible: true,
+        blendMode: 'source-over',
       },
     ],
+    groupStubs: [],
     title,
     flattened: true,
   };

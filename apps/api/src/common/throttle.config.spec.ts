@@ -13,6 +13,7 @@ describe('buildThrottlerOptions', () => {
     'THROTTLE_STOCK_LIMIT',
     'THROTTLE_CATALOG_LIMIT',
     'THROTTLE_READ_LIMIT',
+    'THROTTLE_WRITE_LIMIT',
   ];
   const prev: Record<string, string | undefined> = {};
 
@@ -23,18 +24,26 @@ describe('buildThrottlerOptions', () => {
     }
   });
 
-  it('returns default / ai / stock / catalog / read buckets', () => {
+  it('returns default / ai / stock / catalog / read / write buckets', () => {
     for (const k of keys) {
       prev[k] = process.env[k];
       delete process.env[k];
     }
     const opts = buildThrottlerOptions();
-    expect(opts.map((o) => o.name)).toEqual(['default', 'ai', 'stock', 'catalog', 'read']);
+    expect(opts.map((o) => o.name)).toEqual([
+      'default',
+      'ai',
+      'stock',
+      'catalog',
+      'read',
+      'write',
+    ]);
     expect(opts[0].limit).toBe(120);
     expect(opts[1].limit).toBe(20);
     expect(opts[2].limit).toBe(60);
     expect(opts[3].limit).toBe(90);
     expect(opts[4].limit).toBe(180);
+    expect(opts[5].limit).toBe(40);
     expect(opts[0].ttl).toBe(60_000);
   });
 
@@ -46,12 +55,14 @@ describe('buildThrottlerOptions', () => {
     process.env.THROTTLE_STOCK_LIMIT = '15';
     process.env.THROTTLE_CATALOG_LIMIT = '25';
     process.env.THROTTLE_READ_LIMIT = '40';
+    process.env.THROTTLE_WRITE_LIMIT = '12';
     const opts = buildThrottlerOptions();
     expect(opts[0]).toMatchObject({ ttl: 30_000, limit: 50 });
     expect(opts[1].limit).toBe(5);
     expect(opts[2].limit).toBe(15);
     expect(opts[3].limit).toBe(25);
     expect(opts[4].limit).toBe(40);
+    expect(opts[5].limit).toBe(12);
   });
 
   it('ThrottlePresets mirror env buckets', () => {
@@ -63,6 +74,7 @@ describe('buildThrottlerOptions', () => {
     expect(ThrottlePresets.stock.stock.limit).toBe(60);
     expect(ThrottlePresets.catalog.catalog.limit).toBe(90);
     expect(ThrottlePresets.read.read.limit).toBe(180);
+    expect(ThrottlePresets.write.write.limit).toBe(40);
     expect(ThrottlePresets.stockFetch.stock.limit).toBe(30);
     expect(ThrottlePresets.catalogMedia.stock.limit).toBeGreaterThanOrEqual(120);
   });

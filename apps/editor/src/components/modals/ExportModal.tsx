@@ -119,22 +119,30 @@ export const ExportModal: React.FC = () => {
     setIsExporting(true);
     setError(null);
 
+    // Snapshot pattern-overlay layers so bake is temporary (non-destructive).
+    const restore: Array<{ id: string; src: string; styles: Record<string, unknown> }> = [];
+
     try {
-      // Bake pattern overlays into pixels so export includes them (Konva pattern fill
-      // is preview-only and often missing from toDataURL).
       const store = useEditorStore.getState();
       const { bakePatternOverlayIntoSrc } = await import('../../utils/layerStyleProps');
       for (const layer of store.layers) {
         if (layer.type !== 'image') continue;
         const op = layer.styles?.patternOverlayOpacity || 0;
         if (op <= 0) continue;
+        restore.push({
+          id: layer.id,
+          src: layer.src,
+          styles: { ...(layer.styles || {}) },
+        });
         const next = await bakePatternOverlayIntoSrc(layer.src, layer.styles);
         store.updateLayer(layer.id, {
           src: next,
           styles: { ...layer.styles, patternOverlayOpacity: 0 },
         });
       }
-      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      if (restore.length > 0) {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
 
       const dataUrl = await exportDocumentToDataUrl({
         format,
@@ -152,6 +160,15 @@ export const ExportModal: React.FC = () => {
       console.error('Export error:', e);
       setError(e instanceof Error ? e.message : 'Export failed');
     } finally {
+      if (restore.length > 0) {
+        const store = useEditorStore.getState();
+        for (const r of restore) {
+          store.updateLayer(r.id, {
+            src: r.src,
+            styles: r.styles as never,
+          });
+        }
+      }
       setIsExporting(false);
     }
   };

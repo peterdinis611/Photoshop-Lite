@@ -1,6 +1,6 @@
 export { AppError, getErrorMessage } from './errors';
 export type { ErrorCode } from './errors';
-export { deepClone, clamp, debounce } from './optimize';
+export { deepClone, cloneLayersForHistory, clamp, debounce } from './optimize';
 
 export {
   DEFAULT_ADJUSTMENTS,
@@ -88,6 +88,14 @@ export {
   bakeClassicFilter,
 } from './classicFilters';
 export type { ClassicFilterKind } from './classicFilters';
+
+export {
+  applyGradientMapImageData,
+  applyPhotoFilterImageData,
+  bakeGradientMap,
+  bakePhotoFilter,
+} from './photoAdjustExtras';
+export type { GradientMapStop } from './photoAdjustExtras';
 
 export {
   invertSelection,

@@ -11,6 +11,8 @@ const KIND_LABEL: Record<AdjustmentLayer['kind'], string> = {
   hueSaturation: 'Hue/Saturation',
   invert: 'Invert',
   grayscale: 'Black & White',
+  gradientMap: 'Gradient Map',
+  photoFilter: 'Photo Filter',
 };
 
 interface AdjustmentLayerItemProps {

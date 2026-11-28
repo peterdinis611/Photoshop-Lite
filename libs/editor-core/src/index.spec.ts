@@ -53,6 +53,17 @@ describe('optimize helpers', () => {
     expect(copy.b).not.toBe(src.b);
   });
 
+  it('cloneLayersForHistory reuses large string refs', async () => {
+    const { cloneLayersForHistory } = await import('./optimize');
+    const big = 'data:image/png;base64,' + 'A'.repeat(10_000);
+    const layers = [{ id: '1', src: big, meta: { n: 1 } }];
+    const copy = cloneLayersForHistory(layers);
+    expect(copy).not.toBe(layers);
+    expect(copy[0]).not.toBe(layers[0]);
+    expect(copy[0].meta).not.toBe(layers[0].meta);
+    expect(copy[0].src).toBe(layers[0].src);
+  });
+
   it('debounces calls and supports cancel', () => {
     vi.useFakeTimers();
     const spy = vi.fn();

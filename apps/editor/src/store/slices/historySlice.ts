@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { HistorySnapshot } from '../../types/editor';
-import { deepClone } from '@photoshop-lite/editor-core';
+import { cloneLayersForHistory } from '@photoshop-lite/editor-core';
 import { MAX_HISTORY } from '../helpers';
 
 export interface HistorySlice {
@@ -20,13 +20,12 @@ export const createHistorySlice: StateCreator<EditorStore, [], [], HistorySlice>
 
   commitHistory: (actionName) => {
     const { layers, canvasWidth, canvasHeight, backgroundColor, past } = get();
-    const snapshotLayers = deepClone(layers);
 
     const newSnapshot: HistorySnapshot = {
       id: `${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: actionName,
       timestamp: Date.now(),
-      layers: snapshotLayers,
+      layers: cloneLayersForHistory(layers),
       canvasWidth,
       canvasHeight,
       backgroundColor,
@@ -49,7 +48,7 @@ export const createHistorySlice: StateCreator<EditorStore, [], [], HistorySlice>
       id: `${Date.now()}_curr`,
       name: 'Current State',
       timestamp: Date.now(),
-      layers: deepClone(layers),
+      layers: cloneLayersForHistory(layers),
       canvasWidth,
       canvasHeight,
       backgroundColor,
@@ -77,7 +76,7 @@ export const createHistorySlice: StateCreator<EditorStore, [], [], HistorySlice>
       id: `${Date.now()}_curr`,
       name: 'Current State',
       timestamp: Date.now(),
-      layers: deepClone(layers),
+      layers: cloneLayersForHistory(layers),
       canvasWidth,
       canvasHeight,
       backgroundColor,
@@ -104,7 +103,7 @@ export const createHistorySlice: StateCreator<EditorStore, [], [], HistorySlice>
       id: `${Date.now()}_curr`,
       name: 'State before jump',
       timestamp: Date.now(),
-      layers: deepClone(layers),
+      layers: cloneLayersForHistory(layers),
       canvasWidth,
       canvasHeight,
       backgroundColor,

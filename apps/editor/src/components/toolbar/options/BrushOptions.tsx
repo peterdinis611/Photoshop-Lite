@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sparkles } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { ColorOpt, OptChip, OptHint, SizeOpt } from '../../ui/OptionControls';
@@ -19,8 +19,13 @@ interface BrushOptionsProps {
 export const BrushOptions: React.FC<BrushOptionsProps> = ({ tool }) => {
   const brushSettings = useEditorStore((s) => s.brushSettings);
   const updateBrushSettings = useEditorStore((s) => s.updateBrushSettings);
+  const brushPresets = useEditorStore((s) => s.brushPresets);
+  const applyBrushPreset = useEditorStore((s) => s.applyBrushPreset);
+  const saveBrushPreset = useEditorStore((s) => s.saveBrushPreset);
   const wandTolerance = useEditorStore((s) => s.wandTolerance);
   const setWandTolerance = useEditorStore((s) => s.setWandTolerance);
+  const [presetPick, setPresetPick] = useState('');
+  const [saveName, setSaveName] = useState('');
 
   if (tool === 'fill') {
     return (
@@ -132,8 +137,78 @@ export const BrushOptions: React.FC<BrushOptionsProps> = ({ tool }) => {
     );
   }
 
+  const jitterSliders = tool === 'brush' && (
+    <>
+      <SizeOpt
+        label="Sz jitter"
+        value={brushSettings.sizeJitter ?? 0}
+        min={0}
+        max={1}
+        step={0.05}
+        onCommit={(sizeJitter) => updateBrushSettings({ sizeJitter })}
+      />
+      <SizeOpt
+        label="Op jitter"
+        value={brushSettings.opacityJitter ?? 0}
+        min={0}
+        max={1}
+        step={0.05}
+        onCommit={(opacityJitter) => updateBrushSettings({ opacityJitter })}
+      />
+      <SizeOpt
+        label="Spacing"
+        value={brushSettings.spacing ?? 0.25}
+        min={0.05}
+        max={1.5}
+        step={0.05}
+        onCommit={(spacing) => updateBrushSettings({ spacing })}
+      />
+    </>
+  );
+
+  const presetRow = tool === 'brush' && (
+    <div className="flex items-center gap-2 border-l border-[var(--border-subtle)] pl-3">
+      <select
+        value={presetPick}
+        onChange={(e) => {
+          const id = e.target.value;
+          setPresetPick(id);
+          if (id) applyBrushPreset(id);
+        }}
+        className="max-w-[7rem] rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1.5 py-0.5 text-[10px] text-[var(--text-muted)] cursor-pointer"
+        aria-label="Brush preset"
+      >
+        <option value="">Preset…</option>
+        {brushPresets.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <input
+        type="text"
+        value={saveName}
+        onChange={(e) => setSaveName(e.target.value)}
+        placeholder="Name"
+        className="w-16 rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-1 py-0.5 text-[10px]"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          if (!saveName.trim()) return;
+          saveBrushPreset(saveName);
+          setSaveName('');
+        }}
+        className="text-[10px] font-semibold text-[var(--accent-hot)] cursor-pointer hover:underline"
+      >
+        Save
+      </button>
+    </div>
+  );
+
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 flex-wrap">
+      {presetRow}
       <SizeOpt
         label="Size"
         value={brushSettings.size}
@@ -169,6 +244,7 @@ export const BrushOptions: React.FC<BrushOptionsProps> = ({ tool }) => {
           onCommit={(flow) => updateBrushSettings({ flow })}
         />
       )}
+      {jitterSliders}
       {tool === 'brush' && (
         <ColorOpt
           label="Color"

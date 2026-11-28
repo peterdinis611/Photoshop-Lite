@@ -242,7 +242,7 @@ export const FileMenu: React.FC<FileMenuProps> = ({
           onClose();
         }}
       >
-        <FileImage size={13} /> Export PSD (images)…
+        <FileImage size={13} /> Export PSD (partial)…
       </Item>
     </MenuPanel>
   );

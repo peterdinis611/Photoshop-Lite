@@ -17,6 +17,7 @@ import {
   FolderMinus,
   AlignHorizontalJustifyCenter,
   Layers2,
+  PenTool,
 } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
@@ -35,6 +36,8 @@ const ADJUSTMENT_KINDS = [
   ['levels', 'Levels'],
   ['invert', 'Invert'],
   ['grayscale', 'Grayscale'],
+  ['gradientMap', 'Gradient Map'],
+  ['photoFilter', 'Photo Filter'],
 ] as const;
 
 export const LayerMenu: React.FC<LayerMenuProps> = ({ onClose, onReplaceSmartObject }) => {
@@ -56,12 +59,23 @@ export const LayerMenu: React.FC<LayerMenuProps> = ({ onClose, onReplaceSmartObj
     createGroupFromSelection,
     ungroupLayer,
     alignSelectedLayers,
+    setVectorMaskFromPath,
   } = useEditorStore();
   const { layers, selectedLayerId, selectedLayer, isImageSelected } = useMenuActions(onClose);
 
   const isSmartObject = selectedLayer?.type === 'image' && !!selectedLayer.smartObject;
   const isGroup = selectedLayer?.type === 'group';
   const selectedIndex = layers.findIndex((l) => l.id === selectedLayerId);
+  const canVectorMask = (() => {
+    if (!selectedLayer || selectedIndex < 0) return false;
+    if (selectedLayer.type === 'image') {
+      return layers.slice(0, selectedIndex).some((l) => l.type === 'path');
+    }
+    if (selectedLayer.type === 'path') {
+      return layers.slice(selectedIndex + 1).some((l) => l.type === 'image');
+    }
+    return false;
+  })();
 
   const moveLayer = (dir: 'up' | 'down') => {
     if (selectedIndex < 0) return;
@@ -159,6 +173,16 @@ export const LayerMenu: React.FC<LayerMenuProps> = ({ onClose, onReplaceSmartObj
       <Item disabled={!selectedLayerId} onClick={() => { if (selectedLayerId) toggleLayerLock(selectedLayerId); onClose(); }}>
         {selectedLayer?.locked ? <Unlock size={13} /> : <Lock size={13} />}{' '}
         {selectedLayer?.locked ? 'Unlock' : 'Lock'} Layer
+      </Item>
+      <Sep />
+      <Item
+        disabled={!canVectorMask}
+        onClick={() => {
+          setVectorMaskFromPath();
+          onClose();
+        }}
+      >
+        <PenTool size={13} /> Create Vector Mask
       </Item>
       <Sep />
       <Label>Add Adjustment Layer</Label>

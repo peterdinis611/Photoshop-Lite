@@ -1,5 +1,5 @@
 import React, { Activity, Suspense, lazy, startTransition, useEffect, useState, ViewTransition } from 'react';
-import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen } from 'pulsoicon-react';
+import { Layers, Sliders, Sparkles, Palette, History, Film, FolderArchive, PanelRightClose, PanelRightOpen, Aperture } from 'pulsoicon-react';
 import { useEditorStore } from '../../store/editorStore';
 import { DarkroomSpinner } from '../ui/DarkroomSpinner';
 
@@ -24,8 +24,11 @@ const ActionsPanel = lazy(() =>
 const AssetsPanel = lazy(() =>
   import('./AssetsPanel').then((m) => ({ default: m.AssetsPanel }))
 );
+const ChannelsPanel = lazy(() =>
+  import('./ChannelsPanel').then((m) => ({ default: m.ChannelsPanel }))
+);
 
-type TabType = 'layers' | 'adjustments' | 'ai' | 'styles' | 'history' | 'actions' | 'assets';
+type TabType = 'layers' | 'adjustments' | 'ai' | 'styles' | 'history' | 'actions' | 'assets' | 'channels';
 
 const STORAGE_KEY = 'px_sidebar_open';
 
@@ -43,6 +46,7 @@ const PANELS: { id: TabType; label: string; node: React.ReactNode }[] = [
   { id: 'history', label: 'History', node: <HistoryPanel /> },
   { id: 'actions', label: 'Actions', node: <ActionsPanel /> },
   { id: 'assets', label: 'Assets', node: <AssetsPanel /> },
+  { id: 'channels', label: 'Channels', node: <ChannelsPanel /> },
 ];
 
 function readOpenPreference(): boolean {
@@ -88,6 +92,7 @@ export const RightSidebar: React.FC = () => {
       badge: isRecordingAction,
     },
     { id: 'assets', label: 'Assets', icon: <FolderArchive size={15} /> },
+    { id: 'channels', label: 'Channels', icon: <Aperture size={15} /> },
   ];
 
   const openToTab = (id: TabType) => {

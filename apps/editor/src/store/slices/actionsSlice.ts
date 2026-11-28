@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
-import type { EditorAction, EditorActionStep } from '../../types/editor';
+import type { EditorAction, EditorActionStep, BlendMode, EditorLayer } from '../../types/editor';
 import type { ClassicFilterKind, ReviveMode, CleanupMode } from '@photoshop-lite/editor-core';
 import type { AiJobKind, AiRelightPreset, AiStylePreset } from '@photoshop-lite/shared-types';
 import { makeId, isActionPlaying, setActionPlaying } from '../helpers';
@@ -48,21 +48,76 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
     const action = get().actions.find((a) => a.id === id);
     if (!action || isActionPlaying()) return;
 
-    const selectedImageId = (): string | null => {
+    const resolveLayerId = (payload: Record<string, unknown>): string | null => {
+      const fromPayload = payload.id;
+      if (typeof fromPayload === 'string') return fromPayload;
       const { layers, selectedLayerId } = get();
       const layer = layers.find((l) => l.id === selectedLayerId);
-      return layer && layer.type === 'image' ? layer.id : null;
+      return layer ? layer.id : null;
     };
 
     setActionPlaying(true);
     try {
       for (const step of action.steps) {
         const payload = (step.payload ?? {}) as Record<string, unknown>;
-        const layerId = selectedImageId();
-        if (!layerId) continue; // every supported step targets the selected image layer
 
         switch (step.type) {
-          case 'revive':
+          case 'set-opacity': {
+            const id = resolveLayerId(payload);
+            if (!id) break;
+            const opacity = payload.opacity as number | undefined;
+            if (opacity == null) break;
+            get().setLayerOpacity(id, opacity);
+            break;
+          }
+          case 'set-blend': {
+            const id = resolveLayerId(payload);
+            if (!id) break;
+            const blendMode = payload.blendMode as BlendMode | undefined;
+            if (!blendMode) break;
+            get().setLayerBlendMode(id, blendMode);
+            break;
+          }
+          case 'duplicate-layer': {
+            const id = (payload.id as string | undefined) ?? resolveLayerId(payload);
+            if (!id) break;
+            get().duplicateLayer(id);
+            break;
+          }
+          case 'move-layer': {
+            const id = resolveLayerId(payload);
+            if (!id) break;
+            const layer = get().layers.find((l) => l.id === id);
+            if (!layer) break;
+            if (typeof payload.x === 'number' && typeof payload.y === 'number') {
+              get().updateLayer(id, { x: payload.x, y: payload.y });
+            } else {
+              const dx = (payload.dx as number | undefined) ?? 0;
+              const dy = (payload.dy as number | undefined) ?? 0;
+              get().updateLayer(id, {
+                x: Math.round(layer.x + dx),
+                y: Math.round(layer.y + dy),
+              });
+            }
+            break;
+          }
+          case 'transform-layer': {
+            const id = resolveLayerId(payload);
+            if (!id) break;
+            const updates: Partial<EditorLayer> = {};
+            if (typeof payload.x === 'number') updates.x = payload.x;
+            if (typeof payload.y === 'number') updates.y = payload.y;
+            if (typeof payload.rotation === 'number') updates.rotation = payload.rotation;
+            if (typeof payload.scaleX === 'number') updates.scaleX = payload.scaleX;
+            if (typeof payload.scaleY === 'number') updates.scaleY = payload.scaleY;
+            if (typeof payload.skewX === 'number') updates.skewX = payload.skewX;
+            if (typeof payload.skewY === 'number') updates.skewY = payload.skewY;
+            if (Object.keys(updates).length > 0) get().updateLayer(id, updates);
+            break;
+          }
+          case 'revive': {
+            const layerId = resolveLayerId(payload);
+            if (!layerId) break;
             await get().revivePhotoLayer(
               layerId,
               (payload.mode as ReviveMode | undefined) ?? 'natural',
@@ -70,7 +125,10 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
               (payload.bakeNewLayer as boolean | undefined) ?? false
             );
             break;
-          case 'cleanup':
+          }
+          case 'cleanup': {
+            const layerId = resolveLayerId(payload);
+            if (!layerId) break;
             await get().cleanPhotoLayer(
               layerId,
               (payload.mode as CleanupMode | undefined) ?? 'standard',
@@ -78,11 +136,17 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
               (payload.bakeNewLayer as boolean | undefined) ?? true
             );
             break;
-          case 'desaturate':
+          }
+          case 'desaturate': {
+            const layerId = resolveLayerId(payload);
+            if (!layerId) break;
             get().commitHistory('Desaturate');
             get().updateAdjustments(layerId, { grayscale: true });
             break;
+          }
           case 'invert': {
+            const layerId = resolveLayerId(payload);
+            if (!layerId) break;
             const layer = get().layers.find((l) => l.id === layerId);
             if (layer?.type !== 'image') break;
             get().commitHistory('Invert');
@@ -95,7 +159,9 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
               payload.params as Record<string, number> | undefined
             );
             break;
-          case 'cloud-job':
+          case 'cloud-job': {
+            const layerId = resolveLayerId(payload);
+            if (!layerId) break;
             await get().runCloudAiJob(layerId, (payload.kind as AiJobKind) || 'cleanup', {
               intensity: payload.intensity as number | undefined,
               prompt: payload.prompt as string | undefined,
@@ -104,6 +170,7 @@ export const createActionsSlice: StateCreator<EditorStore, [], [], ActionsSlice>
               applyAsMask: payload.applyAsMask as boolean | undefined,
             });
             break;
+          }
           case 'compress':
             await get().compressSelectedImage(
               payload as Parameters<EditorStore['compressSelectedImage']>[0]

@@ -2,25 +2,33 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { Group, Image as KonvaImage, Rect } from 'react-konva';
 import Konva from 'konva';
 import { applyImageNodeFilters, useKonvaImage } from '@photoshop-lite/editor-konva';
-import { ImageLayer } from '../../types/editor';
+import type { EditorLayer, ImageLayer } from '../../types/editor';
 import { useEditorStore } from '../../store/editorStore';
 import {
   layerShadowProps,
   patternOverlayStyle,
   secondaryStyleOverlays,
 } from '../../utils/layerStyleProps';
+import { flattenPathLayer } from '../../store/helpers';
+import type { PathLayer } from '../../types/editor';
 
 interface ImageLayerItemProps {
   layer: ImageLayer;
   isSelected: boolean;
   onSelect: () => void;
   onChange: (updates: Partial<ImageLayer>) => void;
+  /** Pre-resolved clip target from parent — avoids per-layer store.find. */
+  clipTarget?: EditorLayer;
+  /** Path layer used as vector mask (document-space points). */
+  vectorMaskPath?: PathLayer;
 }
 
 export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
   layer,
   onSelect,
   onChange,
+  clipTarget,
+  vectorMaskPath,
 }) => {
   const imageRef = useRef<Konva.Image>(null);
   const groupRef = useRef<Konva.Group>(null);
@@ -28,25 +36,10 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
   const { image: maskElement } = useKonvaImage(
     layer.hasLayerMask ? layer.layerMaskSrc : null
   );
-  const clipTarget = useEditorStore((s) =>
-    layer.clippingMaskToId
-      ? s.layers.find((l) => l.id === layer.clippingMaskToId)
-      : undefined
-  );
   const activeTool = useEditorStore((s) => s.activeTool);
   const zoom = useEditorStore((s) => s.zoom);
+  const commitHistory = useEditorStore((s) => s.commitHistory);
   const canMove = activeTool === 'select' && !layer.locked;
-
-  useEffect(() => {
-    if (imageRef.current && imageElement) {
-      applyImageNodeFilters(imageRef.current, layer.adjustments);
-      imageRef.current.getLayer()?.batchDraw();
-    }
-  }, [layer.adjustments, imageElement, layer.width, layer.height, layer.src]);
-
-  if (!layer.visible || !imageElement) {
-    return null;
-  }
 
   const styles = layer.styles || {};
   const shadowProps = layerShadowProps(styles);
@@ -67,8 +60,33 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     return c;
   }, [pattern]);
 
+  useEffect(() => {
+    if (imageRef.current && imageElement) {
+      applyImageNodeFilters(imageRef.current, layer.adjustments);
+      imageRef.current.getLayer()?.batchDraw();
+    }
+  }, [layer.adjustments, imageElement, layer.width, layer.height, layer.src]);
+
+  if (!layer.visible || !imageElement) {
+    return null;
+  }
+
   let clipFunc: ((ctx: Konva.Context) => void) | undefined;
-  if (clipTarget) {
+  if (vectorMaskPath) {
+    const pts = flattenPathLayer(vectorMaskPath);
+    if (pts.length >= 6) {
+      clipFunc = (ctx) => {
+        ctx.beginPath();
+        for (let i = 0; i < pts.length; i += 2) {
+          const px = pts[i] - layer.x;
+          const py = pts[i + 1] - layer.y;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      };
+    }
+  } else if (clipTarget) {
     clipFunc = (ctx) => {
       const lx = clipTarget.x - layer.x;
       const ly = clipTarget.y - layer.y;
@@ -81,18 +99,20 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     };
   }
 
-  // Soften when zoomed out; crisp nearest when inspecting pixels close-up
   const imageSmoothingEnabled = zoom < 2.5;
 
   const commonTransformEnd = () => {
     const node = groupRef.current;
     if (!node) return;
+    commitHistory('Transform Layer');
     onChange({
       x: Math.round(node.x()),
       y: Math.round(node.y()),
       rotation: Math.round(node.rotation()),
       scaleX: node.scaleX(),
       scaleY: node.scaleY(),
+      skewX: node.skewX(),
+      skewY: node.skewY(),
     });
   };
 
@@ -104,6 +124,8 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     scaleX: layer.scaleX,
     scaleY: layer.scaleY,
     rotation: layer.rotation,
+    skewX: layer.skewX ?? 0,
+    skewY: layer.skewY ?? 0,
     opacity: layer.opacity,
     draggable: canMove,
     listening: canMove,
@@ -112,6 +134,7 @@ export const ImageLayerItem: React.FC<ImageLayerItemProps> = React.memo(({
     onClick: canMove ? onSelect : undefined,
     onTap: canMove ? onSelect : undefined,
     onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
+      commitHistory('Move Layer');
       onChange({
         x: Math.round(e.target.x()),
         y: Math.round(e.target.y()),

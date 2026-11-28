@@ -33,6 +33,8 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
 }) => {
   const shapeRef = useRef<Konva.Group>(null);
   const activeTool = useEditorStore((s) => s.activeTool);
+  const transformMode = useEditorStore((s) => s.transformMode);
+  const commitHistory = useEditorStore((s) => s.commitHistory);
   const canMove = activeTool === 'select' && !layer.locked;
 
   if (!layer.visible) return null;
@@ -199,6 +201,8 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
       scaleX={layer.scaleX}
       scaleY={layer.scaleY}
       rotation={layer.rotation}
+      skewX={layer.skewX ?? 0}
+      skewY={layer.skewY ?? 0}
       opacity={layer.opacity}
       draggable={canMove}
       listening={canMove}
@@ -206,6 +210,7 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
       onClick={canMove ? onSelect : undefined}
       onTap={canMove ? onSelect : undefined}
       onDragEnd={(e) => {
+        commitHistory('Move Layer');
         onChange({
           x: Math.round(e.target.x()),
           y: Math.round(e.target.y()),
@@ -214,12 +219,16 @@ export const ShapeLayerItem: React.FC<ShapeLayerItemProps> = ({
       onTransformEnd={() => {
         const node = shapeRef.current;
         if (!node) return;
+        commitHistory('Transform Layer');
         onChange({
           x: Math.round(node.x()),
           y: Math.round(node.y()),
           rotation: Math.round(node.rotation()),
           scaleX: node.scaleX(),
           scaleY: node.scaleY(),
+          ...(transformMode === 'skew'
+            ? { skewX: node.skewX(), skewY: node.skewY() }
+            : {}),
         });
       }}
     >

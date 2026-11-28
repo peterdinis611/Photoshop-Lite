@@ -20,6 +20,8 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
 }) => {
   const textRef = useRef<Konva.Text>(null);
   const activeTool = useEditorStore((s) => s.activeTool);
+  const transformMode = useEditorStore((s) => s.transformMode);
+  const commitHistory = useEditorStore((s) => s.commitHistory);
   const canMove = activeTool === 'select' && !layer.locked;
 
   if (!layer.visible) return null;
@@ -134,8 +136,8 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
         (warp ? (style === 'squeeze' ? scaleBump : style === 'bulge' ? 1 + Math.abs(bend) * 0.12 : 1) : 1)
       }
       rotation={layer.rotation + (warp ? rotBump : 0)}
-      skewX={skewX}
-      skewY={skewY}
+      skewX={(layer.skewX ?? 0) + skewX}
+      skewY={(layer.skewY ?? 0) + skewY}
       opacity={layer.opacity}
       fontFamily={layer.fontFamily}
       fontSize={layer.fontSize}
@@ -158,6 +160,7 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
       onDblClick={canMove || activeTool === 'text' ? handleDblClick : undefined}
       onDblTap={canMove || activeTool === 'text' ? handleDblClick : undefined}
       onDragEnd={(e) => {
+        commitHistory('Move Layer');
         onChange({
           x: Math.round(e.target.x()),
           y: Math.round(e.target.y()),
@@ -174,6 +177,7 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
         const lines = Math.max(1, layer.text.split('\n').length);
         node.scaleX(sx < 0 ? -1 : 1);
         node.scaleY(sy < 0 ? -1 : 1);
+        commitHistory('Transform Layer');
         onChange({
           x: Math.round(node.x()),
           y: Math.round(node.y()),
@@ -183,6 +187,9 @@ export const TextLayerItem: React.FC<TextLayerItemProps> = ({
           fontSize: nextFontSize,
           scaleX: sx < 0 ? -1 : 1,
           scaleY: sy < 0 ? -1 : 1,
+          ...(transformMode === 'skew'
+            ? { skewX: node.skewX(), skewY: node.skewY() }
+            : {}),
         });
       }}
     />

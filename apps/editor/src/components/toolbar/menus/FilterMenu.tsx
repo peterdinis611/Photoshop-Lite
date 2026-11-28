@@ -75,6 +75,30 @@ export const FilterMenu: React.FC<FilterMenuProps> = ({ onClose }) => {
       <Item disabled={busyOrNotImage} onClick={() => runClassicFilter('sharpen', { amount: 40 })}>
         Sharpen
       </Item>
+      <Item disabled={busyOrNotImage} onClick={() => runClassicFilter('highPass', { radius: 3 })}>
+        High Pass…
+      </Item>
+      <Item
+        disabled={busyOrNotImage}
+        onClick={() => runClassicFilter('motionBlur', { distance: 14, angle: 0 })}
+      >
+        Motion Blur…
+      </Item>
+      <Item
+        disabled={busyOrNotImage}
+        onClick={() => runClassicFilter('radialBlur', { amount: 35 })}
+      >
+        Radial Blur…
+      </Item>
+      <Item disabled={busyOrNotImage} onClick={() => runClassicFilter('median', { radius: 1 })}>
+        Median
+      </Item>
+      <Item
+        disabled={busyOrNotImage}
+        onClick={() => runClassicFilter('emboss', { amount: 80, angle: 135 })}
+      >
+        Emboss…
+      </Item>
       <Sep />
       <Label>Cleanup</Label>
       <Item disabled={busyOrNoImage} onClick={() => runCleanup('standard')}>

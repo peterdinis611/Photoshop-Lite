@@ -45,6 +45,11 @@ export function buildThrottlerOptions(): readonly ThrottleBucket[] {
       ttl,
       limit: envInt('THROTTLE_READ_LIMIT', 180),
     },
+    {
+      name: 'write',
+      ttl,
+      limit: envInt('THROTTLE_WRITE_LIMIT', 40),
+    },
   ] as const;
 }
 
@@ -101,6 +106,11 @@ export const ThrottlePresets = {
   get read(): Record<string, NamedLimit> {
     const b = bucketMap();
     return { read: b.read };
+  },
+  /** Project / asset mutations (large JSON PUTs, uploads). */
+  get write(): Record<string, NamedLimit> {
+    const b = bucketMap();
+    return { write: b.write };
   },
   /** Stock fetch is more expensive than search. */
   get stockFetch(): Record<string, NamedLimit> {

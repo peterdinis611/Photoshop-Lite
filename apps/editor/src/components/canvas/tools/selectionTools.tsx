@@ -1,5 +1,6 @@
 import React from 'react';
-import { Circle, Ellipse, Line, Rect } from 'react-konva';
+import { Circle, Ellipse, Image as KonvaImage, Line, Rect } from 'react-konva';
+import { useKonvaImage } from '@photoshop-lite/editor-konva';
 import { magicWandBounds } from '../../../utils/maskHelpers';
 import { dist } from '../../../utils/pathHelpers';
 import { renderCursorRing } from './cursorRing';
@@ -302,10 +303,35 @@ export const wandTool: ToolHandler = {
 
 // ─── Shared overlay: drag preview + committed selection (shown for every tool) ───────
 
+function SoftMaskOverlay({
+  src,
+  width,
+  height,
+}: {
+  src: string;
+  width: number;
+  height: number;
+}) {
+  const { image } = useKonvaImage(src);
+  if (!image) return null;
+  return (
+    <KonvaImage
+      image={image}
+      x={0}
+      y={0}
+      width={width}
+      height={height}
+      opacity={0.42}
+      listening={false}
+      perfectDrawEnabled={false}
+    />
+  );
+}
+
 export function renderSelectionOverlay(ctx: ToolContext): React.ReactNode {
   const { session } = ctx;
   const { zoom } = ctx.getView();
-  const { marqueeSelection, marqueeMode } = ctx.getStore();
+  const { marqueeSelection, marqueeMode, canvasWidth, canvasHeight } = ctx.getStore();
   const marqueePreview = session.marqueePreview;
   const lassoPreview = session.lassoPreview;
 
@@ -315,6 +341,13 @@ export function renderSelectionOverlay(ctx: ToolContext): React.ReactNode {
 
   return (
     <>
+      {marqueeSelection?.softMaskSrc && (
+        <SoftMaskOverlay
+          src={marqueeSelection.softMaskSrc}
+          width={canvasWidth}
+          height={canvasHeight}
+        />
+      )}
       {box &&
         (isEllipse ? (
           <Ellipse

@@ -4,7 +4,13 @@ import { fillImageRect } from '@photoshop-lite/editor-core';
 import { useEditorStore } from '../../store/editorStore';
 import { notify } from '../../utils/notify';
 
-type FillContents = 'foreground' | 'background' | 'black' | 'white' | 'generative-remove';
+type FillContents =
+  | 'foreground'
+  | 'background'
+  | 'black'
+  | 'white'
+  | 'generative-fill'
+  | 'generative-remove';
 
 export const FillModal: React.FC = () => {
   const open = useEditorStore((s) => s.isFillModalOpen);
@@ -18,14 +24,16 @@ export const FillModal: React.FC = () => {
   const commitHistory = useEditorStore((s) => s.commitHistory);
   const runCloudAiJob = useEditorStore((s) => s.runCloudAiJob);
 
-  const [contents, setContents] = useState<FillContents>('foreground');
+  const [contents, setContents] = useState<FillContents>('generative-fill');
   const [opacity, setOpacity] = useState(100);
+  const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
 
   if (!open) return null;
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const canFill = layer?.type === 'image' && Boolean(marqueeSelection);
+  const isGenerative = contents === 'generative-fill' || contents === 'generative-remove';
 
   const resolveColor = (): string => {
     switch (contents) {
@@ -50,6 +58,15 @@ export const FillModal: React.FC = () => {
       if (contents === 'generative-remove') {
         await runCloudAiJob(layer.id, 'object-remove', { applyInPlace: true });
         notify.success('Generative remove applied in place');
+        setOpen(false);
+        return;
+      }
+      if (contents === 'generative-fill') {
+        await runCloudAiJob(layer.id, 'inpaint', {
+          applyInPlace: true,
+          prompt: prompt.trim() || undefined,
+        });
+        notify.success(prompt.trim() ? 'Generative fill applied' : 'Selection inpainted');
         setOpen(false);
         return;
       }
@@ -80,7 +97,7 @@ export const FillModal: React.FC = () => {
       >
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-4 py-3">
           <h2 id="fill-title" className="font-display text-sm font-bold text-[var(--text-primary)]">
-            Fill
+            Generative Fill
           </h2>
           <button
             type="button"
@@ -92,6 +109,9 @@ export const FillModal: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-3 p-4 text-xs text-[var(--text-muted)]">
+          <p className="text-[11px] text-[var(--text-faint)]">
+            Selection → fill or remove in one step. Cloud jobs need an API key / server token.
+          </p>
           <label className="flex flex-col gap-1">
             <span className="uppercase tracking-wider text-[10px] text-[var(--text-faint)]">
               Contents
@@ -101,21 +121,38 @@ export const FillModal: React.FC = () => {
               onChange={(e) => setContents(e.target.value as FillContents)}
               className="rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1.5 text-[var(--text-primary)]"
             >
+              <option value="generative-fill">Generative Fill (cloud inpaint)</option>
+              <option value="generative-remove">Generative Remove (cloud)</option>
               <option value="foreground">Foreground Color</option>
               <option value="background">Background Color</option>
               <option value="black">Black</option>
               <option value="white">White</option>
-              <option value="generative-remove">Generative Remove (cloud)</option>
             </select>
           </label>
 
-          {contents === 'generative-remove' ? (
+          {contents === 'generative-fill' && (
+            <label className="flex flex-col gap-1">
+              <span className="uppercase tracking-wider text-[10px] text-[var(--text-faint)]">
+                Prompt (optional)
+              </span>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={3}
+                placeholder="What should appear in the selection…"
+                className="rounded border border-[var(--border-subtle)] bg-[var(--bg-elevated)] px-2 py-1.5 text-[var(--text-primary)] resize-none"
+              />
+            </label>
+          )}
+
+          {contents === 'generative-remove' && (
             <p className="flex items-start gap-2 text-[11px] text-[var(--text-faint)]">
               <Sparkles size={14} className="mt-0.5 shrink-0 text-[var(--accent-hot)]" />
-              Cloud object-remove into the selection, applied in place on this layer (needs API
-              key / server token). Not classic Photoshop Content-Aware Fill.
+              Removes the selection in place (object-remove). Not classic Content-Aware Fill.
             </p>
-          ) : (
+          )}
+
+          {!isGenerative && (
             <label className="flex items-center justify-between gap-3">
               <span>Opacity</span>
               <div className="flex items-center gap-2">

@@ -1,12 +1,82 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
-import { DEFAULT_PEN_SETTINGS, DEFAULT_SHAPE_SETTINGS, DEFAULT_TEXT_SETTINGS, DEFAULT_GRADIENT_SETTINGS, DEFAULT_TONE_BRUSH, type ToolType, type ShapeType, type BrushSettings, type PenSettings, type ShapeSettings, type TextSettings, type CropSettings, type MarqueeMode, type GradientSettings, type ToneBrushSettings, type TransformMode } from '../../types/editor';
+import { DEFAULT_PEN_SETTINGS, DEFAULT_SHAPE_SETTINGS, DEFAULT_TEXT_SETTINGS, DEFAULT_GRADIENT_SETTINGS, DEFAULT_TONE_BRUSH, type ToolType, type ShapeType, type BrushSettings, type BrushPreset, type PenSettings, type ShapeSettings, type TextSettings, type CropSettings, type MarqueeMode, type GradientSettings, type ToneBrushSettings, type TransformMode } from '../../types/editor';
 import { deepClone, type LiquifyMode } from '@photoshop-lite/editor-core';
 
 export interface LiquifySettings {
   mode: LiquifyMode;
   /** 0-1 */
   strength: number;
+}
+
+const BRUSH_PRESETS_KEY = 'px_brush_presets';
+
+const DEFAULT_BRUSH_PRESETS: BrushPreset[] = [
+  {
+    id: 'preset_hard_round',
+    name: 'Hard Round',
+    settings: {
+      size: 24,
+      color: '#d4923a',
+      opacity: 1,
+      hardness: 1,
+      flow: 1,
+      refineMode: 'erase',
+      sizeJitter: 0,
+      opacityJitter: 0,
+      spacing: 0.2,
+    },
+  },
+  {
+    id: 'preset_soft_round',
+    name: 'Soft Round',
+    settings: {
+      size: 36,
+      color: '#d4923a',
+      opacity: 0.85,
+      hardness: 0.15,
+      flow: 0.9,
+      refineMode: 'erase',
+      sizeJitter: 0.05,
+      opacityJitter: 0.08,
+      spacing: 0.25,
+    },
+  },
+  {
+    id: 'preset_calligraphy',
+    name: 'Calligraphy',
+    settings: {
+      size: 18,
+      color: '#1a1208',
+      opacity: 0.95,
+      hardness: 0.55,
+      flow: 0.75,
+      refineMode: 'erase',
+      sizeJitter: 0.12,
+      opacityJitter: 0.15,
+      spacing: 0.12,
+    },
+  },
+];
+
+function loadBrushPresetsFromStorage(): BrushPreset[] {
+  try {
+    const raw = localStorage.getItem(BRUSH_PRESETS_KEY);
+    if (!raw) return deepClone(DEFAULT_BRUSH_PRESETS);
+    const parsed = JSON.parse(raw) as BrushPreset[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return deepClone(DEFAULT_BRUSH_PRESETS);
+    return parsed;
+  } catch {
+    return deepClone(DEFAULT_BRUSH_PRESETS);
+  }
+}
+
+function persistBrushPresets(presets: BrushPreset[]): void {
+  try {
+    localStorage.setItem(BRUSH_PRESETS_KEY, JSON.stringify(presets));
+  } catch {
+    /* ignore */
+  }
 }
 
 export interface ToolsSlice {
@@ -34,6 +104,10 @@ export interface ToolsSlice {
   setActiveShapeType: (shape: ShapeType) => void;
   setMarqueeMode: (mode: MarqueeMode) => void;
   setWandTolerance: (tolerance: number) => void;
+  brushPresets: BrushPreset[];
+  saveBrushPreset: (name: string) => void;
+  applyBrushPreset: (id: string) => void;
+  deleteBrushPreset: (id: string) => void;
   updateBrushSettings: (settings: Partial<BrushSettings>) => void;
   updatePenSettings: (settings: Partial<PenSettings>) => void;
   updateShapeSettings: (settings: Partial<ShapeSettings>) => void;
@@ -58,7 +132,12 @@ export const createToolsSlice: StateCreator<EditorStore, [], [], ToolsSlice> = (
     hardness: 0.8,
     flow: 1,
     refineMode: 'erase',
+    sizeJitter: 0,
+    opacityJitter: 0,
+    spacing: 0.25,
   },
+
+  brushPresets: loadBrushPresetsFromStorage(),
 
   penSettings: { ...DEFAULT_PEN_SETTINGS },
 
@@ -142,6 +221,31 @@ export const createToolsSlice: StateCreator<EditorStore, [], [], ToolsSlice> = (
 
   setWandTolerance: (tolerance) =>
     set({ wandTolerance: Math.max(0, Math.min(128, tolerance)) }),
+
+  saveBrushPreset: (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const preset: BrushPreset = {
+      id: `preset_${Date.now()}`,
+      name: trimmed,
+      settings: deepClone(get().brushSettings),
+    };
+    const next = [...get().brushPresets, preset];
+    persistBrushPresets(next);
+    set({ brushPresets: next });
+  },
+
+  applyBrushPreset: (id) => {
+    const preset = get().brushPresets.find((p) => p.id === id);
+    if (!preset) return;
+    set({ brushSettings: deepClone(preset.settings) });
+  },
+
+  deleteBrushPreset: (id) => {
+    const next = get().brushPresets.filter((p) => p.id !== id);
+    persistBrushPresets(next);
+    set({ brushPresets: next });
+  },
 
   updateBrushSettings: (settings) =>
     set((state) => ({ brushSettings: { ...state.brushSettings, ...settings } })),

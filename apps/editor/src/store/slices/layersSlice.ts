@@ -50,6 +50,8 @@ export interface LayersSlice {
   ungroupLayer: (id?: string) => void;
   toggleGroupExpanded: (id: string) => void;
   alignSelectedLayers: (mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
+  /** Link a path layer to the selected image as a vector mask (clip path). */
+  setVectorMaskFromPath: () => void;
 }
 
 export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> = (set, get) => ({
@@ -117,10 +119,35 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
       y: layer.y + 25,
     };
 
+    // Smart Object instances share linked source + filters via instance id
+    if (layer.type === 'image' && layer.smartObject) {
+      const instanceId =
+        layer.smartObjectInstanceId || `so_${layer.id}`;
+      const imgDup = duplicated as ImageLayer;
+      imgDup.smartObjectInstanceId = instanceId;
+      imgDup.smartObjectSrc = layer.smartObjectSrc || layer.originalSrc || layer.src;
+      imgDup.smartFilters = layer.smartFilters ? deepClone(layer.smartFilters) : [];
+      // Ensure original also has the instance id so replace updates both
+      set((state) => ({
+        layers: [
+          ...state.layers.map((l) =>
+            l.id === layer.id && l.type === 'image'
+              ? { ...l, smartObjectInstanceId: instanceId }
+              : l
+          ),
+          duplicated,
+        ],
+        selectedLayerId: duplicated.id,
+      }));
+      get().recordActionStep('duplicate-layer', `Duplicate ${layer.name}`, { id });
+      return;
+    }
+
     set((state) => ({
       layers: [...state.layers, duplicated],
       selectedLayerId: duplicated.id,
     }));
+    get().recordActionStep('duplicate-layer', `Duplicate ${layer.name}`, { id });
   },
 
   toggleLayerVisibility: (id) => {
@@ -143,12 +170,14 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
 
   setLayerBlendMode: (id, blendMode) => {
     get().commitHistory('Change Blend Mode');
+    get().recordActionStep('set-blend', 'Blend Mode', { id, blendMode });
     set((state) => ({
       layers: state.layers.map((l) => (l.id === id ? { ...l, blendMode } : l)),
     }));
   },
 
   setLayerOpacity: (id, opacity) => {
+    get().recordActionStep('set-opacity', 'Opacity', { id, opacity });
     set((state) => ({
       layers: state.layers.map((l) => (l.id === id ? { ...l, opacity } : l)),
     }));
@@ -580,6 +609,22 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
       rotation: 0,
       adjustments,
       affectedChannel: 'rgb',
+      ...(kind === 'gradientMap'
+        ? {
+            gradientMapStops: [
+              { offset: 0, color: '#0a0a0a' },
+              { offset: 0.5, color: '#d4923a' },
+              { offset: 1, color: '#f5efe6' },
+            ],
+          }
+        : {}),
+      ...(kind === 'photoFilter'
+        ? {
+            photoFilterColor: '#e8a54b',
+            photoFilterDensity: 0.35,
+            photoFilterPreserveLuminosity: true,
+          }
+        : {}),
     };
 
     get().commitHistory(`Add ${layer.name}`);
@@ -632,10 +677,16 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
     if (!layer || layer.type !== 'image' || layer.smartObject) return;
 
     get().commitHistory('Convert to Smart Object');
+    const instanceId = `so_${layer.id}`;
     set((state) => ({
       layers: state.layers.map((l) =>
         l.id === layer.id && l.type === 'image'
-          ? { ...l, smartObject: true, smartObjectSrc: l.originalSrc || l.src }
+          ? {
+              ...l,
+              smartObject: true,
+              smartObjectSrc: l.originalSrc || l.src,
+              smartObjectInstanceId: instanceId,
+            }
           : l
       ),
     }));
@@ -645,27 +696,39 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
     const layer = get().layers.find((l) => l.id === get().selectedLayerId);
     if (!layer || layer.type !== 'image' || !layer.smartObject) return;
 
-    const updates: Partial<ImageLayer> = { src, originalSrc: src, smartObjectSrc: src };
-    if (width && height && width > 0 && height > 0) {
-      // Contain-fit the new content inside the layer's current on-canvas box
-      const boxW = layer.width * Math.abs(layer.scaleX);
-      const boxH = layer.height * Math.abs(layer.scaleY);
-      const k = Math.min(boxW / width, boxH / height);
-      updates.width = Math.max(1, Math.round(width * k));
-      updates.height = Math.max(1, Math.round(height * k));
-      updates.scaleX = layer.scaleX < 0 ? -1 : 1;
-      updates.scaleY = layer.scaleY < 0 ? -1 : 1;
-    }
+    const instanceId = layer.smartObjectInstanceId;
+    const match = (l: EditorLayer): l is ImageLayer =>
+      l.type === 'image' &&
+      l.smartObject === true &&
+      (instanceId ? l.smartObjectInstanceId === instanceId : l.id === layer.id);
 
     get().commitHistory('Replace Smart Object Contents');
     set((state) => ({
-      layers: state.layers.map((l) =>
-        l.id === layer.id && l.type === 'image' ? { ...l, ...updates } : l
-      ),
+      layers: state.layers.map((l) => {
+        if (!match(l)) return l;
+        const updates: Partial<ImageLayer> = {
+          src,
+          originalSrc: src,
+          smartObjectSrc: src,
+        };
+        if (width && height && width > 0 && height > 0) {
+          const boxW = l.width * Math.abs(l.scaleX);
+          const boxH = l.height * Math.abs(l.scaleY);
+          const k = Math.min(boxW / width, boxH / height);
+          updates.width = Math.max(1, Math.round(width * k));
+          updates.height = Math.max(1, Math.round(height * k));
+          updates.scaleX = l.scaleX < 0 ? -1 : 1;
+          updates.scaleY = l.scaleY < 0 ? -1 : 1;
+        }
+        return { ...l, ...updates };
+      }),
     }));
-    // Keep Smart Filters stack in sync with the new linked source
-    if ((layer.smartFilters || []).length > 0) {
-      void get().rebakeSmartFilters(layer.id);
+
+    // Rebake filters on every linked instance
+    for (const l of get().layers) {
+      if (match(l) && (l.smartFilters || []).length > 0) {
+        void get().rebakeSmartFilters(l.id);
+      }
     }
   },
 
@@ -933,6 +996,38 @@ export const createLayersSlice: StateCreator<EditorStore, [], [], LayersSlice> =
         l.id === id && l.type === 'group' ? { ...l, expanded: !l.expanded } : l
       ),
     }));
+  },
+
+  setVectorMaskFromPath: () => {
+    const { layers, selectedLayerId } = get();
+    const sel = layers.find((l) => l.id === selectedLayerId);
+    if (!sel) return;
+
+    let imageId: string | null = null;
+    let pathId: string | null = null;
+    const selIdx = layers.findIndex((l) => l.id === sel.id);
+
+    if (sel.type === 'image') {
+      imageId = sel.id;
+      for (let i = selIdx - 1; i >= 0; i--) {
+        if (layers[i].type === 'path') {
+          pathId = layers[i].id;
+          break;
+        }
+      }
+    } else if (sel.type === 'path') {
+      pathId = sel.id;
+      for (let i = selIdx + 1; i < layers.length; i++) {
+        if (layers[i].type === 'image') {
+          imageId = layers[i].id;
+          break;
+        }
+      }
+    }
+
+    if (!imageId || !pathId) return;
+    get().commitHistory('Vector Mask');
+    get().updateLayer(imageId, { vectorMaskPathId: pathId });
   },
 
   alignSelectedLayers: (mode) => {

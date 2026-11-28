@@ -1,5 +1,5 @@
 import React from 'react';
-import { Square, SquareDashed, PenTool } from 'pulsoicon-react';
+import { Square, SquareDashed, PenTool, PaintBucket, Save, FolderOpen } from 'pulsoicon-react';
 import { useEditorStore } from '../../../store/editorStore';
 import { MenuItem as Item, MenuLabel as Label, MenuSep as Sep } from '../../ui/AnimatedMenu';
 import { MenuPanel } from './MenuPanel';
@@ -21,6 +21,10 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({ onClose }) => {
     strokePathAsDrawing,
     setColorRangeModalOpen,
     setSelectAndMaskModalOpen,
+    setFillModalOpen,
+    saveSelectionAsChannel,
+    loadSelectionFromChannel,
+    savedSelections,
   } = useEditorStore();
 
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
@@ -105,6 +109,34 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({ onClose }) => {
         }}
       >
         Select and Mask…
+      </Item>
+      <Item
+        disabled={selectedLayer?.type !== 'image' || !marqueeSelection}
+        onClick={() => {
+          setFillModalOpen(true);
+          onClose();
+        }}
+      >
+        <PaintBucket size={13} /> Generative Fill…
+      </Item>
+      <Item
+        disabled={!marqueeSelection}
+        onClick={() => {
+          void saveSelectionAsChannel();
+          onClose();
+        }}
+      >
+        <Save size={13} /> Save Selection
+      </Item>
+      <Item
+        disabled={savedSelections.length === 0}
+        onClick={() => {
+          const last = savedSelections[savedSelections.length - 1];
+          if (last) loadSelectionFromChannel(last.id);
+          onClose();
+        }}
+      >
+        <FolderOpen size={13} /> Load Last Saved
       </Item>
       <Sep />
       <Label>Path</Label>

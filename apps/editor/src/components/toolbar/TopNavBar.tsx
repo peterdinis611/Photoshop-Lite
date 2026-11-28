@@ -256,6 +256,10 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
           height: layer.height,
           opacity: layer.opacity,
           visible: layer.visible,
+          blendMode: layer.blendMode,
+          ...(layer.hasLayerMask && layer.layerMaskSrc
+            ? { hasLayerMask: true, layerMaskSrc: layer.layerMaskSrc }
+            : {}),
         });
       }
       // addImageLayer sizes the canvas to the first layer; restore the PSD canvas.
@@ -267,7 +271,12 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({ onFitToScreen }) => {
         future: [],
       });
       onFitToScreen();
-      notify.success('PSD imported', `${psd.layers.length} layers · ${psd.width}×${psd.height}`);
+      const groupNote =
+        psd.groupStubs.length > 0 ? ` · ${psd.groupStubs.length} groups (stubs)` : '';
+      notify.success(
+        'PSD imported',
+        `${psd.layers.length} layers${groupNote} · ${psd.width}×${psd.height}`
+      );
     } catch (err) {
       notify.error(
         'Could not open PSD',

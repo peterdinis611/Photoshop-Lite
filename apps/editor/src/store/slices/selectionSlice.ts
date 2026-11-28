@@ -1,25 +1,44 @@
 import type { StateCreator } from 'zustand';
 import type { EditorStore } from '../types';
 import type { SelectionShape } from '../../types/editor';
-import { getErrorMessage, invertSelection, expandSelection, contractSelection, featherSelectionMask } from '@photoshop-lite/editor-core';
+import {
+  getErrorMessage,
+  invertSelection,
+  expandSelection,
+  contractSelection,
+  featherSelectionMask,
+} from '@photoshop-lite/editor-core';
 import { flattenPathLayer, selectionMaskToLayerMask } from '../helpers';
 
 export interface SelectionSlice {
   marqueeSelection: SelectionShape | null;
+  /** Named alpha channels saved from selections (document-space masks). */
+  savedSelections: { id: string; name: string; maskSrc: string }[];
   setMarqueeSelection: (sel: SelectionShape | null) => void;
   modifyMarqueeSelection: (
     op: 'invert' | 'expand' | 'contract' | 'feather',
-    amount?: number
+    amount?: number,
+    options?: { bakeToLayerMask?: boolean }
   ) => Promise<void>;
   pathToSelection: () => void;
+  /** Commit soft selection (or current marquee) onto the active image layer mask. */
+  applySelectionToLayerMask: () => Promise<void>;
+  saveSelectionAsChannel: (name?: string) => Promise<void>;
+  loadSelectionFromChannel: (id: string) => void;
+  deleteSavedSelection: (id: string) => void;
 }
 
-export const createSelectionSlice: StateCreator<EditorStore, [], [], SelectionSlice> = (set, get) => ({
+export const createSelectionSlice: StateCreator<EditorStore, [], [], SelectionSlice> = (
+  set,
+  get
+) => ({
   marqueeSelection: null,
+
+  savedSelections: [],
 
   setMarqueeSelection: (sel) => set({ marqueeSelection: sel }),
 
-  modifyMarqueeSelection: async (op, amount) => {
+  modifyMarqueeSelection: async (op, amount, options) => {
     const { marqueeSelection: sel, canvasWidth, canvasHeight } = get();
     if (!sel) return;
 
@@ -36,8 +55,57 @@ export const createSelectionSlice: StateCreator<EditorStore, [], [], SelectionSl
       return;
     }
 
-    // feather: a soft mask can't be stored as a SelectionShape, so it becomes the layer mask
-    const layer = get().layers.find((l) => l.id === get().selectedLayerId);
+    // Live soft selection by default; optional bake to layer mask
+    try {
+      const docMask = await featherSelectionMask(sel, amount ?? 8, canvasWidth, canvasHeight);
+      if (options?.bakeToLayerMask) {
+        const layer = get().layers.find((l) => l.id === get().selectedLayerId);
+        if (!layer || layer.type !== 'image') {
+          set({
+            aiStatus: {
+              isProcessing: false,
+              action: null,
+              progress: 0,
+              statusText: '',
+              error: 'Select an image layer to bake feather into a mask',
+            },
+          });
+          return;
+        }
+        const layerMask = await selectionMaskToLayerMask(docMask, layer, canvasWidth, canvasHeight);
+        get().commitHistory('Feather → Layer Mask');
+        set((state) => ({
+          layers: state.layers.map((l) =>
+            l.id === layer.id ? { ...l, hasLayerMask: true, layerMaskSrc: layerMask } : l
+          ),
+          marqueeSelection: { ...sel, softMaskSrc: docMask },
+        }));
+        return;
+      }
+
+      set({
+        marqueeSelection: {
+          ...sel,
+          softMaskSrc: docMask,
+        },
+      });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Feather failed'),
+        },
+      });
+    }
+  },
+
+  applySelectionToLayerMask: async () => {
+    const { marqueeSelection: sel, canvasWidth, canvasHeight, selectedLayerId, layers } = get();
+    if (!sel) return;
+    const layer = layers.find((l) => l.id === selectedLayerId);
     if (!layer || layer.type !== 'image') {
       set({
         aiStatus: {
@@ -45,16 +113,17 @@ export const createSelectionSlice: StateCreator<EditorStore, [], [], SelectionSl
           action: null,
           progress: 0,
           statusText: '',
-          error: 'Select an image layer to feather the selection into a mask',
+          error: 'Select an image layer to apply the selection as a mask',
         },
       });
       return;
     }
-
     try {
-      const docMask = await featherSelectionMask(sel, amount ?? 8, canvasWidth, canvasHeight);
+      const docMask =
+        sel.softMaskSrc ||
+        (await featherSelectionMask(sel, 0, canvasWidth, canvasHeight));
       const layerMask = await selectionMaskToLayerMask(docMask, layer, canvasWidth, canvasHeight);
-      get().commitHistory('Feather Selection');
+      get().commitHistory('Selection → Layer Mask');
       set((state) => ({
         layers: state.layers.map((l) =>
           l.id === layer.id ? { ...l, hasLayerMask: true, layerMaskSrc: layerMask } : l
@@ -67,10 +136,58 @@ export const createSelectionSlice: StateCreator<EditorStore, [], [], SelectionSl
           action: null,
           progress: 0,
           statusText: '',
-          error: getErrorMessage(e, 'Feather failed'),
+          error: getErrorMessage(e, 'Apply mask failed'),
         },
       });
     }
+  },
+
+  saveSelectionAsChannel: async (name) => {
+    const { marqueeSelection: sel, canvasWidth, canvasHeight, savedSelections } = get();
+    if (!sel) return;
+    try {
+      const maskSrc =
+        sel.softMaskSrc ||
+        (await featherSelectionMask(sel, 0, canvasWidth, canvasHeight));
+      const entry = {
+        id: `${Date.now()}_ch`,
+        name: name?.trim() || `Alpha ${savedSelections.length + 1}`,
+        maskSrc,
+      };
+      set({ savedSelections: [...savedSelections, entry] });
+    } catch (e: unknown) {
+      set({
+        aiStatus: {
+          isProcessing: false,
+          action: null,
+          progress: 0,
+          statusText: '',
+          error: getErrorMessage(e, 'Save selection failed'),
+        },
+      });
+    }
+  },
+
+  loadSelectionFromChannel: (id) => {
+    const entry = get().savedSelections.find((c) => c.id === id);
+    if (!entry) return;
+    const { canvasWidth, canvasHeight } = get();
+    set({
+      marqueeSelection: {
+        x: 0,
+        y: 0,
+        width: canvasWidth,
+        height: canvasHeight,
+        mode: 'rect',
+        softMaskSrc: entry.maskSrc,
+      },
+    });
+  },
+
+  deleteSavedSelection: (id) => {
+    set((state) => ({
+      savedSelections: state.savedSelections.filter((c) => c.id !== id),
+    }));
   },
 
   pathToSelection: () => {

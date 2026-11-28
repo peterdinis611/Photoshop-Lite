@@ -71,10 +71,29 @@ export const brushTool: ToolHandler = {
     session.brushPreview = [point.x, point.y];
   },
 
-  onPointerMove: ({ point }, { session }) => {
+  onPointerMove: ({ point }, ctx) => {
+    const { session } = ctx;
     if (!session.brushStroke) return;
-    const newPoints = [...session.brushStroke.points, point.x, point.y];
+    const { brushSettings } = ctx.getStore();
+    const pts = session.brushStroke.points;
+    const spacingPx = Math.max(2, brushSettings.size * (brushSettings.spacing ?? 0.25));
+    if (pts.length >= 2) {
+      const lx = pts[pts.length - 2];
+      const ly = pts[pts.length - 1];
+      const dx = point.x - lx;
+      const dy = point.y - ly;
+      if (Math.hypot(dx, dy) < spacingPx) return;
+    }
+    const jitter = brushSettings.sizeJitter ?? 0;
+    const opJitter = brushSettings.opacityJitter ?? 0;
+    let size = brushSettings.size;
+    let opacity = brushSettings.opacity;
+    if (jitter > 0) size *= 1 + (Math.random() * 2 - 1) * jitter;
+    if (opJitter > 0) opacity *= 1 + (Math.random() * 2 - 1) * opJitter;
+    const newPoints = [...pts, point.x, point.y];
     session.brushStroke.points = newPoints;
+    session.brushStroke.size = Math.max(1, size);
+    session.brushStroke.opacity = Math.max(0.05, Math.min(1, opacity));
     session.brushPreview = newPoints;
   },
 
